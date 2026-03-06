@@ -486,7 +486,13 @@ mod tests {
     #[test]
     fn test_count_consistency_all_encodings() {
         let text = "Hello, 世界! This is a test with mixed content 🚀 and numbers 12345.";
-        for name in ["cl100k_base", "o200k_base", "p50k_base", "p50k_edit", "r50k_base"] {
+        for name in [
+            "cl100k_base",
+            "o200k_base",
+            "p50k_base",
+            "p50k_edit",
+            "r50k_base",
+        ] {
             let enc = get_encoding(name).unwrap();
             assert_eq!(
                 enc.count(text),

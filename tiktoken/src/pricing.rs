@@ -592,6 +592,10 @@ mod tests {
             .iter()
             .map(|p| models_by_provider(*p).len())
             .sum();
-        assert_eq!(total, ALL_MODELS.len(), "provider counts don't sum to total");
+        assert_eq!(
+            total,
+            ALL_MODELS.len(),
+            "provider counts don't sum to total"
+        );
     }
 }

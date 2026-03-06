@@ -1,14 +1,14 @@
 [package]
 name = "tiktoken"
 description = "A high-performance pure-Rust implementation of OpenAI's tiktoken BPE tokenizer"
-license = "MIT"
-repository = "https://github.com/goliajp/airs"
-homepage = "https://github.com/goliajp/airs"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/tiktoken"
-version = "2.1.0"
-edition = "2024"
-rust-version = "1.85"
-authors = ["GOLIA株式会社", "Li Hao <lihao@golia.jp>"]
+version = "2.1.1"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
 keywords = ["tiktoken", "tokenizer", "bpe", "openai", "gpt"]
 categories = ["text-processing", "algorithms"]
 
@@ -23,7 +23,3 @@ criterion = { version = "^0.8", features = ["html_reports"] }
 [[bench]]
 name = "tokenize"
 harness = false
-
-[profile.release]
-lto = true
-codegen-units = 1
