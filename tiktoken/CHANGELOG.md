@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.1] - 2026-03-07
+
+### Changed
+
+- Upgraded Rust edition 2021 → 2024, MSRV 1.85 → 1.94
+- Upgraded `criterion` dev-dependency 0.5 → 0.8
+- Migrated Cargo.toml metadata to workspace inheritance (edition, rust-version, license, repository, homepage, authors)
+- Moved to `airs` monorepo workspace
+
 ## [2.1.0] - 2026-03-06
 
 ### Performance
