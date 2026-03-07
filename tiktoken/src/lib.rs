@@ -23,7 +23,7 @@
 //! ```
 
 mod bpe;
-mod encoding;
+pub mod encoding;
 mod merge;
 mod pretokenize;
 pub mod pricing;
