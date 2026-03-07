@@ -55,11 +55,43 @@ impl Encoding {
         self.bpe.count(text)
     }
 
+    /// Count tokens, recognizing special tokens.
+    ///
+    /// Like `count()` but special tokens (e.g. `<|endoftext|>`) are counted
+    /// as single tokens instead of being split into sub-word pieces.
+    #[wasm_bindgen(js_name = countWithSpecialTokens)]
+    pub fn count_with_special_tokens(&self, text: &str) -> usize {
+        self.bpe.count_with_special_tokens(text)
+    }
+
+    /// Get the number of regular (non-special) tokens in the vocabulary.
+    #[wasm_bindgen(js_name = vocabSize, getter)]
+    pub fn vocab_size(&self) -> usize {
+        self.bpe.vocab_size()
+    }
+
+    /// Get the number of special tokens in the vocabulary.
+    #[wasm_bindgen(js_name = numSpecialTokens, getter)]
+    pub fn num_special_tokens(&self) -> usize {
+        self.bpe.num_special_tokens()
+    }
+
     /// Get the encoding name (e.g. `"cl100k_base"`).
     #[wasm_bindgen(getter)]
     pub fn name(&self) -> String {
         self.name.to_string()
     }
+}
+
+/// List all available encoding names.
+///
+/// Returns an array of strings: `["cl100k_base", "o200k_base", ...]`
+#[wasm_bindgen(js_name = listEncodings)]
+pub fn list_encodings() -> Vec<JsValue> {
+    tiktoken::list_encodings()
+        .iter()
+        .map(|s| JsValue::from_str(s))
+        .collect()
 }
 
 /// Get an encoding by name.
@@ -112,6 +144,14 @@ pub fn encoding_for_model(model: &str) -> Result<Encoding, JsError> {
     Ok(Encoding { name, bpe })
 }
 
+/// Map a model name to its encoding name without loading the encoding.
+///
+/// Returns the encoding name string (e.g. `"o200k_base"`) or `null` for unknown models.
+#[wasm_bindgen(js_name = modelToEncoding)]
+pub fn model_to_encoding(model: &str) -> Option<String> {
+    tiktoken::model_to_encoding(model).map(|s| s.to_string())
+}
+
 /// Estimate cost in USD for a given model, input token count, and output token count.
 ///
 /// Supports OpenAI, Anthropic Claude, Google Gemini, Meta Llama, DeepSeek, Qwen, and Mistral models.
@@ -126,18 +166,18 @@ pub fn estimate_cost(
         .ok_or_else(|| JsError::new(&format!("unknown model: {model_id}")))
 }
 
-/// Get model pricing and metadata as a JS object.
+/// Get model pricing and metadata.
 ///
-/// Returns an object with: `id`, `provider`, `input_per_1m`, `output_per_1m`,
-/// `cached_input_per_1m`, `context_window`, `max_output`.
+/// Returns a typed object with: `id`, `provider`, `inputPer1m`, `outputPer1m`,
+/// `cachedInputPer1m`, `contextWindow`, `maxOutput`.
 ///
 /// Throws `Error` for unknown model ids.
 #[wasm_bindgen(js_name = getModelInfo)]
-pub fn get_model_info(model_id: &str) -> Result<JsValue, JsError> {
+pub fn get_model_info(model_id: &str) -> Result<ModelInfo, JsError> {
     let model = tiktoken::pricing::get_model(model_id)
         .ok_or_else(|| JsError::new(&format!("unknown model: {model_id}")))?;
 
-    let info = ModelInfo {
+    Ok(ModelInfo {
         id: model.id.to_string(),
         provider: model.provider.to_string(),
         input_per_1m: model.pricing.input_per_1m,
@@ -145,14 +185,63 @@ pub fn get_model_info(model_id: &str) -> Result<JsValue, JsError> {
         cached_input_per_1m: model.pricing.cached_input_per_1m,
         context_window: model.context_window,
         max_output: model.max_output,
-    };
-
-    serde_wasm_bindgen::to_value(&info).map_err(|e| JsError::new(&e.to_string()))
+    })
 }
 
-/// Internal struct for JSON serialization of model info to JS.
-#[derive(serde::Serialize)]
-struct ModelInfo {
+/// List all supported models with pricing info.
+///
+/// Returns an array of `ModelInfo` objects.
+#[wasm_bindgen(js_name = allModels)]
+pub fn all_models() -> Vec<ModelInfo> {
+    tiktoken::pricing::all_models()
+        .iter()
+        .map(|m| ModelInfo {
+            id: m.id.to_string(),
+            provider: m.provider.to_string(),
+            input_per_1m: m.pricing.input_per_1m,
+            output_per_1m: m.pricing.output_per_1m,
+            cached_input_per_1m: m.pricing.cached_input_per_1m,
+            context_window: m.context_window,
+            max_output: m.max_output,
+        })
+        .collect()
+}
+
+/// List models filtered by provider name.
+///
+/// Provider names: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"DeepSeek"`, `"Alibaba"`, `"Mistral"`.
+/// Returns an empty array for unknown providers.
+#[wasm_bindgen(js_name = modelsByProvider)]
+pub fn models_by_provider(provider: &str) -> Vec<ModelInfo> {
+    let provider = match provider {
+        "OpenAI" => tiktoken::pricing::Provider::OpenAI,
+        "Anthropic" => tiktoken::pricing::Provider::Anthropic,
+        "Google" => tiktoken::pricing::Provider::Google,
+        "Meta" => tiktoken::pricing::Provider::Meta,
+        "DeepSeek" => tiktoken::pricing::Provider::DeepSeek,
+        "Alibaba" => tiktoken::pricing::Provider::Alibaba,
+        "Mistral" => tiktoken::pricing::Provider::Mistral,
+        _ => return Vec::new(),
+    };
+
+    tiktoken::pricing::models_by_provider(provider)
+        .iter()
+        .map(|m| ModelInfo {
+            id: m.id.to_string(),
+            provider: m.provider.to_string(),
+            input_per_1m: m.pricing.input_per_1m,
+            output_per_1m: m.pricing.output_per_1m,
+            cached_input_per_1m: m.pricing.cached_input_per_1m,
+            context_window: m.context_window,
+            max_output: m.max_output,
+        })
+        .collect()
+}
+
+/// Model pricing and metadata.
+#[wasm_bindgen]
+#[derive(Clone)]
+pub struct ModelInfo {
     id: String,
     provider: String,
     input_per_1m: f64,
@@ -160,4 +249,36 @@ struct ModelInfo {
     cached_input_per_1m: Option<f64>,
     context_window: u32,
     max_output: u32,
+}
+
+#[wasm_bindgen]
+impl ModelInfo {
+    #[wasm_bindgen(getter)]
+    pub fn id(&self) -> String {
+        self.id.clone()
+    }
+    #[wasm_bindgen(getter)]
+    pub fn provider(&self) -> String {
+        self.provider.clone()
+    }
+    #[wasm_bindgen(getter, js_name = inputPer1m)]
+    pub fn input_per_1m(&self) -> f64 {
+        self.input_per_1m
+    }
+    #[wasm_bindgen(getter, js_name = outputPer1m)]
+    pub fn output_per_1m(&self) -> f64 {
+        self.output_per_1m
+    }
+    #[wasm_bindgen(getter, js_name = cachedInputPer1m)]
+    pub fn cached_input_per_1m(&self) -> Option<f64> {
+        self.cached_input_per_1m
+    }
+    #[wasm_bindgen(getter, js_name = contextWindow)]
+    pub fn context_window(&self) -> u32 {
+        self.context_window
+    }
+    #[wasm_bindgen(getter, js_name = maxOutput)]
+    pub fn max_output(&self) -> u32 {
+        self.max_output
+    }
 }
