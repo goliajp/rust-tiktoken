@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 43d46f09185a56648b83f37e4b3f3f1574009bb394b4469058aaf37915c8e73e # shrinks to text = "\u{3000}A"
+cc 6c71d56696edaa8283cab3e8da61af7ce3928569db9a4c41ea07e8482db98a9f # shrinks to text = "fn a()\u{1680}{\n"
+cc c0079287ce42c046dddabed13a77184c1b8da1656df2292955c00f11f3d4fe8d # shrinks to text = "\u{3000}["
+cc ef6c3d1a5a5d3513ece6acfec30227cb4b57ccb8e068231b21c74c507ad3d004 # shrinks to text = "\u{3000}{"
+cc f137aeabeeddfdcd986b31442e678a1be56c71f77da63306cc30c1f76b8599b5 # shrinks to text = "\u{a0}!"
