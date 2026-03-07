@@ -24,23 +24,23 @@ All benchmarks on Apple M4 Mac mini, single-threaded. Token output verified iden
 
 #### cl100k_base encode
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 2.1** | vs tiktoken-rs | vs Python |
+| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| short (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.5x** | **14x** |
-| medium (900 B) | 32.2 us | 53.8 us | **7.3 us** | **7.3x** | **4.4x** |
-| long (45 KB) | 1,500 us | 2,611 us | **373 us** | **7.0x** | **4.0x** |
-| unicode (4.5 KB) | 141 us | 164 us | **97 us** | **1.7x** | **1.5x** |
-| code (3.9 KB) | 247 us | 264 us | **34 us** | **7.7x** | **7.3x** |
+| short (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.6x** | **14x** |
+| medium (900 B) | 32.2 us | 53.8 us | **7.2 us** | **7.5x** | **4.5x** |
+| long (45 KB) | 1,500 us | 2,611 us | **366 us** | **7.1x** | **4.1x** |
+| unicode (4.5 KB) | 141 us | 164 us | **101 us** | **1.6x** | **1.4x** |
+| code (3.9 KB) | 247 us | 264 us | **42 us** | **6.3x** | **5.9x** |
 
 #### o200k_base encode
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 2.1** | vs tiktoken-rs | vs Python |
+| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| short (13 B) | 1,600 ns | 1,051 ns | **116 ns** | **9.1x** | **14x** |
-| medium (900 B) | 58.3 us | 56.2 us | **7.3 us** | **7.7x** | **8.0x** |
-| long (45 KB) | 2,900 us | 2,799 us | **374 us** | **7.5x** | **7.8x** |
-| unicode (4.5 KB) | 204 us | 187 us | **104 us** | **1.8x** | **2.0x** |
-| code (3.9 KB) | 332 us | 253 us | **33 us** | **7.6x** | **10x** |
+| short (13 B) | 1,600 ns | 1,051 ns | **115 ns** | **9.1x** | **14x** |
+| medium (900 B) | 58.3 us | 56.2 us | **7.1 us** | **7.9x** | **8.2x** |
+| long (45 KB) | 2,900 us | 2,799 us | **365 us** | **7.7x** | **7.9x** |
+| unicode (4.5 KB) | 204 us | 187 us | **99 us** | **1.9x** | **2.1x** |
+| code (3.9 KB) | 332 us | 253 us | **41 us** | **6.2x** | **8.1x** |
 
 <details>
 <summary>Why is it faster?</summary>

@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.0.1] - 2026-03-07
+
+### Changed
+
+- Updated benchmark tables in README to v3.0 numbers (all three languages)
+
 ## [3.0.0] - 2026-03-07
 
 ### Added
