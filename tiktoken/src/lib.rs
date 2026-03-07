@@ -92,10 +92,11 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
     }
 }
 
-/// Get a cached tokenizer by OpenAI model name.
+/// Get a cached tokenizer by model name.
 ///
+/// Supports OpenAI, Meta, DeepSeek, Qwen, and Mistral models.
 /// Maps model name prefixes to their encoding.
-/// Returns `None` for unknown or non-OpenAI models.
+/// Returns `None` for unknown models.
 pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
     model_to_encoding(model).and_then(get_encoding)
 }
