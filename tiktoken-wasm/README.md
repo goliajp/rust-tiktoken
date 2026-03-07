@@ -199,7 +199,7 @@ Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"De
 
 ## Demo
 
-See [`examples/react-app`](../examples/react-app/) for a complete Vite + React demo application.
+See [`examples/react-app`](../tiktoken/examples/react-app/) for a complete Vite + React demo application.
 
 ## License
 
