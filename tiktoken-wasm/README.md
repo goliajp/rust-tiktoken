@@ -193,9 +193,19 @@ Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"De
 | Anthropic | claude-opus-4, claude-sonnet-4, claude-4.5-sonnet, claude-4.5-haiku, claude-4.6-sonnet, claude-4.6-opus, claude-4.6-haiku, claude-3.5-haiku, claude-3.5-sonnet, claude-3-opus, claude-3-haiku |
 | Google | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash |
 | Meta | llama-4-scout, llama-4-maverick, llama-3.3-70b, llama-3.1-405b, llama-3.1-70b, llama-3.1-8b |
-| DeepSeek | deepseek-r1, deepseek-v3, deepseek-chat |
+| DeepSeek | deepseek-r1, deepseek-v3 |
 | Qwen | qwen3-235b, qwen3-32b, qwen3-30b-a3b, qwen3-14b, qwen-2.5-72b, qwen-2.5-coder-32b, qwen-turbo |
 | Mistral | mistral-large, mistral-medium, mistral-small, codestral, pixtral-large |
+
+## Notes
+
+### Initialization
+
+Call `await init()` once before any other API calls. This loads and compiles the WASM module. Subsequent calls are a no-op.
+
+### Memory Management
+
+`Encoding` instances hold references to globally cached data and are lightweight. Calling `.free()` releases the JS wrapper — the underlying encoding data remains cached for reuse. In short-lived scripts you can skip `.free()`; in long-running apps, call it when you're done with the instance.
 
 ## Demo
 
