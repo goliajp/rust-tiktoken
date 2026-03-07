@@ -14,8 +14,8 @@ The fastest Rust BPE tokenizer. Compatible with OpenAI [tiktoken](https://github
 - **Multi-provider**: 9 encodings across 5 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral)
 - **Fast**: arena-based vocabulary, heap-accelerated BPE merge, DFA regex
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
-- **Pricing**: cost estimation for 39 models across 7 providers
-- **Compact**: zstd-compressed vocabulary data embedded at compile time
+- **Pricing**: cost estimation for 57 models across 7 providers
+- **Compact**: ruzstd-compressed vocabulary data embedded at compile time
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
 ## Performance
@@ -24,7 +24,7 @@ All benchmarks on Apple M4 Mac mini, single-threaded. Token output verified iden
 
 #### cl100k_base encode
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
+| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
 | short (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.6x** | **14x** |
 | medium (900 B) | 32.2 us | 53.8 us | **7.2 us** | **7.5x** | **4.5x** |
@@ -34,7 +34,7 @@ All benchmarks on Apple M4 Mac mini, single-threaded. Token output verified iden
 
 #### o200k_base encode
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
+| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
 | short (13 B) | 1,600 ns | 1,051 ns | **115 ns** | **9.1x** | **14x** |
 | medium (900 B) | 58.3 us | 56.2 us | **7.1 us** | **7.9x** | **8.2x** |
@@ -155,7 +155,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-Supports 39 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
+Supports 57 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 
 ## WebAssembly
 
