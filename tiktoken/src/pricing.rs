@@ -1,4 +1,4 @@
-//! Per-model pricing data and cost estimation for OpenAI, Anthropic Claude, and Google Gemini.
+//! Per-model pricing data and cost estimation for OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 //!
 //! Prices are in USD per 1M tokens. Updated as of 2025-05.
 //! Pricing changes frequently — verify against official docs before production billing.
@@ -9,6 +9,10 @@ pub enum Provider {
     OpenAI,
     Anthropic,
     Google,
+    Meta,
+    DeepSeek,
+    Alibaba,
+    Mistral,
 }
 
 impl std::fmt::Display for Provider {
@@ -17,6 +21,10 @@ impl std::fmt::Display for Provider {
             Self::OpenAI => write!(f, "OpenAI"),
             Self::Anthropic => write!(f, "Anthropic"),
             Self::Google => write!(f, "Google"),
+            Self::Meta => write!(f, "Meta"),
+            Self::DeepSeek => write!(f, "DeepSeek"),
+            Self::Alibaba => write!(f, "Alibaba"),
+            Self::Mistral => write!(f, "Mistral"),
         }
     }
 }
@@ -94,8 +102,7 @@ impl Model {
 /// assert_eq!(model.context_window, 128_000);
 /// ```
 pub fn get_model(id: &str) -> Option<&'static Model> {
-    let lower = id.to_lowercase();
-    ALL_MODELS.iter().find(|m| m.id == lower)
+    ALL_MODELS.iter().find(|m| m.id.eq_ignore_ascii_case(id))
 }
 
 /// Estimate cost for a model by name. Returns `None` for unknown models.
@@ -108,6 +115,18 @@ pub fn get_model(id: &str) -> Option<&'static Model> {
 /// ```
 pub fn estimate_cost(model_id: &str, input_tokens: u64, output_tokens: u64) -> Option<f64> {
     get_model(model_id).map(|m| m.estimate_cost(input_tokens, output_tokens))
+}
+
+/// List all available models.
+///
+/// # Examples
+///
+/// ```
+/// let models = tiktoken::pricing::all_models();
+/// assert!(models.len() >= 39);
+/// ```
+pub fn all_models() -> &'static [Model] {
+    ALL_MODELS
 }
 
 /// List all models for a given provider.
@@ -407,6 +426,145 @@ const GEMINI_EMBED: Model = model(
     0,
 );
 
+// ── Meta (Llama via hosted APIs) ──────────────────────────
+// pricing based on common API providers (Together, Fireworks, etc.)
+
+const META_LLAMA_3_1_405B: Model = model(
+    "llama-3.1-405b",
+    Provider::Meta,
+    3.00,
+    3.00,
+    None,
+    128_000,
+    4_096,
+);
+
+const META_LLAMA_3_1_70B: Model = model(
+    "llama-3.1-70b",
+    Provider::Meta,
+    0.88,
+    0.88,
+    None,
+    128_000,
+    4_096,
+);
+
+const META_LLAMA_3_1_8B: Model = model(
+    "llama-3.1-8b",
+    Provider::Meta,
+    0.18,
+    0.18,
+    None,
+    128_000,
+    4_096,
+);
+
+const META_LLAMA_3_3_70B: Model = model(
+    "llama-3.3-70b",
+    Provider::Meta,
+    0.88,
+    0.88,
+    None,
+    128_000,
+    4_096,
+);
+
+// ── DeepSeek ─────────────────────────────────────────────
+
+const DEEPSEEK_V3: Model = model(
+    "deepseek-v3",
+    Provider::DeepSeek,
+    0.27,
+    1.10,
+    Some(0.07),
+    128_000,
+    8_192,
+);
+
+const DEEPSEEK_R1: Model = model(
+    "deepseek-r1",
+    Provider::DeepSeek,
+    0.55,
+    2.19,
+    Some(0.14),
+    128_000,
+    8_192,
+);
+
+// ── Alibaba (Qwen) ──────────────────────────────────────
+
+const QWEN_2_5_72B: Model = model(
+    "qwen2.5-72b",
+    Provider::Alibaba,
+    0.90,
+    0.90,
+    None,
+    128_000,
+    8_192,
+);
+
+const QWEN_2_5_32B: Model = model(
+    "qwen2.5-32b",
+    Provider::Alibaba,
+    0.40,
+    0.40,
+    None,
+    128_000,
+    8_192,
+);
+
+const QWEN_2_5_7B: Model = model(
+    "qwen2.5-7b",
+    Provider::Alibaba,
+    0.15,
+    0.15,
+    None,
+    128_000,
+    8_192,
+);
+
+// ── Mistral ─────────────────────────────────────────────
+
+const MISTRAL_LARGE: Model = model(
+    "mistral-large",
+    Provider::Mistral,
+    2.00,
+    6.00,
+    None,
+    128_000,
+    4_096,
+);
+
+const MISTRAL_SMALL: Model = model(
+    "mistral-small",
+    Provider::Mistral,
+    0.10,
+    0.30,
+    None,
+    128_000,
+    4_096,
+);
+
+const MISTRAL_NEMO: Model = model(
+    "mistral-nemo",
+    Provider::Mistral,
+    0.15,
+    0.15,
+    None,
+    128_000,
+    4_096,
+);
+
+const MIXTRAL_8X7B: Model = model(
+    "mixtral-8x7b",
+    Provider::Mistral,
+    0.60,
+    0.60,
+    None,
+    32_768,
+    4_096,
+);
+
 // ── Master list ─────────────────────────────────────────
 
 static ALL_MODELS: &[Model] = &[
@@ -439,6 +597,23 @@ static ALL_MODELS: &[Model] = &[
     GEMINI_15_PRO,
     GEMINI_15_FLASH,
     GEMINI_EMBED,
+    // Meta
+    META_LLAMA_3_1_405B,
+    META_LLAMA_3_1_70B,
+    META_LLAMA_3_1_8B,
+    META_LLAMA_3_3_70B,
+    // DeepSeek
+    DEEPSEEK_V3,
+    DEEPSEEK_R1,
+    // Alibaba
+    QWEN_2_5_72B,
+    QWEN_2_5_32B,
+    QWEN_2_5_7B,
+    // Mistral
+    MISTRAL_LARGE,
+    MISTRAL_SMALL,
+    MISTRAL_NEMO,
+    MIXTRAL_8X7B,
 ];
 
 #[cfg(test)]
@@ -462,6 +637,31 @@ mod tests {
     fn test_get_model_gemini() {
         let m = get_model("gemini-2.5-pro").unwrap();
         assert_eq!(m.provider, Provider::Google);
+    }
+
+    #[test]
+    fn test_get_model_deepseek() {
+        let m = get_model("deepseek-v3").unwrap();
+        assert_eq!(m.provider, Provider::DeepSeek);
+        assert!(m.pricing.cached_input_per_1m.is_some());
+    }
+
+    #[test]
+    fn test_get_model_llama() {
+        let m = get_model("llama-3.1-70b").unwrap();
+        assert_eq!(m.provider, Provider::Meta);
+    }
+
+    #[test]
+    fn test_get_model_qwen() {
+        let m = get_model("qwen2.5-72b").unwrap();
+        assert_eq!(m.provider, Provider::Alibaba);
+    }
+
+    #[test]
+    fn test_get_model_mistral() {
+        let m = get_model("mistral-large").unwrap();
+        assert_eq!(m.provider, Provider::Mistral);
     }
 
     #[test]
@@ -501,6 +701,14 @@ mod tests {
         assert!(claude.len() >= 4);
         let google = models_by_provider(Provider::Google);
         assert!(google.len() >= 4);
+        let meta = models_by_provider(Provider::Meta);
+        assert!(meta.len() >= 3);
+        let deepseek = models_by_provider(Provider::DeepSeek);
+        assert!(deepseek.len() >= 2);
+        let alibaba = models_by_provider(Provider::Alibaba);
+        assert!(alibaba.len() >= 3);
+        let mistral = models_by_provider(Provider::Mistral);
+        assert!(mistral.len() >= 3);
     }
 
     #[test]
@@ -529,6 +737,10 @@ mod tests {
         assert_eq!(Provider::OpenAI.to_string(), "OpenAI");
         assert_eq!(Provider::Anthropic.to_string(), "Anthropic");
         assert_eq!(Provider::Google.to_string(), "Google");
+        assert_eq!(Provider::Meta.to_string(), "Meta");
+        assert_eq!(Provider::DeepSeek.to_string(), "DeepSeek");
+        assert_eq!(Provider::Alibaba.to_string(), "Alibaba");
+        assert_eq!(Provider::Mistral.to_string(), "Mistral");
     }
 
     #[test]
@@ -544,6 +756,62 @@ mod tests {
     #[test]
     fn test_estimate_cost_unknown_model() {
         assert!(estimate_cost("nonexistent-model", 1000, 1000).is_none());
+    }
+
+    #[test]
+    fn test_deepseek_cache_pricing() {
+        let m = get_model("deepseek-v3").unwrap();
+        assert!(m.pricing.cached_input_per_1m.is_some());
+        let cached = m.pricing.cached_input_per_1m.unwrap();
+        assert!(cached < m.pricing.input_per_1m);
+        let cost = m.estimate_cost_with_cache(500_000, 500_000, 100_000);
+        assert!(cost > 0.0);
+    }
+
+    #[test]
+    fn test_deepseek_r1_pricing() {
+        let m = get_model("deepseek-r1").unwrap();
+        assert_eq!(m.provider, Provider::DeepSeek);
+        assert!(m.pricing.input_per_1m > 0.0);
+        assert!(m.pricing.output_per_1m > m.pricing.input_per_1m);
+    }
+
+    #[test]
+    fn test_llama_models_no_cache() {
+        for id in [
+            "llama-3.1-405b",
+            "llama-3.1-70b",
+            "llama-3.1-8b",
+            "llama-3.3-70b",
+        ] {
+            let m = get_model(id).unwrap();
+            assert_eq!(m.provider, Provider::Meta, "wrong provider for {id}");
+            assert!(
+                m.pricing.cached_input_per_1m.is_none(),
+                "unexpected cache for {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_qwen_models() {
+        for id in ["qwen2.5-72b", "qwen2.5-32b", "qwen2.5-7b"] {
+            let m = get_model(id).unwrap();
+            assert_eq!(m.provider, Provider::Alibaba, "wrong provider for {id}");
+        }
+    }
+
+    #[test]
+    fn test_mistral_models() {
+        for id in [
+            "mistral-large",
+            "mistral-small",
+            "mistral-nemo",
+            "mixtral-8x7b",
+        ] {
+            let m = get_model(id).unwrap();
+            assert_eq!(m.provider, Provider::Mistral, "wrong provider for {id}");
+        }
     }
 
     #[test]
@@ -588,10 +856,18 @@ mod tests {
 
     #[test]
     fn test_models_by_provider_exhaustive() {
-        let total: usize = [Provider::OpenAI, Provider::Anthropic, Provider::Google]
-            .iter()
-            .map(|p| models_by_provider(*p).len())
-            .sum();
+        let total: usize = [
+            Provider::OpenAI,
+            Provider::Anthropic,
+            Provider::Google,
+            Provider::Meta,
+            Provider::DeepSeek,
+            Provider::Alibaba,
+            Provider::Mistral,
+        ]
+        .iter()
+        .map(|p| models_by_provider(*p).len())
+        .sum();
         assert_eq!(
             total,
             ALL_MODELS.len(),

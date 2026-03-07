@@ -26,6 +26,7 @@ fn bench_encoding(c: &mut Criterion, enc_name: &str) {
     let enc = tiktoken::get_encoding(enc_name).unwrap();
     let cases = make_cases();
 
+    // encode
     let mut group = c.benchmark_group(format!("{enc_name}/encode"));
     for (name, text) in &cases {
         group.bench_with_input(BenchmarkId::new(*name, text.len()), text, |b, t| {
@@ -34,6 +35,7 @@ fn bench_encoding(c: &mut Criterion, enc_name: &str) {
     }
     group.finish();
 
+    // count
     let mut group = c.benchmark_group(format!("{enc_name}/count"));
     for (name, text) in &cases {
         group.bench_with_input(BenchmarkId::new(*name, text.len()), text, |b, t| {
@@ -41,15 +43,54 @@ fn bench_encoding(c: &mut Criterion, enc_name: &str) {
         });
     }
     group.finish();
+
+    // decode (encode once, then benchmark decoding)
+    let pre_encoded: Vec<(&str, Vec<u32>)> = cases
+        .iter()
+        .map(|(name, text)| (*name, enc.encode(text)))
+        .collect();
+    let mut group = c.benchmark_group(format!("{enc_name}/decode"));
+    for (name, tokens) in &pre_encoded {
+        group.bench_with_input(BenchmarkId::new(*name, tokens.len()), tokens, |b, toks| {
+            b.iter(|| enc.decode(toks));
+        });
+    }
+    group.finish();
 }
 
-fn bench_cl100k(c: &mut Criterion) {
-    bench_encoding(c, "cl100k_base");
+// generate one bench function per encoding to keep criterion groups separate
+macro_rules! bench_fns {
+    ($($fn_name:ident => $enc_name:literal),+ $(,)?) => {
+        $(
+            fn $fn_name(c: &mut Criterion) {
+                bench_encoding(c, $enc_name);
+            }
+        )+
+    };
 }
 
-fn bench_o200k(c: &mut Criterion) {
-    bench_encoding(c, "o200k_base");
+bench_fns! {
+    bench_cl100k_base => "cl100k_base",
+    bench_o200k_base  => "o200k_base",
+    bench_p50k_base   => "p50k_base",
+    bench_p50k_edit   => "p50k_edit",
+    bench_r50k_base   => "r50k_base",
+    bench_llama3      => "llama3",
+    bench_deepseek_v3 => "deepseek_v3",
+    bench_qwen2       => "qwen2",
+    bench_mistral_v3  => "mistral_v3",
 }
 
-criterion_group!(benches, bench_cl100k, bench_o200k);
+criterion_group!(
+    benches,
+    bench_cl100k_base,
+    bench_o200k_base,
+    bench_p50k_base,
+    bench_p50k_edit,
+    bench_r50k_base,
+    bench_llama3,
+    bench_deepseek_v3,
+    bench_qwen2,
+    bench_mistral_v3,
+);
 criterion_main!(benches);
