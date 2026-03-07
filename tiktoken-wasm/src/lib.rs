@@ -64,7 +64,16 @@ impl Encoding {
 
 /// Get an encoding by name.
 ///
-/// Supported: `"cl100k_base"`, `"o200k_base"`, `"p50k_base"`, `"p50k_edit"`, `"r50k_base"`.
+/// Supported encodings:
+/// - `"cl100k_base"` — GPT-4, GPT-3.5-turbo
+/// - `"o200k_base"` — GPT-4o, GPT-4.1, o1, o3
+/// - `"p50k_base"` — text-davinci-002/003
+/// - `"p50k_edit"` — text-davinci-edit
+/// - `"r50k_base"` — GPT-3 (davinci, curie, etc.)
+/// - `"llama3"` — Meta Llama 3/4
+/// - `"deepseek_v3"` — DeepSeek V3/R1
+/// - `"qwen2"` — Qwen 2/2.5/3
+/// - `"mistral_v3"` — Mistral/Codestral/Pixtral
 ///
 /// Throws `Error` for unknown encoding names.
 #[wasm_bindgen(js_name = getEncoding)]
@@ -77,6 +86,10 @@ pub fn get_encoding(name: &str) -> Result<Encoding, JsError> {
         "p50k_base" => "p50k_base",
         "p50k_edit" => "p50k_edit",
         "r50k_base" => "r50k_base",
+        "llama3" => "llama3",
+        "deepseek_v3" => "deepseek_v3",
+        "qwen2" => "qwen2",
+        "mistral_v3" => "mistral_v3",
         _ => return Err(JsError::new(&format!("unknown encoding: {name}"))),
     };
     Ok(Encoding {
@@ -85,8 +98,9 @@ pub fn get_encoding(name: &str) -> Result<Encoding, JsError> {
     })
 }
 
-/// Get an encoding for an OpenAI model name (e.g. `"gpt-4o"`, `"o3-mini"`).
+/// Get an encoding for a model name (e.g. `"gpt-4o"`, `"o3-mini"`, `"llama-4"`, `"deepseek-r1"`).
 ///
+/// Supports models from OpenAI, Meta, DeepSeek, Qwen, and Mistral.
 /// Automatically resolves the model name to the correct encoding.
 /// Throws `Error` for unknown model names.
 #[wasm_bindgen(js_name = encodingForModel)]
@@ -100,7 +114,7 @@ pub fn encoding_for_model(model: &str) -> Result<Encoding, JsError> {
 
 /// Estimate cost in USD for a given model, input token count, and output token count.
 ///
-/// Supports OpenAI, Anthropic Claude, and Google Gemini models.
+/// Supports OpenAI, Anthropic Claude, Google Gemini, Meta Llama, DeepSeek, Qwen, and Mistral models.
 /// Throws `Error` for unknown model ids.
 #[wasm_bindgen(js_name = estimateCost)]
 pub fn estimate_cost(
