@@ -3,12 +3,20 @@
 [![Crates.io](https://img.shields.io/crates/v/tiktoken?style=flat-square&logo=rust)](https://crates.io/crates/tiktoken)
 [![docs.rs](https://img.shields.io/docsrs/tiktoken?style=flat-square&logo=docs.rs)](https://docs.rs/tiktoken)
 [![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](LICENSE)
-[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen?style=flat-square)](src/)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue?style=flat-square&logo=rust)](Cargo.toml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.94-blue?style=flat-square&logo=rust)](Cargo.toml)
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器，兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)。**比 tiktoken-rs 快 7–10 倍**，**比 Python tiktoken 快 4–15 倍**。
+最快的 Rust BPE 分词器。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
+
+## 特性
+
+- **多厂商**：9 种编码，覆盖 5 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral）
+- **高性能**：Arena 词表存储、堆加速 BPE 合并、DFA 正则
+- **并行编码**：可选的 rayon 多线程编码，适用于长文本
+- **费用估算**：覆盖 7 家厂商共 39 个模型
+- **体积紧凑**：zstd 压缩词表数据，编译期嵌入
+- **零分配计数**：`count()` 不分配 token 向量
 
 ## 性能
 
@@ -19,31 +27,31 @@
 | 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 2.1** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
 | 短文本 (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.5x** | **14x** |
-| 中等文本 (900 B) | 32.2 µs | 53.8 µs | **7.3 µs** | **7.3x** | **4.4x** |
-| 长文本 (45 KB) | 1,500 µs | 2,611 µs | **373 µs** | **7.0x** | **4.0x** |
-| Unicode (4.5 KB) | 141 µs | 164 µs | **97 µs** | **1.7x** | **1.5x** |
-| 代码 (3.9 KB) | 247 µs | 264 µs | **34 µs** | **7.7x** | **7.3x** |
+| 中等文本 (900 B) | 32.2 us | 53.8 us | **7.3 us** | **7.3x** | **4.4x** |
+| 长文本 (45 KB) | 1,500 us | 2,611 us | **373 us** | **7.0x** | **4.0x** |
+| Unicode (4.5 KB) | 141 us | 164 us | **97 us** | **1.7x** | **1.5x** |
+| 代码 (3.9 KB) | 247 us | 264 us | **34 us** | **7.7x** | **7.3x** |
 
 #### o200k_base encode
 
 | 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 2.1** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
 | 短文本 (13 B) | 1,600 ns | 1,051 ns | **116 ns** | **9.1x** | **14x** |
-| 中等文本 (900 B) | 58.3 µs | 56.2 µs | **7.3 µs** | **7.7x** | **8.0x** |
-| 长文本 (45 KB) | 2,900 µs | 2,799 µs | **374 µs** | **7.5x** | **7.8x** |
-| Unicode (4.5 KB) | 204 µs | 187 µs | **104 µs** | **1.8x** | **2.0x** |
-| 代码 (3.9 KB) | 332 µs | 253 µs | **33 µs** | **7.6x** | **10x** |
+| 中等文本 (900 B) | 58.3 us | 56.2 us | **7.3 us** | **7.7x** | **8.0x** |
+| 长文本 (45 KB) | 2,900 us | 2,799 us | **374 us** | **7.5x** | **7.8x** |
+| Unicode (4.5 KB) | 204 us | 187 us | **104 us** | **1.8x** | **2.0x** |
+| 代码 (3.9 KB) | 332 us | 253 us | **33 us** | **7.6x** | **10x** |
 
 <details>
 <summary>为什么更快？</summary>
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
+| 词表存储 | Arena（单次分配，缓存友好） | `HashMap<Vec<u8>>`（20 万次分配） | PyO3 背后的 Rust `HashMap` |
 | 正则引擎 | `regex`（DFA，线性时间） | `fancy-regex`（回溯） | `regex` 经 PyO3 + FFI 开销 |
-| 哈希表 | `FxHashMap`（小 key 更快） | `rustc-hash` v1 | PyO3 背后的 Rust `HashMap` |
-| BPE 合并 | rank 缓存（仅重算 2 邻居） | 标准实现 | 标准实现 |
+| 哈希表 | 自定义开放寻址 + `FxHash` | `rustc-hash` v1 | 标准 `HashMap` |
+| BPE 合并 | 堆加速 O(n log n) | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
 | 零分配 `count()` | 有 | 无 | 无 |
-| 运行时依赖 | 4 crates | 16 crates | — |
 
 基准测试源码：[`benches/`](benches/)。可通过 `cargo bench` 复现。
 
@@ -53,7 +61,10 @@
 
 ```toml
 [dependencies]
-tiktoken = "2.1"
+tiktoken = "3"
+
+# 可选：大文本多线程编码
+tiktoken = { version = "3", features = ["parallel"] }
 ```
 
 ## 快速开始
@@ -65,20 +76,28 @@ let tokens = enc.encode("hello world");
 let text = enc.decode_to_string(&tokens).unwrap();
 assert_eq!(text, "hello world");
 
-// 按模型名称
+// 按模型名称 — 支持所有厂商
 let enc = tiktoken::encoding_for_model("gpt-4o").unwrap();
 let count = enc.count("hello world"); // 零分配快速路径
+
+let enc = tiktoken::encoding_for_model("llama-3.1-70b").unwrap();
+let enc = tiktoken::encoding_for_model("deepseek-v3").unwrap();
+let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 ```
 
 ## 支持的编码
 
-| 编码 | 适用模型 |
-|---|---|
-| `o200k_base` | GPT-4o, GPT-4o-mini, o1, o3, o4-mini |
-| `cl100k_base` | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-ada-002, text-embedding-3-* |
-| `p50k_base` | text-davinci-002/003, code-davinci-*, code-cushman-* |
-| `p50k_edit` | text-davinci-edit-*, code-davinci-edit-* |
-| `r50k_base` | text-davinci-001, text-curie, text-babbage, text-ada, davinci, curie, babbage, ada |
+| 编码 | 厂商 | 适用模型 |
+|---|---|---|
+| `o200k_base` | OpenAI | GPT-4o, GPT-4o-mini, o1, o3, o4-mini |
+| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-* |
+| `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
+| `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
+| `r50k_base` | OpenAI | GPT-3 时代：davinci, curie, babbage, ada |
+| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3 |
+| `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
+| `qwen2` | 阿里巴巴 | Qwen 2.5, Qwen 3 |
+| `mistral_v3` | Mistral | Mistral, Mixtral（Tekken 分词器） |
 
 ## API
 
@@ -106,6 +125,18 @@ let tokens = enc.encode_with_special_tokens("hello<|endoftext|>world");
 let enc = tiktoken::get_encoding("o200k_base").unwrap();
 let count = enc.count("敏捷的棕色狐狸跳过了懒狗。");
 // 比 encode().len() 更快 — 不分配 token 向量
+
+// 带特殊 token 识别的计数
+let count = enc.count_with_special_tokens("hello<|endoftext|>world");
+```
+
+### 并行编码
+
+```rust
+// 需要 `parallel` feature
+let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+let tokens = enc.encode_parallel("...非常长的文本...");
+// 输出完全一致，>= 4KB 文本时使用 rayon 并行
 ```
 
 ### 费用估算
@@ -121,21 +152,21 @@ let model = pricing::get_model("claude-opus-4").unwrap();
 let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 
 // 按厂商列出所有模型
-let models = pricing::models_by_provider(pricing::Provider::Google);
+let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-支持 OpenAI、Anthropic Claude、Google Gemini 共 26 个模型。
+支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 39 个模型。
 
 ## WebAssembly
 
-npm 包 [`@goliapkg/tokenrs-wasm`](https://www.npmjs.com/package/@goliapkg/tokenrs-wasm)，可直接在浏览器和 Node.js 中使用。
+npm 包 [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)，可直接在浏览器和 Node.js 中使用。
 
 ```bash
-npm install @goliapkg/tokenrs-wasm
+npm install @goliapkg/tiktoken-wasm
 ```
 
 ```typescript
-import init, { getEncoding, encodingForModel, estimateCost } from '@goliapkg/tokenrs-wasm'
+import init, { getEncoding, encodingForModel, estimateCost } from '@goliapkg/tiktoken-wasm'
 
 await init()
 
@@ -169,3 +200,5 @@ wasm-pack build --target web --release
 ## 许可证
 
 [MIT](LICENSE)
+
+第三方词表数据许可证：参见 [LICENSE-3RD-PARTY](LICENSE-3RD-PARTY)。
