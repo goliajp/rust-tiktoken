@@ -24,23 +24,23 @@
 
 #### cl100k_base encode
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 2.1** | vs tiktoken-rs | vs Python |
+| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.5x** | **14x** |
-| 中等文本 (900 B) | 32.2 us | 53.8 us | **7.3 us** | **7.3x** | **4.4x** |
-| 长文本 (45 KB) | 1,500 us | 2,611 us | **373 us** | **7.0x** | **4.0x** |
-| Unicode (4.5 KB) | 141 us | 164 us | **97 us** | **1.7x** | **1.5x** |
-| 代码 (3.9 KB) | 247 us | 264 us | **34 us** | **7.7x** | **7.3x** |
+| 短文本 (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.6x** | **14x** |
+| 中等文本 (900 B) | 32.2 us | 53.8 us | **7.2 us** | **7.5x** | **4.5x** |
+| 长文本 (45 KB) | 1,500 us | 2,611 us | **366 us** | **7.1x** | **4.1x** |
+| Unicode (4.5 KB) | 141 us | 164 us | **101 us** | **1.6x** | **1.4x** |
+| 代码 (3.9 KB) | 247 us | 264 us | **42 us** | **6.3x** | **5.9x** |
 
 #### o200k_base encode
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 2.1** | vs tiktoken-rs | vs Python |
+| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1,600 ns | 1,051 ns | **116 ns** | **9.1x** | **14x** |
-| 中等文本 (900 B) | 58.3 us | 56.2 us | **7.3 us** | **7.7x** | **8.0x** |
-| 长文本 (45 KB) | 2,900 us | 2,799 us | **374 us** | **7.5x** | **7.8x** |
-| Unicode (4.5 KB) | 204 us | 187 us | **104 us** | **1.8x** | **2.0x** |
-| 代码 (3.9 KB) | 332 us | 253 us | **33 us** | **7.6x** | **10x** |
+| 短文本 (13 B) | 1,600 ns | 1,051 ns | **115 ns** | **9.1x** | **14x** |
+| 中等文本 (900 B) | 58.3 us | 56.2 us | **7.1 us** | **7.9x** | **8.2x** |
+| 长文本 (45 KB) | 2,900 us | 2,799 us | **365 us** | **7.7x** | **7.9x** |
+| Unicode (4.5 KB) | 204 us | 187 us | **99 us** | **1.9x** | **2.1x** |
+| 代码 (3.9 KB) | 332 us | 253 us | **41 us** | **6.2x** | **8.1x** |
 
 <details>
 <summary>为什么更快？</summary>
