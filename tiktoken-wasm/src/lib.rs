@@ -7,7 +7,7 @@
 //! All encoding instances are cached globally via `OnceLock`, so repeated
 //! calls to `getEncoding()` with the same name return the same underlying data.
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::{wasm_bindgen, JsError};
 
 /// WASM wrapper around a tiktoken encoding instance.
 ///
@@ -87,10 +87,10 @@ impl Encoding {
 ///
 /// Returns an array of strings: `["cl100k_base", "o200k_base", ...]`
 #[wasm_bindgen(js_name = listEncodings)]
-pub fn list_encodings() -> Vec<JsValue> {
+pub fn list_encodings() -> Vec<String> {
     tiktoken::list_encodings()
         .iter()
-        .map(|s| JsValue::from_str(s))
+        .map(|s| s.to_string())
         .collect()
 }
 
