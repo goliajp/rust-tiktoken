@@ -1,7 +1,11 @@
-//! High-performance pure-Rust BPE tokenizer compatible with OpenAI's tiktoken.
+//! High-performance pure-Rust BPE tokenizer compatible with OpenAI's tiktoken
+//! and all mainstream LLM tokenizers.
 //!
-//! Supports all tiktoken encodings (`cl100k_base`, `o200k_base`, `p50k_base`, `p50k_edit`,
-//! `r50k_base`) with token encoding, decoding, counting, and multi-provider pricing.
+//! Supports 9 encodings across 5 providers: OpenAI (`cl100k_base`, `o200k_base`,
+//! `p50k_base`, `p50k_edit`, `r50k_base`), Meta (`llama3`), DeepSeek (`deepseek_v3`),
+//! Alibaba (`qwen2`), and Mistral (`mistral_v3`).
+//!
+//! Includes token encoding, decoding, counting, and multi-provider pricing.
 //!
 //! # Quick Start
 //!
@@ -20,7 +24,10 @@
 
 mod bpe;
 mod encoding;
+mod merge;
+mod pretokenize;
 pub mod pricing;
+mod vocab;
 
 pub use bpe::CoreBpe;
 
@@ -31,10 +38,45 @@ static O200K_BASE: OnceLock<CoreBpe> = OnceLock::new();
 static P50K_BASE: OnceLock<CoreBpe> = OnceLock::new();
 static P50K_EDIT: OnceLock<CoreBpe> = OnceLock::new();
 static R50K_BASE: OnceLock<CoreBpe> = OnceLock::new();
+static LLAMA3: OnceLock<CoreBpe> = OnceLock::new();
+static DEEPSEEK_V3: OnceLock<CoreBpe> = OnceLock::new();
+static QWEN2: OnceLock<CoreBpe> = OnceLock::new();
+static MISTRAL_V3: OnceLock<CoreBpe> = OnceLock::new();
+
+/// All available encoding names.
+///
+/// Returns the list of encoding names that can be passed to [`get_encoding`].
+///
+/// # Examples
+///
+/// ```
+/// let names = tiktoken::list_encodings();
+/// assert!(names.contains(&"cl100k_base"));
+/// assert!(names.contains(&"llama3"));
+/// assert_eq!(names.len(), 9);
+/// ```
+pub fn list_encodings() -> &'static [&'static str] {
+    &[
+        "cl100k_base",
+        "o200k_base",
+        "p50k_base",
+        "p50k_edit",
+        "r50k_base",
+        "llama3",
+        "deepseek_v3",
+        "qwen2",
+        "mistral_v3",
+    ]
+}
 
 /// Get a cached tokenizer by encoding name.
 ///
-/// Supported: `cl100k_base`, `o200k_base`, `p50k_base`, `p50k_edit`, `r50k_base`.
+/// Supported encodings:
+/// - OpenAI: `cl100k_base`, `o200k_base`, `p50k_base`, `p50k_edit`, `r50k_base`
+/// - Meta: `llama3`
+/// - DeepSeek: `deepseek_v3`
+/// - Alibaba: `qwen2`
+/// - Mistral: `mistral_v3`
 pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
     match name {
         "cl100k_base" => Some(CL100K_BASE.get_or_init(encoding::cl100k_base)),
@@ -42,6 +84,10 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
         "p50k_base" => Some(P50K_BASE.get_or_init(encoding::p50k_base)),
         "p50k_edit" => Some(P50K_EDIT.get_or_init(encoding::p50k_edit)),
         "r50k_base" => Some(R50K_BASE.get_or_init(encoding::r50k_base)),
+        "llama3" => Some(LLAMA3.get_or_init(encoding::llama3)),
+        "deepseek_v3" => Some(DEEPSEEK_V3.get_or_init(encoding::deepseek_v3)),
+        "qwen2" => Some(QWEN2.get_or_init(encoding::qwen2)),
+        "mistral_v3" => Some(MISTRAL_V3.get_or_init(encoding::mistral_v3)),
         _ => None,
     }
 }
@@ -57,8 +103,12 @@ pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
 /// Map a model name to its encoding name.
 ///
 /// Returns the encoding name (e.g. `"o200k_base"`) for the given model,
-/// or `None` for unknown models.
+/// or `None` for unknown models. Supports OpenAI, Meta, DeepSeek, Qwen, and Mistral models.
 pub fn model_to_encoding(model: &str) -> Option<&'static str> {
+    // order matters: more specific prefixes must come before less specific ones.
+    // e.g. "gpt-4o" must be checked before "gpt-4" since starts_with("gpt-4")
+    // would also match "gpt-4o".
+
     // o200k_base models (newest first)
     if model.starts_with("o4-mini")
         || model.starts_with("o3")
@@ -100,6 +150,34 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
         return Some("r50k_base");
     }
 
+    // llama3 models
+    if model.starts_with("llama-3")
+        || model.starts_with("llama3")
+        || model.starts_with("Llama-3")
+        || model.starts_with("Meta-Llama-3")
+    {
+        return Some("llama3");
+    }
+
+    // deepseek models
+    if model.starts_with("deepseek") || model.starts_with("DeepSeek") {
+        return Some("deepseek_v3");
+    }
+
+    // qwen models
+    if model.starts_with("qwen") || model.starts_with("Qwen") {
+        return Some("qwen2");
+    }
+
+    // mistral / mixtral models
+    if model.starts_with("mistral")
+        || model.starts_with("Mistral")
+        || model.starts_with("mixtral")
+        || model.starts_with("Mixtral")
+    {
+        return Some("mistral_v3");
+    }
+
     None
 }
 
@@ -117,6 +195,10 @@ mod tests {
             "p50k_base",
             "p50k_edit",
             "r50k_base",
+            "llama3",
+            "deepseek_v3",
+            "qwen2",
+            "mistral_v3",
         ] {
             assert!(get_encoding(name).is_some(), "missing encoding: {name}");
         }
@@ -239,6 +321,16 @@ mod tests {
     }
 
     // special tokens
+
+    #[test]
+    fn test_count_with_special_tokens_cl100k() {
+        let enc = get_encoding("cl100k_base").unwrap();
+        let text = "hello<|endoftext|>world";
+        assert_eq!(
+            enc.count_with_special_tokens(text),
+            enc.encode_with_special_tokens(text).len()
+        );
+    }
 
     #[test]
     fn test_special_tokens_cl100k() {
@@ -427,8 +519,278 @@ mod tests {
     }
 
     #[test]
+    fn test_model_to_encoding_llama3() {
+        for model in ["llama-3.1-70b", "llama3-8b", "Meta-Llama-3.1-8B"] {
+            assert_eq!(
+                model_to_encoding(model),
+                Some("llama3"),
+                "wrong encoding for {model}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_model_to_encoding_deepseek() {
+        for model in ["deepseek-v3", "DeepSeek-R1", "deepseek-chat"] {
+            assert_eq!(
+                model_to_encoding(model),
+                Some("deepseek_v3"),
+                "wrong encoding for {model}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_model_to_encoding_qwen() {
+        for model in ["qwen2.5-72b", "Qwen2.5-7B", "qwen3-32b"] {
+            assert_eq!(
+                model_to_encoding(model),
+                Some("qwen2"),
+                "wrong encoding for {model}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_model_to_encoding_mistral() {
+        for model in ["mistral-small-latest", "Mistral-Small-24B", "mixtral-8x7b"] {
+            assert_eq!(
+                model_to_encoding(model),
+                Some("mistral_v3"),
+                "wrong encoding for {model}"
+            );
+        }
+    }
+
+    #[test]
     fn test_model_to_encoding_unknown() {
         assert_eq!(model_to_encoding("unknown-model"), None);
+    }
+
+    // vocab_size / num_special_tokens
+
+    #[test]
+    fn test_vocab_sizes() {
+        let cases: &[(&str, usize)] = &[
+            ("cl100k_base", 100256),
+            ("o200k_base", 199998),
+            ("p50k_base", 50280),
+            ("r50k_base", 50256),
+            ("llama3", 128000),
+            ("deepseek_v3", 128000),
+            ("qwen2", 151643),
+            ("mistral_v3", 131072),
+        ];
+        for &(name, expected) in cases {
+            let enc = get_encoding(name).unwrap();
+            assert_eq!(enc.vocab_size(), expected, "vocab_size mismatch for {name}");
+        }
+    }
+
+    #[test]
+    fn test_special_token_counts() {
+        let enc = get_encoding("cl100k_base").unwrap();
+        assert_eq!(enc.num_special_tokens(), 5);
+
+        let enc = get_encoding("p50k_edit").unwrap();
+        assert_eq!(enc.num_special_tokens(), 4); // endoftext + 3 fim tokens
+
+        let enc = get_encoding("llama3").unwrap();
+        assert_eq!(enc.num_special_tokens(), 8);
+    }
+
+    // regression: gpt-4o must resolve to o200k, not cl100k (prefix order matters)
+    #[test]
+    fn test_model_to_encoding_gpt4o_vs_gpt4() {
+        assert_eq!(model_to_encoding("gpt-4o"), Some("o200k_base"));
+        assert_eq!(model_to_encoding("gpt-4o-mini"), Some("o200k_base"));
+        assert_eq!(model_to_encoding("gpt-4"), Some("cl100k_base"));
+        assert_eq!(model_to_encoding("gpt-4-turbo"), Some("cl100k_base"));
+    }
+
+    // new encoding edge cases
+
+    #[test]
+    fn test_llama3_special_tokens() {
+        let enc = get_encoding("llama3").unwrap();
+        let text = "hello<|begin_of_text|>world";
+        let with = enc.encode_with_special_tokens(text);
+        assert!(with.contains(&128000));
+        let without = enc.encode(text);
+        assert!(!without.contains(&128000));
+    }
+
+    #[test]
+    fn test_deepseek_special_tokens() {
+        let enc = get_encoding("deepseek_v3").unwrap();
+        let text = "hello<|EOT|>world";
+        let with = enc.encode_with_special_tokens(text);
+        assert!(with.contains(&128805));
+    }
+
+    #[test]
+    fn test_qwen2_special_tokens() {
+        let enc = get_encoding("qwen2").unwrap();
+        let text = "hello<|endoftext|>world";
+        let with = enc.encode_with_special_tokens(text);
+        assert!(with.contains(&151643));
+    }
+
+    #[test]
+    fn test_mistral_special_tokens() {
+        let enc = get_encoding("mistral_v3").unwrap();
+        let text = "hello[INST]world";
+        let with = enc.encode_with_special_tokens(text);
+        assert!(with.contains(&3));
+    }
+
+    #[test]
+    fn test_deepseek_zwj_roundtrip() {
+        let enc = get_encoding("deepseek_v3").unwrap();
+        // ZWJ emoji sequence
+        let text = "\u{200d}\u{200d}test";
+        let decoded = enc.decode(&enc.encode(text));
+        assert_eq!(std::str::from_utf8(&decoded).unwrap(), text);
+    }
+
+    #[test]
+    fn test_all_encodings_empty_roundtrip() {
+        for name in [
+            "cl100k_base",
+            "o200k_base",
+            "p50k_base",
+            "p50k_edit",
+            "r50k_base",
+            "llama3",
+            "deepseek_v3",
+            "qwen2",
+            "mistral_v3",
+        ] {
+            let enc = get_encoding(name).unwrap();
+            assert!(enc.encode("").is_empty(), "non-empty for {name}");
+            assert_eq!(enc.count(""), 0, "non-zero count for {name}");
+            assert!(enc.decode(&[]).is_empty(), "non-empty decode for {name}");
+        }
+    }
+
+    #[test]
+    fn test_all_encodings_single_byte_roundtrip() {
+        for name in [
+            "cl100k_base",
+            "o200k_base",
+            "p50k_base",
+            "r50k_base",
+            "llama3",
+            "deepseek_v3",
+            "qwen2",
+            "mistral_v3",
+        ] {
+            let enc = get_encoding(name).unwrap();
+            for b in 0u8..=127 {
+                let text = String::from(b as char);
+                let decoded = enc.decode(&enc.encode(&text));
+                assert_eq!(
+                    &decoded[..],
+                    text.as_bytes(),
+                    "byte {b} roundtrip failed for {name}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_count_with_special_tokens_equals_encode_with_special_tokens() {
+        for name in ["cl100k_base", "o200k_base", "llama3", "qwen2"] {
+            let enc = get_encoding(name).unwrap();
+            let text = "hello world test text";
+            assert_eq!(
+                enc.count_with_special_tokens(text),
+                enc.encode_with_special_tokens(text).len(),
+                "mismatch for {name}"
+            );
+        }
+    }
+
+    // count_with_special_tokens across all encodings with their specific tokens
+
+    #[test]
+    fn test_count_with_special_tokens_all_encodings() {
+        let cases: &[(&str, &str)] = &[
+            ("cl100k_base", "<|endoftext|>"),
+            ("o200k_base", "<|endoftext|>"),
+            ("p50k_edit", "<|fim_prefix|>"),
+            ("llama3", "<|begin_of_text|>"),
+            ("deepseek_v3", "<|EOT|>"),
+            ("qwen2", "<|endoftext|>"),
+            ("mistral_v3", "[INST]"),
+        ];
+        for &(name, special) in cases {
+            let enc = get_encoding(name).unwrap();
+            let text = format!("hello{special}world");
+            assert_eq!(
+                enc.count_with_special_tokens(&text),
+                enc.encode_with_special_tokens(&text).len(),
+                "count_with_special_tokens mismatch for {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_count_with_special_tokens_adjacent() {
+        let enc = get_encoding("cl100k_base").unwrap();
+        let text = "<|endoftext|><|endoftext|>";
+        assert_eq!(
+            enc.count_with_special_tokens(text),
+            enc.encode_with_special_tokens(text).len()
+        );
+    }
+
+    // special token roundtrips for new encodings
+
+    #[test]
+    fn test_llama3_special_token_roundtrip() {
+        let enc = get_encoding("llama3").unwrap();
+        let text = "start<|begin_of_text|>middle<|eot_id|>end";
+        let tokens = enc.encode_with_special_tokens(text);
+        assert_eq!(enc.decode_to_string(&tokens).unwrap(), text);
+    }
+
+    #[test]
+    fn test_qwen2_special_token_roundtrip() {
+        let enc = get_encoding("qwen2").unwrap();
+        let text = "<|im_start|>user\nhello<|im_end|>";
+        let tokens = enc.encode_with_special_tokens(text);
+        assert_eq!(enc.decode_to_string(&tokens).unwrap(), text);
+    }
+
+    #[test]
+    fn test_mistral_special_token_roundtrip() {
+        let enc = get_encoding("mistral_v3").unwrap();
+        let text = "[INST]hello[/INST]";
+        let tokens = enc.encode_with_special_tokens(text);
+        assert_eq!(enc.decode_to_string(&tokens).unwrap(), text);
+    }
+
+    // decode unknown token id: should silently skip
+    #[test]
+    fn test_decode_unknown_token_id() {
+        let enc = get_encoding("cl100k_base").unwrap();
+        let result = enc.decode(&[u32::MAX]);
+        assert!(
+            result.is_empty(),
+            "unknown token should be silently skipped"
+        );
+    }
+
+    #[test]
+    fn test_decode_mixed_known_and_unknown() {
+        let enc = get_encoding("cl100k_base").unwrap();
+        let tokens = enc.encode("hello");
+        let mut with_unknown = tokens.clone();
+        with_unknown.push(u32::MAX);
+        with_unknown.extend_from_slice(&enc.encode(" world"));
+        let decoded = enc.decode_to_string(&with_unknown).unwrap();
+        assert_eq!(decoded, "hello world");
     }
 
     // p50k_edit roundtrip (uses different special tokens from p50k_base)
@@ -481,6 +843,40 @@ mod tests {
         assert_eq!(decoded, text);
     }
 
+    // new encoding roundtrips
+
+    #[test]
+    fn test_llama3_roundtrip() {
+        let enc = get_encoding("llama3").unwrap();
+        let text = "Hello, 世界! 🚀 test";
+        let decoded = enc.decode(&enc.encode(text));
+        assert_eq!(std::str::from_utf8(&decoded).unwrap(), text);
+    }
+
+    #[test]
+    fn test_deepseek_roundtrip() {
+        let enc = get_encoding("deepseek_v3").unwrap();
+        let text = "Hello, 世界! 🚀 test";
+        let decoded = enc.decode(&enc.encode(text));
+        assert_eq!(std::str::from_utf8(&decoded).unwrap(), text);
+    }
+
+    #[test]
+    fn test_qwen2_roundtrip() {
+        let enc = get_encoding("qwen2").unwrap();
+        let text = "Hello, 世界! 🚀 test";
+        let decoded = enc.decode(&enc.encode(text));
+        assert_eq!(std::str::from_utf8(&decoded).unwrap(), text);
+    }
+
+    #[test]
+    fn test_mistral_roundtrip() {
+        let enc = get_encoding("mistral_v3").unwrap();
+        let text = "Hello, 世界! 🚀 test";
+        let decoded = enc.decode(&enc.encode(text));
+        assert_eq!(std::str::from_utf8(&decoded).unwrap(), text);
+    }
+
     // count consistency across all encodings
 
     #[test]
@@ -492,6 +888,10 @@ mod tests {
             "p50k_base",
             "p50k_edit",
             "r50k_base",
+            "llama3",
+            "deepseek_v3",
+            "qwen2",
+            "mistral_v3",
         ] {
             let enc = get_encoding(name).unwrap();
             assert_eq!(

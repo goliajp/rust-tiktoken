@@ -5,20 +5,29 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/tiktoken"
-version = "2.1.1"
+version = "3.0.1"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 keywords = ["tiktoken", "tokenizer", "bpe", "openai", "gpt"]
 categories = ["text-processing", "algorithms"]
 
+[features]
+default = []
+parallel = ["rayon"]
+
 [dependencies]
 base64 = "^0.22"
+rayon = { version = "^1", optional = true }
 regex = "^1"
 rustc-hash = "^2"
+zstd = "^0.13"
 
 [dev-dependencies]
 criterion = { version = "^0.8", features = ["html_reports"] }
+proptest = "^1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [[bench]]
 name = "tokenize"
