@@ -1,6 +1,6 @@
 [package]
 name = "tiktoken-wasm"
-version = "2.1.1"
+version = "3.0.0"
 edition = "2024"
 description = "WASM bindings for the tiktoken BPE tokenizer"
 license = "MIT"
