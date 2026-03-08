@@ -1,4 +1,10 @@
-// arena-based vocabulary storage for zero-allocation token lookup
+//! Arena-based vocabulary storage for zero-allocation token lookup.
+//!
+//! All token byte sequences are stored contiguously in a single `Box<[u8]>` arena.
+//! Encoding lookups use an open-addressing hash table with linear probing and
+//! `FxHash` for fast, low-collision hashing. Decoding uses direct indexing by rank
+//! into a pre-built `(offset, len)` table. This design replaces ~200k individual
+//! `Vec<u8>` heap allocations with a single contiguous block.
 
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};

@@ -94,7 +94,7 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 | `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | GPT-3 时代：davinci, curie, babbage, ada |
-| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3 |
+| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
 | `qwen2` | 阿里巴巴 | Qwen 2.5, Qwen 3 |
 | `mistral_v3` | Mistral | Mistral, Mixtral（Tekken 分词器） |

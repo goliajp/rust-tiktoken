@@ -1088,6 +1088,53 @@ mod tests {
     }
 
     #[test]
+    fn test_all_providers_have_models() {
+        let providers = [
+            Provider::OpenAI,
+            Provider::Anthropic,
+            Provider::Google,
+            Provider::Meta,
+            Provider::DeepSeek,
+            Provider::Alibaba,
+            Provider::Mistral,
+        ];
+        for p in providers {
+            assert!(!models_by_provider(p).is_empty(), "{p} has no models");
+        }
+    }
+
+    #[test]
+    fn test_max_output_within_context() {
+        for m in ALL_MODELS {
+            // embedding models have max_output = 0, skip those
+            if m.max_output == 0 {
+                continue;
+            }
+            assert!(
+                m.max_output <= m.context_window,
+                "{}: max_output {} > context_window {}",
+                m.id,
+                m.max_output,
+                m.context_window,
+            );
+        }
+    }
+
+    #[test]
+    fn test_cache_price_leq_normal() {
+        for m in ALL_MODELS {
+            if let Some(cached) = m.pricing.cached_input_per_1m {
+                assert!(
+                    cached <= m.pricing.input_per_1m,
+                    "{}: cached_input {cached} > input {}",
+                    m.id,
+                    m.pricing.input_per_1m,
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_models_by_provider_exhaustive() {
         let total: usize = [
             Provider::OpenAI,
