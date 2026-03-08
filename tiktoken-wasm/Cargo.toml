@@ -1,6 +1,6 @@
 [package]
 name = "tiktoken-wasm"
-version = "3.2.1"
+version = "3.2.2"
 edition = "2024"
 description = "WASM bindings for the tiktoken BPE tokenizer"
 license = "MIT"
@@ -17,3 +17,5 @@ wasm-bindgen = "^0.2"
 lto = true
 codegen-units = 1
 opt-level = "s"
+strip = true
+panic = "abort"

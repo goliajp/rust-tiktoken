@@ -110,20 +110,13 @@ pub fn list_encodings() -> Vec<String> {
 /// Throws `Error` for unknown encoding names.
 #[wasm_bindgen(js_name = getEncoding)]
 pub fn get_encoding(name: &str) -> Result<Encoding, JsError> {
+    // look up the static name from tiktoken's canonical list (single source of truth)
+    let static_name = tiktoken::list_encodings()
+        .iter()
+        .find(|&&n| n == name)
+        .ok_or_else(|| JsError::new(&format!("unknown encoding: {name}")))?;
     let bpe = tiktoken::get_encoding(name)
         .ok_or_else(|| JsError::new(&format!("unknown encoding: {name}")))?;
-    let static_name: &'static str = match name {
-        "cl100k_base" => "cl100k_base",
-        "o200k_base" => "o200k_base",
-        "p50k_base" => "p50k_base",
-        "p50k_edit" => "p50k_edit",
-        "r50k_base" => "r50k_base",
-        "llama3" => "llama3",
-        "deepseek_v3" => "deepseek_v3",
-        "qwen2" => "qwen2",
-        "mistral_v3" => "mistral_v3",
-        _ => return Err(JsError::new(&format!("unknown encoding: {name}"))),
-    };
     Ok(Encoding {
         name: static_name,
         bpe,
@@ -176,16 +169,7 @@ pub fn estimate_cost(
 pub fn get_model_info(model_id: &str) -> Result<ModelInfo, JsError> {
     let model = tiktoken::pricing::get_model(model_id)
         .ok_or_else(|| JsError::new(&format!("unknown model: {model_id}")))?;
-
-    Ok(ModelInfo {
-        id: model.id.to_string(),
-        provider: model.provider.to_string(),
-        input_per_1m: model.pricing.input_per_1m,
-        output_per_1m: model.pricing.output_per_1m,
-        cached_input_per_1m: model.pricing.cached_input_per_1m,
-        context_window: model.context_window,
-        max_output: model.max_output,
-    })
+    Ok(convert_model(model))
 }
 
 /// List all supported models with pricing info.
@@ -195,15 +179,7 @@ pub fn get_model_info(model_id: &str) -> Result<ModelInfo, JsError> {
 pub fn all_models() -> Vec<ModelInfo> {
     tiktoken::pricing::all_models()
         .iter()
-        .map(|m| ModelInfo {
-            id: m.id.to_string(),
-            provider: m.provider.to_string(),
-            input_per_1m: m.pricing.input_per_1m,
-            output_per_1m: m.pricing.output_per_1m,
-            cached_input_per_1m: m.pricing.cached_input_per_1m,
-            context_window: m.context_window,
-            max_output: m.max_output,
-        })
+        .map(convert_model)
         .collect()
 }
 
@@ -213,36 +189,46 @@ pub fn all_models() -> Vec<ModelInfo> {
 /// Returns an empty array for unknown providers.
 #[wasm_bindgen(js_name = modelsByProvider)]
 pub fn models_by_provider(provider: &str) -> Vec<ModelInfo> {
-    let provider = match provider {
-        "OpenAI" => tiktoken::pricing::Provider::OpenAI,
-        "Anthropic" => tiktoken::pricing::Provider::Anthropic,
-        "Google" => tiktoken::pricing::Provider::Google,
-        "Meta" => tiktoken::pricing::Provider::Meta,
-        "DeepSeek" => tiktoken::pricing::Provider::DeepSeek,
-        "Alibaba" => tiktoken::pricing::Provider::Alibaba,
-        "Mistral" => tiktoken::pricing::Provider::Mistral,
-        _ => return Vec::new(),
+    let Some(provider) = parse_provider(provider) else {
+        return Vec::new();
     };
 
     tiktoken::pricing::models_by_provider(provider)
         .iter()
-        .map(|m| ModelInfo {
-            id: m.id.to_string(),
-            provider: m.provider.to_string(),
-            input_per_1m: m.pricing.input_per_1m,
-            output_per_1m: m.pricing.output_per_1m,
-            cached_input_per_1m: m.pricing.cached_input_per_1m,
-            context_window: m.context_window,
-            max_output: m.max_output,
-        })
+        .map(|m| convert_model(m))
         .collect()
+}
+
+fn convert_model(m: &tiktoken::pricing::Model) -> ModelInfo {
+    ModelInfo {
+        id: m.id,
+        provider: m.provider.to_string(),
+        input_per_1m: m.pricing.input_per_1m,
+        output_per_1m: m.pricing.output_per_1m,
+        cached_input_per_1m: m.pricing.cached_input_per_1m,
+        context_window: m.context_window,
+        max_output: m.max_output,
+    }
+}
+
+fn parse_provider(s: &str) -> Option<tiktoken::pricing::Provider> {
+    match s {
+        "OpenAI" => Some(tiktoken::pricing::Provider::OpenAI),
+        "Anthropic" => Some(tiktoken::pricing::Provider::Anthropic),
+        "Google" => Some(tiktoken::pricing::Provider::Google),
+        "Meta" => Some(tiktoken::pricing::Provider::Meta),
+        "DeepSeek" => Some(tiktoken::pricing::Provider::DeepSeek),
+        "Alibaba" => Some(tiktoken::pricing::Provider::Alibaba),
+        "Mistral" => Some(tiktoken::pricing::Provider::Mistral),
+        _ => None,
+    }
 }
 
 /// Model pricing and metadata.
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct ModelInfo {
-    id: String,
+    id: &'static str,
     provider: String,
     input_per_1m: f64,
     output_per_1m: f64,
@@ -255,7 +241,7 @@ pub struct ModelInfo {
 impl ModelInfo {
     #[wasm_bindgen(getter)]
     pub fn id(&self) -> String {
-        self.id.clone()
+        self.id.to_string()
     }
     #[wasm_bindgen(getter)]
     pub fn provider(&self) -> String {
@@ -280,5 +266,116 @@ impl ModelInfo {
     #[wasm_bindgen(getter, js_name = maxOutput)]
     pub fn max_output(&self) -> u32 {
         self.max_output
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_encodings_roundtrip() {
+        for &name in tiktoken::list_encodings() {
+            let enc = get_encoding(name).unwrap();
+            let text = "hello world 你好 🚀";
+            let tokens = enc.encode(text);
+            let decoded = enc.decode(&tokens);
+            assert_eq!(decoded, text, "roundtrip failed for {name}");
+        }
+    }
+
+    #[test]
+    fn encoding_for_known_models() {
+        let models = [
+            "gpt-4o", "gpt-4", "gpt-3.5-turbo", "llama-4", "deepseek-r1", "qwen3", "mistral-large",
+        ];
+        for model in models {
+            let enc = encoding_for_model(model);
+            assert!(enc.is_ok(), "encoding_for_model failed for {model}");
+        }
+    }
+
+    #[test]
+    fn list_encodings_count() {
+        let names = list_encodings();
+        assert_eq!(names.len(), 9);
+    }
+
+    #[test]
+    fn all_models_count() {
+        let models = all_models();
+        assert_eq!(models.len(), tiktoken::pricing::all_models().len());
+    }
+
+    #[test]
+    fn models_by_valid_provider() {
+        let openai = models_by_provider("OpenAI");
+        assert!(!openai.is_empty());
+        for m in &openai {
+            assert_eq!(m.provider, "OpenAI");
+        }
+    }
+
+    #[test]
+    fn models_by_invalid_provider() {
+        let unknown = models_by_provider("NonExistent");
+        assert!(unknown.is_empty());
+    }
+
+    #[test]
+    fn estimate_cost_known_model() {
+        let cost = estimate_cost("gpt-4o", 1000, 1000).unwrap();
+        assert!(cost > 0.0);
+    }
+
+    #[test]
+    fn estimate_cost_unknown_model() {
+        assert!(estimate_cost("fake-model", 1000, 1000).is_err());
+    }
+
+    #[test]
+    fn get_model_info_known() {
+        let info = get_model_info("gpt-4o").unwrap();
+        assert_eq!(info.id(), "gpt-4o");
+        assert_eq!(info.provider(), "OpenAI");
+        assert!(info.context_window() > 0);
+    }
+
+    #[test]
+    fn get_model_info_unknown() {
+        assert!(get_model_info("fake-model").is_err());
+    }
+
+    #[test]
+    fn unknown_encoding_error() {
+        assert!(get_encoding("nonexistent").is_err());
+    }
+
+    #[test]
+    fn unknown_model_encoding_error() {
+        assert!(encoding_for_model("nonexistent-model-xyz").is_err());
+    }
+
+    #[test]
+    fn model_to_encoding_known() {
+        let name = model_to_encoding("gpt-4o");
+        assert_eq!(name.as_deref(), Some("o200k_base"));
+    }
+
+    #[test]
+    fn model_to_encoding_unknown() {
+        assert!(model_to_encoding("fake-model").is_none());
+    }
+
+    #[test]
+    fn parse_provider_all_variants() {
+        assert!(parse_provider("OpenAI").is_some());
+        assert!(parse_provider("Anthropic").is_some());
+        assert!(parse_provider("Google").is_some());
+        assert!(parse_provider("Meta").is_some());
+        assert!(parse_provider("DeepSeek").is_some());
+        assert!(parse_provider("Alibaba").is_some());
+        assert!(parse_provider("Mistral").is_some());
+        assert!(parse_provider("Unknown").is_none());
     }
 }
