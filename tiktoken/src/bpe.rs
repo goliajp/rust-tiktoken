@@ -278,7 +278,7 @@ impl CoreBpe {
                 if let Some(token) = self.vocab.get(piece) {
                     vec![token]
                 } else {
-                    let mut tokens = Vec::new();
+                    let mut tokens = Vec::with_capacity((end - start) / 3);
                     merge::bpe_encode(piece, &self.vocab, &mut tokens);
                     tokens
                 }
