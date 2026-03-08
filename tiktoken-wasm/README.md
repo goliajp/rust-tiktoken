@@ -137,7 +137,7 @@ Get a tokenizer by encoding name. Supported:
 
 ### `encodingForModel(model: string): Encoding`
 
-Get a tokenizer by model name (e.g. `gpt-4o`, `llama-4-scout`, `deepseek-r1`, `qwen3-235b`).
+Get a tokenizer by model name (e.g. `gpt-4o`, `llama-4-scout`, `deepseek-r1`, `qwen3-max`).
 
 ### `modelToEncoding(model: string): string | null`
 
@@ -189,13 +189,13 @@ Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"De
 
 | Provider | Models |
 |----------|--------|
-| OpenAI | gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini, o3, o3-pro, o3-mini, o4-mini, o1, gpt-4-turbo, gpt-4, gpt-3.5-turbo, embeddings |
-| Anthropic | claude-opus-4, claude-sonnet-4, claude-4.5-sonnet, claude-4.5-haiku, claude-4.6-sonnet, claude-4.6-opus, claude-4.6-haiku, claude-3.5-haiku, claude-3.5-sonnet, claude-3-opus, claude-3-haiku |
-| Google | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash |
-| Meta | llama-4-scout, llama-4-maverick, llama-3.3-70b, llama-3.1-405b, llama-3.1-70b, llama-3.1-8b |
-| DeepSeek | deepseek-r1, deepseek-v3 |
-| Qwen | qwen3-235b, qwen3-32b, qwen3-30b-a3b, qwen3-14b, qwen-2.5-72b, qwen-2.5-coder-32b, qwen-turbo |
-| Mistral | mistral-large, mistral-medium, mistral-small, codestral, pixtral-large |
+| OpenAI | gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini, o1, o1-mini, o1-pro, o3, o3-pro, o3-mini, o4-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo, text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002 |
+| Anthropic | claude-opus-4.6, claude-sonnet-4.6, claude-haiku-4.5, claude-opus-4.5, claude-sonnet-4.5, claude-opus-4, claude-sonnet-4, claude-3.5-haiku, claude-3.5-sonnet, claude-3-opus, claude-3-haiku |
+| Google | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash, text-embedding-004 |
+| Meta | llama-4-scout, llama-4-maverick, llama-3.1-405b, llama-3.1-70b, llama-3.1-8b, llama-3.3-70b |
+| DeepSeek | deepseek-v3, deepseek-r1 |
+| Alibaba | qwen3-max, qwen3-plus, qwen3-coder, qwen3-8b, qwen2.5-72b, qwen2.5-32b, qwen2.5-7b |
+| Mistral | mistral-large, mistral-medium, mistral-small, mistral-nemo, codestral, pixtral-large, mixtral-8x7b |
 
 ## Notes
 
