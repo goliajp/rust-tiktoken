@@ -10,7 +10,7 @@ repository = "https://github.com/goliajp/airs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tiktoken = { path = "../tiktoken" }
+tiktoken = { path = "../tiktoken", version = "3.1.2" }
 wasm-bindgen = "^0.2"
 
 [profile.release]
