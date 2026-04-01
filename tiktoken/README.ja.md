@@ -4,10 +4,11 @@
 [![docs.rs](https://img.shields.io/docsrs/tiktoken?style=flat-square&logo=docs.rs)](https://docs.rs/tiktoken)
 [![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue?style=flat-square&logo=rust)](Cargo.toml)
+[![Downloads](https://img.shields.io/crates/d/tiktoken?style=flat-square)](https://crates.io/crates/tiktoken)
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
-最速の Rust BPE トークナイザ。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral。
+最速の Rust BPE トークナイザ — tiktoken-rs より 7-10 倍高速。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral。
 
 ## 特徴
 
@@ -196,6 +197,14 @@ wasm-pack build --target web --release
 ```
 
 </details>
+
+## エコシステム
+
+tiktoken は **airs**（AI in Rust Series）の一部です。シリーズの他のクレート：
+
+- [**instructors**](https://crates.io/crates/instructors) — LLM からの型安全な構造化出力抽出
+- [**embedrs**](https://crates.io/crates/embedrs) — 統一 embedding API（クラウド + ローカル推論）
+- [**chunkedrs**](https://crates.io/crates/chunkedrs) — embedding と検索のための AI ネイティブテキストチャンキング
 
 ## ライセンス
 

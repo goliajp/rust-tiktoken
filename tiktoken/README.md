@@ -4,10 +4,11 @@
 [![docs.rs](https://img.shields.io/docsrs/tiktoken?style=flat-square&logo=docs.rs)](https://docs.rs/tiktoken)
 [![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue?style=flat-square&logo=rust)](Cargo.toml)
+[![Downloads](https://img.shields.io/crates/d/tiktoken?style=flat-square)](https://crates.io/crates/tiktoken)
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-The fastest Rust BPE tokenizer. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, and Mistral.
+The fastest Rust BPE tokenizer — 7-10x faster than tiktoken-rs. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, and Mistral.
 
 ## Features
 
@@ -196,6 +197,14 @@ wasm-pack build --target web --release
 ```
 
 </details>
+
+## Ecosystem
+
+tiktoken is part of **airs** (AI in Rust Series). Other crates in the family:
+
+- [**instructors**](https://crates.io/crates/instructors) — type-safe structured output extraction from LLMs
+- [**embedrs**](https://crates.io/crates/embedrs) — unified embedding API (cloud + local inference)
+- [**chunkedrs**](https://crates.io/crates/chunkedrs) — AI-native text chunking for embedding and retrieval
 
 ## License
 

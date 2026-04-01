@@ -4,10 +4,11 @@
 [![docs.rs](https://img.shields.io/docsrs/tiktoken?style=flat-square&logo=docs.rs)](https://docs.rs/tiktoken)
 [![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue?style=flat-square&logo=rust)](Cargo.toml)
+[![Downloads](https://img.shields.io/crates/d/tiktoken?style=flat-square)](https://crates.io/crates/tiktoken)
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
+最快的 Rust BPE 分词器 — 比 tiktoken-rs 快 7-10 倍。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
 
 ## 特性
 
@@ -196,6 +197,14 @@ wasm-pack build --target web --release
 ```
 
 </details>
+
+## 生态系统
+
+tiktoken 是 **airs**（AI in Rust Series）的一部分。系列中的其他 crate：
+
+- [**instructors**](https://crates.io/crates/instructors) — 类型安全的 LLM 结构化输出提取
+- [**embedrs**](https://crates.io/crates/embedrs) — 统一 embedding API（云端 + 本地推理）
+- [**chunkedrs**](https://crates.io/crates/chunkedrs) — AI 原生文本分块，用于 embedding 和检索
 
 ## 许可证
 
