@@ -1,6 +1,6 @@
 [package]
 name = "tiktoken-wasm"
-version = "3.2.3"
+version = "3.2.4"
 edition = "2024"
 description = "WASM bindings for the tiktoken BPE tokenizer"
 license = "MIT"
@@ -10,7 +10,7 @@ repository = "https://github.com/goliajp/rust-tiktoken"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tiktoken = { path = "../tiktoken", version = "3.1.3" }
+tiktoken = { path = "../tiktoken", version = "3.1.4" }
 wasm-bindgen = "^0.2"
 
 [package.metadata.wasm-pack.profile.release]
