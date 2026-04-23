@@ -1,7 +1,9 @@
 # @goliapkg/tiktoken-wasm
 
 [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm?style=flat-square&logo=npm)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)
-[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](../LICENSE)
+[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](LICENSE)
+
+**English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
 WebAssembly bindings for the [tiktoken](https://crates.io/crates/tiktoken) BPE tokenizer — run multi-provider tokenization directly in the browser or Node.js with near-native performance.
 
@@ -213,4 +215,4 @@ See [`examples/react-app`](../tiktoken/examples/react-app/) for a complete Vite 
 
 ## License
 
-[MIT](../LICENSE)
+[MIT](LICENSE)
