@@ -200,11 +200,12 @@ wasm-pack build --target web --release
 
 ## Ecosystem
 
-tiktoken is part of **airs** (AI in Rust Series). Other crates in the family:
+Part of a family of independent AI-infrastructure crates by GOLIA, each in its own repo:
 
-- [**instructors**](https://crates.io/crates/instructors) — type-safe structured output extraction from LLMs
-- [**embedrs**](https://crates.io/crates/embedrs) — unified embedding API (cloud + local inference)
-- [**chunkedrs**](https://crates.io/crates/chunkedrs) — AI-native text chunking for embedding and retrieval
+- [**instructors**](https://crates.io/crates/instructors) ([rust-instructor](https://github.com/goliajp/rust-instructor)) — type-safe structured output extraction from LLMs
+- [**embedrs**](https://crates.io/crates/embedrs) ([rust-embeddings](https://github.com/goliajp/rust-embeddings)) — unified embedding API (cloud + local inference)
+- [**chunkedrs**](https://crates.io/crates/chunkedrs) ([rust-chunker](https://github.com/goliajp/rust-chunker)) — AI-native text chunking for embedding and retrieval
+- [**tiktoken-wasm**](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) — WASM bindings for this crate, same repo
 
 ## License
 
