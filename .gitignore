@@ -1,0 +1,17 @@
+target/
+Cargo.lock
+*.pdb
+.DS_Store
+
+# wasm-pack build output (npm publish source)
+tiktoken-wasm/pkg/
+
+# IDE
+.idea/
+.vscode/
+
+# Claude Code
+.claude/
+
+# local
+.env.local
