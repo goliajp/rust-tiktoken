@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.1.3] - 2026-04-24
+
+### Changed
+- Migrated from `goliajp/airs` mono-repo to standalone `goliajp/rust-tiktoken` (shares repo with `tiktoken-wasm`).
+  No code changes; `repository` URL updated.
+
 ## [3.0.1] - 2026-03-07
 
 ### Changed
