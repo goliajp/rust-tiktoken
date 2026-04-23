@@ -1,6 +1,6 @@
 //! Per-model pricing data and cost estimation for OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 //!
-//! Prices are in USD per 1M tokens. Updated as of 2025-05.
+//! Prices are in USD per 1M tokens. Updated as of 2026-03.
 //! Pricing changes frequently — verify against official docs before production billing.
 
 /// Provider identity
@@ -123,7 +123,7 @@ pub fn estimate_cost(model_id: &str, input_tokens: u64, output_tokens: u64) -> O
 ///
 /// ```
 /// let models = tiktoken::pricing::all_models();
-/// assert!(models.len() >= 39);
+/// assert!(models.len() >= 57);
 /// ```
 pub fn all_models() -> &'static [Model] {
     ALL_MODELS
@@ -169,6 +169,36 @@ const fn model(
 }
 
 // ── OpenAI ──────────────────────────────────────────────
+
+const OPENAI_GPT41: Model = model(
+    "gpt-4.1",
+    Provider::OpenAI,
+    2.00,
+    8.00,
+    Some(0.50),
+    1_000_000,
+    32_768,
+);
+
+const OPENAI_GPT41_MINI: Model = model(
+    "gpt-4.1-mini",
+    Provider::OpenAI,
+    0.40,
+    1.60,
+    Some(0.10),
+    1_000_000,
+    32_768,
+);
+
+const OPENAI_GPT41_NANO: Model = model(
+    "gpt-4.1-nano",
+    Provider::OpenAI,
+    0.10,
+    0.40,
+    Some(0.025),
+    1_000_000,
+    32_768,
+);
 
 const OPENAI_GPT4O: Model = model(
     "gpt-4o",
@@ -223,9 +253,19 @@ const OPENAI_O1_PRO: Model = model(
 const OPENAI_O3: Model = model(
     "o3",
     Provider::OpenAI,
-    10.00,
-    40.00,
-    Some(2.50),
+    2.00,
+    8.00,
+    Some(0.50),
+    200_000,
+    100_000,
+);
+
+const OPENAI_O3_PRO: Model = model(
+    "o3-pro",
+    Provider::OpenAI,
+    20.00,
+    80.00,
+    None,
     200_000,
     100_000,
 );
@@ -304,6 +344,56 @@ const OPENAI_EMBED_ADA_002: Model = model(
 
 // ── Anthropic Claude ────────────────────────────────────
 
+const CLAUDE_OPUS_46: Model = model(
+    "claude-opus-4.6",
+    Provider::Anthropic,
+    5.00,
+    25.00,
+    Some(0.50),
+    200_000,
+    128_000,
+);
+
+const CLAUDE_SONNET_46: Model = model(
+    "claude-sonnet-4.6",
+    Provider::Anthropic,
+    3.00,
+    15.00,
+    Some(0.30),
+    200_000,
+    64_000,
+);
+
+const CLAUDE_HAIKU_45: Model = model(
+    "claude-haiku-4.5",
+    Provider::Anthropic,
+    1.00,
+    5.00,
+    Some(0.10),
+    200_000,
+    64_000,
+);
+
+const CLAUDE_OPUS_45: Model = model(
+    "claude-opus-4.5",
+    Provider::Anthropic,
+    5.00,
+    25.00,
+    Some(0.50),
+    200_000,
+    64_000,
+);
+
+const CLAUDE_SONNET_45: Model = model(
+    "claude-sonnet-4.5",
+    Provider::Anthropic,
+    3.00,
+    15.00,
+    Some(0.30),
+    200_000,
+    64_000,
+);
+
 const CLAUDE_OPUS_4: Model = model(
     "claude-opus-4",
     Provider::Anthropic,
@@ -379,9 +469,9 @@ const GEMINI_25_PRO: Model = model(
 const GEMINI_25_FLASH: Model = model(
     "gemini-2.5-flash",
     Provider::Google,
-    0.15,
-    0.60,
-    Some(0.0375),
+    0.30,
+    2.50,
+    Some(0.075),
     1_048_576,
     65_536,
 );
@@ -469,6 +559,26 @@ const META_LLAMA_3_3_70B: Model = model(
     4_096,
 );
 
+const META_LLAMA_4_SCOUT: Model = model(
+    "llama-4-scout",
+    Provider::Meta,
+    0.11,
+    0.34,
+    None,
+    10_000_000,
+    8_192,
+);
+
+const META_LLAMA_4_MAVERICK: Model = model(
+    "llama-4-maverick",
+    Provider::Meta,
+    0.15,
+    0.60,
+    None,
+    1_000_000,
+    8_192,
+);
+
 // ── DeepSeek ─────────────────────────────────────────────
 
 const DEEPSEEK_V3: Model = model(
@@ -523,6 +633,46 @@ const QWEN_2_5_7B: Model = model(
     8_192,
 );
 
+const QWEN_3_MAX: Model = model(
+    "qwen3-max",
+    Provider::Alibaba,
+    1.20,
+    6.00,
+    None,
+    262_144,
+    8_192,
+);
+
+const QWEN_3_PLUS: Model = model(
+    "qwen3-plus",
+    Provider::Alibaba,
+    0.40,
+    1.20,
+    None,
+    128_000,
+    8_192,
+);
+
+const QWEN_3_CODER: Model = model(
+    "qwen3-coder",
+    Provider::Alibaba,
+    0.22,
+    1.00,
+    None,
+    262_144,
+    8_192,
+);
+
+const QWEN_3_8B: Model = model(
+    "qwen3-8b",
+    Provider::Alibaba,
+    0.05,
+    0.40,
+    None,
+    128_000,
+    8_192,
+);
+
 // ── Mistral ─────────────────────────────────────────────
 
 const MISTRAL_LARGE: Model = model(
@@ -555,6 +705,36 @@ const MISTRAL_NEMO: Model = model(
     4_096,
 );
 
+const MISTRAL_MEDIUM: Model = model(
+    "mistral-medium",
+    Provider::Mistral,
+    0.40,
+    2.00,
+    None,
+    128_000,
+    4_096,
+);
+
+const CODESTRAL: Model = model(
+    "codestral",
+    Provider::Mistral,
+    0.30,
+    0.90,
+    None,
+    256_000,
+    4_096,
+);
+
+const PIXTRAL_LARGE: Model = model(
+    "pixtral-large",
+    Provider::Mistral,
+    2.00,
+    6.00,
+    None,
+    131_072,
+    4_096,
+);
+
 const MIXTRAL_8X7B: Model = model(
     "mixtral-8x7b",
     Provider::Mistral,
@@ -569,12 +749,16 @@ const MIXTRAL_8X7B: Model = model(
 
 static ALL_MODELS: &[Model] = &[
     // OpenAI
+    OPENAI_GPT41,
+    OPENAI_GPT41_MINI,
+    OPENAI_GPT41_NANO,
     OPENAI_GPT4O,
     OPENAI_GPT4O_MINI,
     OPENAI_O1,
     OPENAI_O1_MINI,
     OPENAI_O1_PRO,
     OPENAI_O3,
+    OPENAI_O3_PRO,
     OPENAI_O3_MINI,
     OPENAI_O4_MINI,
     OPENAI_GPT4_TURBO,
@@ -584,6 +768,11 @@ static ALL_MODELS: &[Model] = &[
     OPENAI_EMBED_3_LARGE,
     OPENAI_EMBED_ADA_002,
     // Anthropic
+    CLAUDE_OPUS_46,
+    CLAUDE_SONNET_46,
+    CLAUDE_HAIKU_45,
+    CLAUDE_OPUS_45,
+    CLAUDE_SONNET_45,
     CLAUDE_OPUS_4,
     CLAUDE_SONNET_4,
     CLAUDE_HAIKU_35,
@@ -598,6 +787,8 @@ static ALL_MODELS: &[Model] = &[
     GEMINI_15_FLASH,
     GEMINI_EMBED,
     // Meta
+    META_LLAMA_4_SCOUT,
+    META_LLAMA_4_MAVERICK,
     META_LLAMA_3_1_405B,
     META_LLAMA_3_1_70B,
     META_LLAMA_3_1_8B,
@@ -606,13 +797,20 @@ static ALL_MODELS: &[Model] = &[
     DEEPSEEK_V3,
     DEEPSEEK_R1,
     // Alibaba
+    QWEN_3_MAX,
+    QWEN_3_PLUS,
+    QWEN_3_CODER,
+    QWEN_3_8B,
     QWEN_2_5_72B,
     QWEN_2_5_32B,
     QWEN_2_5_7B,
     // Mistral
     MISTRAL_LARGE,
+    MISTRAL_MEDIUM,
     MISTRAL_SMALL,
     MISTRAL_NEMO,
+    CODESTRAL,
+    PIXTRAL_LARGE,
     MIXTRAL_8X7B,
 ];
 
@@ -783,6 +981,8 @@ mod tests {
             "llama-3.1-70b",
             "llama-3.1-8b",
             "llama-3.3-70b",
+            "llama-4-scout",
+            "llama-4-maverick",
         ] {
             let m = get_model(id).unwrap();
             assert_eq!(m.provider, Provider::Meta, "wrong provider for {id}");
@@ -795,7 +995,15 @@ mod tests {
 
     #[test]
     fn test_qwen_models() {
-        for id in ["qwen2.5-72b", "qwen2.5-32b", "qwen2.5-7b"] {
+        for id in [
+            "qwen2.5-72b",
+            "qwen2.5-32b",
+            "qwen2.5-7b",
+            "qwen3-max",
+            "qwen3-plus",
+            "qwen3-coder",
+            "qwen3-8b",
+        ] {
             let m = get_model(id).unwrap();
             assert_eq!(m.provider, Provider::Alibaba, "wrong provider for {id}");
         }
@@ -805,12 +1013,37 @@ mod tests {
     fn test_mistral_models() {
         for id in [
             "mistral-large",
+            "mistral-medium",
             "mistral-small",
             "mistral-nemo",
+            "codestral",
+            "pixtral-large",
             "mixtral-8x7b",
         ] {
             let m = get_model(id).unwrap();
             assert_eq!(m.provider, Provider::Mistral, "wrong provider for {id}");
+        }
+    }
+
+    #[test]
+    fn test_new_openai_models() {
+        for id in ["gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o3-pro"] {
+            let m = get_model(id).unwrap();
+            assert_eq!(m.provider, Provider::OpenAI, "wrong provider for {id}");
+        }
+    }
+
+    #[test]
+    fn test_new_claude_models() {
+        for id in [
+            "claude-opus-4.6",
+            "claude-sonnet-4.6",
+            "claude-haiku-4.5",
+            "claude-opus-4.5",
+            "claude-sonnet-4.5",
+        ] {
+            let m = get_model(id).unwrap();
+            assert_eq!(m.provider, Provider::Anthropic, "wrong provider for {id}");
         }
     }
 
@@ -851,6 +1084,53 @@ mod tests {
         for m in ALL_MODELS {
             let cost = estimate_cost(m.id, 1000, 1000).unwrap();
             assert!(cost >= 0.0, "{} produced negative cost", m.id);
+        }
+    }
+
+    #[test]
+    fn test_all_providers_have_models() {
+        let providers = [
+            Provider::OpenAI,
+            Provider::Anthropic,
+            Provider::Google,
+            Provider::Meta,
+            Provider::DeepSeek,
+            Provider::Alibaba,
+            Provider::Mistral,
+        ];
+        for p in providers {
+            assert!(!models_by_provider(p).is_empty(), "{p} has no models");
+        }
+    }
+
+    #[test]
+    fn test_max_output_within_context() {
+        for m in ALL_MODELS {
+            // embedding models have max_output = 0, skip those
+            if m.max_output == 0 {
+                continue;
+            }
+            assert!(
+                m.max_output <= m.context_window,
+                "{}: max_output {} > context_window {}",
+                m.id,
+                m.max_output,
+                m.context_window,
+            );
+        }
+    }
+
+    #[test]
+    fn test_cache_price_leq_normal() {
+        for m in ALL_MODELS {
+            if let Some(cached) = m.pricing.cached_input_per_1m {
+                assert!(
+                    cached <= m.pricing.input_per_1m,
+                    "{}: cached_input {cached} > input {}",
+                    m.id,
+                    m.pricing.input_per_1m,
+                );
+            }
         }
     }
 

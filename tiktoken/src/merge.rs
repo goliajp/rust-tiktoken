@@ -1,4 +1,9 @@
-// heap-accelerated BPE merge algorithm
+//! Heap-accelerated BPE merge algorithm.
+//!
+//! Implements byte-pair encoding merging using a min-heap (`BinaryHeap<Reverse>`)
+//! combined with a doubly-linked list for O(n log n) complexity. The heap tracks
+//! candidate merges by rank; the linked list enables O(1) neighbor updates when
+//! a merge removes a position. Lazy deletion handles stale heap entries.
 
 use crate::vocab::Vocab;
 use std::cmp::Reverse;

@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["tiktoken"]
+exclude = ["tiktoken-wasm"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.94"
+license = "MIT"
+repository = "https://github.com/goliajp/rust-tiktoken"
+homepage = "https://github.com/goliajp/rust-tiktoken"
+authors = ["GOLIA株式会社", "Li Hao <lihao@golia.jp>"]
+
+[profile.release]
+lto = true
+codegen-units = 1

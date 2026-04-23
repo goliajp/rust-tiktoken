@@ -75,7 +75,10 @@ const MISTRAL_V3_PATTERN: &str = CL100K_PATTERN;
 /// Each line is: `<base64-encoded token bytes> <integer rank>`
 /// The rank determines merge priority in the BPE algorithm (lower = merged first).
 pub(crate) fn parse_tiktoken_data(compressed: &[u8]) -> FxHashMap<Vec<u8>, u32> {
-    let data = zstd::decode_all(compressed).expect("zstd decompression failed");
+    let mut decoder =
+        ruzstd::decoding::StreamingDecoder::new(compressed).expect("zstd decompression failed");
+    let mut data = Vec::new();
+    std::io::Read::read_to_end(&mut decoder, &mut data).expect("zstd decompression failed");
     parse_tiktoken_lines(&data)
 }
 
