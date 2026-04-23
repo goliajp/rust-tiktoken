@@ -200,11 +200,12 @@ wasm-pack build --target web --release
 
 ## エコシステム
 
-tiktoken は **airs**（AI in Rust Series）の一部です。シリーズの他のクレート：
+GOLIA の独立した AI インフラ crate ファミリーの一員、各々が独自のリポジトリ:
 
-- [**instructors**](https://crates.io/crates/instructors) — LLM からの型安全な構造化出力抽出
-- [**embedrs**](https://crates.io/crates/embedrs) — 統一 embedding API（クラウド + ローカル推論）
-- [**chunkedrs**](https://crates.io/crates/chunkedrs) — embedding と検索のための AI ネイティブテキストチャンキング
+- [**instructors**](https://crates.io/crates/instructors) ([rust-instructor](https://github.com/goliajp/rust-instructor)) — LLM からの型安全な構造化出力抽出
+- [**embedrs**](https://crates.io/crates/embedrs) ([rust-embeddings](https://github.com/goliajp/rust-embeddings)) — 統一 embedding API（クラウド + ローカル推論）
+- [**chunkedrs**](https://crates.io/crates/chunkedrs) ([rust-chunker](https://github.com/goliajp/rust-chunker)) — embedding と検索のための AI ネイティブテキストチャンキング
+- [**tiktoken-wasm**](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) — 本 crate の WASM バインディング（同リポジトリ）
 
 ## ライセンス
 
