@@ -26,7 +26,7 @@ jobs:
       - run: cargo install wasm-pack
       - name: build wasm
         working-directory: tiktoken-wasm
-        run: wasm-pack build --target web --release
+        run: wasm-pack build --target web --release --scope goliapkg
       - name: publish to crates.io
         working-directory: tiktoken-wasm
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }} --allow-dirty
