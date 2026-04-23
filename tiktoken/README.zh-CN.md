@@ -4,18 +4,19 @@
 [![docs.rs](https://img.shields.io/docsrs/tiktoken?style=flat-square&logo=docs.rs)](https://docs.rs/tiktoken)
 [![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue?style=flat-square&logo=rust)](Cargo.toml)
+[![Downloads](https://img.shields.io/crates/d/tiktoken?style=flat-square)](https://crates.io/crates/tiktoken)
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
+最快的 Rust BPE 分词器 — 比 tiktoken-rs 快 7-10 倍。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
 
 ## 特性
 
 - **多厂商**：9 种编码，覆盖 5 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral）
 - **高性能**：Arena 词表存储、堆加速 BPE 合并、DFA 正则
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
-- **费用估算**：覆盖 7 家厂商共 39 个模型
-- **体积紧凑**：zstd 压缩词表数据，编译期嵌入
+- **费用估算**：覆盖 7 家厂商共 57 个模型
+- **体积紧凑**：ruzstd 压缩词表数据，编译期嵌入
 - **零分配计数**：`count()` 不分配 token 向量
 
 ## 性能
@@ -24,7 +25,7 @@
 
 #### cl100k_base encode
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
+| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
 | 短文本 (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.6x** | **14x** |
 | 中等文本 (900 B) | 32.2 us | 53.8 us | **7.2 us** | **7.5x** | **4.5x** |
@@ -34,7 +35,7 @@
 
 #### o200k_base encode
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.0** | vs tiktoken-rs | vs Python |
+| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
 | 短文本 (13 B) | 1,600 ns | 1,051 ns | **115 ns** | **9.1x** | **14x** |
 | 中等文本 (900 B) | 58.3 us | 56.2 us | **7.1 us** | **7.9x** | **8.2x** |
@@ -94,7 +95,7 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 | `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | GPT-3 时代：davinci, curie, babbage, ada |
-| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3 |
+| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
 | `qwen2` | 阿里巴巴 | Qwen 2.5, Qwen 3 |
 | `mistral_v3` | Mistral | Mistral, Mixtral（Tekken 分词器） |
@@ -155,7 +156,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 39 个模型。
+支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 57 个模型。
 
 ## WebAssembly
 
@@ -196,6 +197,14 @@ wasm-pack build --target web --release
 ```
 
 </details>
+
+## 生态系统
+
+tiktoken 是 **airs**（AI in Rust Series）的一部分。系列中的其他 crate：
+
+- [**instructors**](https://crates.io/crates/instructors) — 类型安全的 LLM 结构化输出提取
+- [**embedrs**](https://crates.io/crates/embedrs) — 统一 embedding API（云端 + 本地推理）
+- [**chunkedrs**](https://crates.io/crates/chunkedrs) — AI 原生文本分块，用于 embedding 和检索
 
 ## 许可证
 

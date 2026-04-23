@@ -23,7 +23,7 @@
 //! ```
 
 mod bpe;
-mod encoding;
+pub mod encoding;
 mod merge;
 mod pretokenize;
 pub mod pricing;
@@ -92,10 +92,11 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
     }
 }
 
-/// Get a cached tokenizer by OpenAI model name.
+/// Get a cached tokenizer by model name.
 ///
+/// Supports OpenAI, Meta, DeepSeek, Qwen, and Mistral models.
 /// Maps model name prefixes to their encoding.
-/// Returns `None` for unknown or non-OpenAI models.
+/// Returns `None` for unknown models.
 pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
     model_to_encoding(model).and_then(get_encoding)
 }
@@ -113,6 +114,7 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
     if model.starts_with("o4-mini")
         || model.starts_with("o3")
         || model.starts_with("o1")
+        || model.starts_with("gpt-4.1")
         || model.starts_with("gpt-4o")
         || model.starts_with("chatgpt-4o")
     {
@@ -150,11 +152,12 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
         return Some("r50k_base");
     }
 
-    // llama3 models
-    if model.starts_with("llama-3")
+    // llama models (llama3 encoding covers all llama 3.x and 4.x)
+    if model.starts_with("llama-")
         || model.starts_with("llama3")
-        || model.starts_with("Llama-3")
-        || model.starts_with("Meta-Llama-3")
+        || model.starts_with("llama4")
+        || model.starts_with("Llama-")
+        || model.starts_with("Meta-Llama-")
     {
         return Some("llama3");
     }
@@ -169,11 +172,15 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
         return Some("qwen2");
     }
 
-    // mistral / mixtral models
+    // mistral / mixtral / codestral / pixtral models
     if model.starts_with("mistral")
         || model.starts_with("Mistral")
         || model.starts_with("mixtral")
         || model.starts_with("Mixtral")
+        || model.starts_with("codestral")
+        || model.starts_with("Codestral")
+        || model.starts_with("pixtral")
+        || model.starts_with("Pixtral")
     {
         return Some("mistral_v3");
     }
@@ -466,7 +473,17 @@ mod tests {
 
     #[test]
     fn test_model_to_encoding_o200k() {
-        for model in ["gpt-4o", "o1", "o3", "o4-mini", "chatgpt-4o"] {
+        for model in [
+            "gpt-4o",
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
+            "o1",
+            "o3",
+            "o3-pro",
+            "o4-mini",
+            "chatgpt-4o",
+        ] {
             assert_eq!(
                 model_to_encoding(model),
                 Some("o200k_base"),
@@ -520,7 +537,13 @@ mod tests {
 
     #[test]
     fn test_model_to_encoding_llama3() {
-        for model in ["llama-3.1-70b", "llama3-8b", "Meta-Llama-3.1-8B"] {
+        for model in [
+            "llama-3.1-70b",
+            "llama3-8b",
+            "Meta-Llama-3.1-8B",
+            "llama-4-scout",
+            "llama-4-maverick",
+        ] {
             assert_eq!(
                 model_to_encoding(model),
                 Some("llama3"),
@@ -542,7 +565,13 @@ mod tests {
 
     #[test]
     fn test_model_to_encoding_qwen() {
-        for model in ["qwen2.5-72b", "Qwen2.5-7B", "qwen3-32b"] {
+        for model in [
+            "qwen2.5-72b",
+            "Qwen2.5-7B",
+            "qwen3-32b",
+            "qwen3-max",
+            "qwen3-coder",
+        ] {
             assert_eq!(
                 model_to_encoding(model),
                 Some("qwen2"),
@@ -553,7 +582,15 @@ mod tests {
 
     #[test]
     fn test_model_to_encoding_mistral() {
-        for model in ["mistral-small-latest", "Mistral-Small-24B", "mixtral-8x7b"] {
+        for model in [
+            "mistral-small-latest",
+            "Mistral-Small-24B",
+            "mixtral-8x7b",
+            "codestral",
+            "Codestral",
+            "pixtral-large",
+            "Pixtral-Large",
+        ] {
             assert_eq!(
                 model_to_encoding(model),
                 Some("mistral_v3"),

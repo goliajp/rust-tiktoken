@@ -58,6 +58,35 @@ fn bench_encoding(c: &mut Criterion, enc_name: &str) {
     group.finish();
 }
 
+fn bench_init(c: &mut Criterion) {
+    let mut group = c.benchmark_group("init");
+    group.sample_size(10); // init is slow, fewer samples needed
+
+    macro_rules! bench_init_encoding {
+        ($($name:literal => $fn:path),+ $(,)?) => {
+            $(
+                group.bench_function($name, |b| {
+                    b.iter(|| $fn());
+                });
+            )+
+        };
+    }
+
+    bench_init_encoding! {
+        "cl100k_base" => tiktoken::encoding::cl100k_base,
+        "o200k_base"  => tiktoken::encoding::o200k_base,
+        "p50k_base"   => tiktoken::encoding::p50k_base,
+        "p50k_edit"   => tiktoken::encoding::p50k_edit,
+        "r50k_base"   => tiktoken::encoding::r50k_base,
+        "llama3"      => tiktoken::encoding::llama3,
+        "deepseek_v3" => tiktoken::encoding::deepseek_v3,
+        "qwen2"       => tiktoken::encoding::qwen2,
+        "mistral_v3"  => tiktoken::encoding::mistral_v3,
+    }
+
+    group.finish();
+}
+
 // generate one bench function per encoding to keep criterion groups separate
 macro_rules! bench_fns {
     ($($fn_name:ident => $enc_name:literal),+ $(,)?) => {
@@ -83,6 +112,7 @@ bench_fns! {
 
 criterion_group!(
     benches,
+    bench_init,
     bench_cl100k_base,
     bench_o200k_base,
     bench_p50k_base,

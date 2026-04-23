@@ -1,4 +1,9 @@
-// pre-tokenization: split text into pieces before BPE
+//! Pre-tokenization: split text into pieces before BPE encoding.
+//!
+//! The [`PreTokenizer`] trait defines a regex-based splitter that partitions
+//! input text into byte-range pieces. [`RegexPreTokenizer`] implements this
+//! using the `regex` crate (DFA-based), with a custom whitespace lookahead
+//! emulation (`adjust_whitespace_end`) that avoids `fancy-regex` entirely.
 
 use regex::Regex;
 

@@ -1,14 +1,14 @@
-# @goliapkg/tokenrs-wasm
+# @goliapkg/tiktoken-wasm
 
-[![npm](https://img.shields.io/npm/v/@goliapkg/tokenrs-wasm?style=flat-square&logo=npm)](https://www.npmjs.com/package/@goliapkg/tokenrs-wasm)
-[![License](https://img.shields.io/npm/l/@goliapkg/tokenrs-wasm?style=flat-square)](../LICENSE)
+[![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm?style=flat-square&logo=npm)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)
+[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](../LICENSE)
 
-WebAssembly bindings for the [tiktoken](https://crates.io/crates/tiktoken) BPE tokenizer — run OpenAI-compatible tokenization directly in the browser or Node.js with near-native performance.
+WebAssembly bindings for the [tiktoken](https://crates.io/crates/tiktoken) BPE tokenizer — run multi-provider tokenization directly in the browser or Node.js with near-native performance.
 
 ## Install
 
 ```bash
-npm install @goliapkg/tokenrs-wasm
+npm install @goliapkg/tiktoken-wasm
 ```
 
 ## Build from source
@@ -21,7 +21,7 @@ wasm-pack build --target web --release
 
 Output is in `pkg/` — a complete npm-ready package containing:
 - `tiktoken_wasm.js` — ES module with WASM loader
-- `tiktoken_wasm_bg.wasm` — compiled WASM binary (~3 MB)
+- `tiktoken_wasm_bg.wasm` — compiled WASM binary (~7 MB, ~3 MB gzipped)
 - `tiktoken_wasm.d.ts` — TypeScript type definitions
 
 ## Usage
@@ -32,13 +32,22 @@ Output is in `pkg/` — a complete npm-ready package containing:
 import init, {
   getEncoding,
   encodingForModel,
+  listEncodings,
+  modelToEncoding,
   estimateCost,
   getModelInfo,
+  allModels,
+  modelsByProvider,
   type Encoding,
-} from '@goliapkg/tokenrs-wasm'
+  type ModelInfo,
+} from '@goliapkg/tiktoken-wasm'
 
 // initialize WASM module (required once, before any other calls)
 await init()
+
+// discover available encodings
+const names: string[] = listEncodings()
+// ["cl100k_base", "o200k_base", ..., "mistral_v3"]
 
 // encode / decode
 const enc: Encoding = getEncoding('cl100k_base')
@@ -46,15 +55,27 @@ const tokens: Uint32Array = enc.encode('hello world')
 const text: string = enc.decode(tokens)   // "hello world"
 const count: number = enc.count('hello world')  // 2
 
-// by model name
+// special token handling
+const countST: number = enc.countWithSpecialTokens('hi<|endoftext|>bye')
+
+// vocabulary info
+console.log(enc.vocabSize)         // 100256
+console.log(enc.numSpecialTokens)  // 5
+
+// by model name — supports OpenAI, Meta, DeepSeek, Qwen, Mistral
 const enc2 = encodingForModel('gpt-4o')
+const encName = modelToEncoding('llama-4-scout')  // "llama3"
 
 // cost estimation (USD)
 const cost: number = estimateCost('gpt-4o', 1000, 500)
 
-// model metadata
-const info = getModelInfo('claude-opus-4')
-// { id, provider, input_per_1m, output_per_1m, cached_input_per_1m, context_window, max_output }
+// model metadata (fully typed)
+const info: ModelInfo = getModelInfo('claude-opus-4')
+console.log(info.id, info.provider, info.inputPer1m, info.contextWindow)
+
+// browse all models or filter by provider
+const all: ModelInfo[] = allModels()
+const openai: ModelInfo[] = modelsByProvider('OpenAI')
 
 // free WASM memory when done
 enc.free()
@@ -97,44 +118,98 @@ module.exports = {
 
 ## API Reference
 
+### `listEncodings(): string[]`
+
+List all available encoding names (9 encodings).
+
 ### `getEncoding(name: string): Encoding`
 
-Get a tokenizer by encoding name. Supported: `cl100k_base`, `o200k_base`, `p50k_base`, `p50k_edit`, `r50k_base`.
+Get a tokenizer by encoding name. Supported:
+- `cl100k_base` — GPT-4, GPT-3.5-turbo
+- `o200k_base` — GPT-4o, GPT-4.1, o1, o3
+- `p50k_base` — text-davinci-002/003
+- `p50k_edit` — text-davinci-edit
+- `r50k_base` — GPT-3 (davinci, curie, etc.)
+- `llama3` — Meta Llama 3/4
+- `deepseek_v3` — DeepSeek V3/R1
+- `qwen2` — Qwen 2/2.5/3
+- `mistral_v3` — Mistral/Codestral/Pixtral
 
 ### `encodingForModel(model: string): Encoding`
 
-Get a tokenizer by OpenAI model name (e.g. `gpt-4o`, `o3-mini`, `gpt-3.5-turbo`).
+Get a tokenizer by model name (e.g. `gpt-4o`, `llama-4-scout`, `deepseek-r1`, `qwen3-max`).
+
+### `modelToEncoding(model: string): string | null`
+
+Map a model name to its encoding name without loading the encoding.
 
 ### `Encoding`
 
-| Method | Returns | Description |
-|--------|---------|-------------|
+| Method / Property | Type | Description |
+|-------------------|------|-------------|
 | `encode(text)` | `Uint32Array` | Encode text to token ids |
 | `encodeWithSpecialTokens(text)` | `Uint32Array` | Encode with special token recognition |
 | `decode(tokens)` | `string` | Decode token ids to text |
 | `count(text)` | `number` | Count tokens (faster than `encode().length`) |
+| `countWithSpecialTokens(text)` | `number` | Count tokens with special token recognition |
 | `name` | `string` | Encoding name (getter) |
+| `vocabSize` | `number` | Number of regular tokens in vocabulary |
+| `numSpecialTokens` | `number` | Number of special tokens |
 | `free()` | `void` | Release WASM memory |
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-Estimate API cost in USD. Supports OpenAI, Anthropic Claude, and Google Gemini models.
+Estimate API cost in USD. Supports 57 models across 7 providers.
 
-### `getModelInfo(modelId): object`
+### `getModelInfo(modelId): ModelInfo`
 
-Get model metadata: pricing, context window, max output tokens.
+Get model metadata with full TypeScript typing.
+
+### `allModels(): ModelInfo[]`
+
+List all 57 supported models with pricing info.
+
+### `modelsByProvider(provider): ModelInfo[]`
+
+Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"DeepSeek"`, `"Alibaba"`, `"Mistral"`.
+
+### `ModelInfo`
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Model identifier |
+| `provider` | `string` | Provider name |
+| `inputPer1m` | `number` | Input cost per 1M tokens (USD) |
+| `outputPer1m` | `number` | Output cost per 1M tokens (USD) |
+| `cachedInputPer1m` | `number \| undefined` | Cached input cost per 1M tokens |
+| `contextWindow` | `number` | Max context window (tokens) |
+| `maxOutput` | `number` | Max output tokens |
 
 ## Supported Models (pricing)
 
 | Provider | Models |
 |----------|--------|
-| OpenAI | gpt-4o, gpt-4o-mini, o1, o3, o4-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo, embeddings |
-| Anthropic | claude-opus-4, claude-sonnet-4, claude-3.5-haiku, claude-3.5-sonnet, claude-3-opus, claude-3-haiku |
-| Google | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash |
+| OpenAI | gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini, o1, o1-mini, o1-pro, o3, o3-pro, o3-mini, o4-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo, text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002 |
+| Anthropic | claude-opus-4.6, claude-sonnet-4.6, claude-haiku-4.5, claude-opus-4.5, claude-sonnet-4.5, claude-opus-4, claude-sonnet-4, claude-3.5-haiku, claude-3.5-sonnet, claude-3-opus, claude-3-haiku |
+| Google | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash, text-embedding-004 |
+| Meta | llama-4-scout, llama-4-maverick, llama-3.1-405b, llama-3.1-70b, llama-3.1-8b, llama-3.3-70b |
+| DeepSeek | deepseek-v3, deepseek-r1 |
+| Alibaba | qwen3-max, qwen3-plus, qwen3-coder, qwen3-8b, qwen2.5-72b, qwen2.5-32b, qwen2.5-7b |
+| Mistral | mistral-large, mistral-medium, mistral-small, mistral-nemo, codestral, pixtral-large, mixtral-8x7b |
+
+## Notes
+
+### Initialization
+
+Call `await init()` once before any other API calls. This loads and compiles the WASM module. Subsequent calls are a no-op.
+
+### Memory Management
+
+`Encoding` instances hold references to globally cached data and are lightweight. Calling `.free()` releases the JS wrapper — the underlying encoding data remains cached for reuse. In short-lived scripts you can skip `.free()`; in long-running apps, call it when you're done with the instance.
 
 ## Demo
 
-See [`examples/react-app`](../examples/react-app/) for a complete Vite + React demo application.
+See [`examples/react-app`](../tiktoken/examples/react-app/) for a complete Vite + React demo application.
 
 ## License
 
