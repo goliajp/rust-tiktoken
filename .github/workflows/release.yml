@@ -30,7 +30,7 @@ jobs:
       - name: publish to crates.io
         working-directory: tiktoken-wasm
         run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }} --allow-dirty
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
