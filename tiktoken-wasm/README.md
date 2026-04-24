@@ -213,7 +213,7 @@ Call `await init()` once before any other API calls. This loads and compiles the
 
 See [`examples/react-app`](../tiktoken/examples/react-app/) for a complete Vite + React demo application.
 
-<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+<!-- ECOSYSTEM BEGIN (generated — edit ecosystem.toml, not this block) -->
 
 ## Ecosystem
 

@@ -215,7 +215,7 @@ USD で API コストを見積もり。7 プロバイダ 57 モデル対応。
 
 完全な Vite + React デモアプリ: [`examples/react-app`](../tiktoken/examples/react-app/)。
 
-<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+<!-- ECOSYSTEM BEGIN (generated — edit ecosystem.toml, not this block) -->
 
 ## エコシステム
 
