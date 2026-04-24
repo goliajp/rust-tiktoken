@@ -198,14 +198,21 @@ wasm-pack build --target web --release
 
 </details>
 
+<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+
 ## エコシステム
 
-GOLIA の独立した AI インフラ crate ファミリーの一員、各々が独自のリポジトリ:
+GOLIA の Rust AI インフラ系列の一員 — 各々独立したリポジトリで、crates.io 経由で組み合わせ:
 
-- [**instructors**](https://crates.io/crates/instructors) ([rust-instructor](https://github.com/goliajp/rust-instructor)) — LLM からの型安全な構造化出力抽出
-- [**embedrs**](https://crates.io/crates/embedrs) ([rust-embeddings](https://github.com/goliajp/rust-embeddings)) — 統一 embedding API（クラウド + ローカル推論）
-- [**chunkedrs**](https://crates.io/crates/chunkedrs) ([rust-chunker](https://github.com/goliajp/rust-chunker)) — embedding と検索のための AI ネイティブテキストチャンキング
-- [**tiktoken-wasm**](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) — 本 crate の WASM バインディング（同リポジトリ）
+| Crate / Package | リポジトリ | 説明 |
+|---|---|---|
+| **tiktoken**（本 crate） | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | 高性能 BPE トークナイザー — 9 エンコーディング、57 モデル、各社料金 |
+| [@goliapkg/tiktoken-wasm](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | tiktoken の WASM バインディング — ブラウザ / Node.js |
+| [instructors](https://crates.io/crates/instructors) | [rust-instructor](https://github.com/goliajp/rust-instructor) | LLM からの型安全な構造化出力抽出 |
+| [embedrs](https://crates.io/crates/embedrs) | [rust-embeddings](https://github.com/goliajp/rust-embeddings) | 統一 embedding — クラウド API + ローカル推論、単一インターフェース |
+| [chunkedrs](https://crates.io/crates/chunkedrs) | [rust-chunker](https://github.com/goliajp/rust-chunker) | AI ネイティブテキストチャンキング — 再帰、Markdown 対応、セマンティック |
+
+<!-- ECOSYSTEM END -->
 
 ## ライセンス
 

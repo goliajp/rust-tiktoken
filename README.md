@@ -45,6 +45,22 @@ git tag -a tiktoken-wasm-v3.2.4 -m "release tiktoken-wasm 3.2.4"
 git push origin tiktoken-wasm-v3.2.4   # CI publishes both crates.io + npm
 ```
 
+<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+
+## Ecosystem
+
+Part of GOLIA's Rust AI-infrastructure family — independent crates in their own repos, composable through crates.io:
+
+| Crate / Package | Repo | Description |
+|---|---|---|
+| [tiktoken](https://crates.io/crates/tiktoken) | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | High-performance BPE tokenizer — 9 encodings, 57 models, multi-provider pricing |
+| [@goliapkg/tiktoken-wasm](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | WASM bindings for tiktoken — browser / Node.js |
+| [instructors](https://crates.io/crates/instructors) | [rust-instructor](https://github.com/goliajp/rust-instructor) | Type-safe structured output extraction from LLMs |
+| [embedrs](https://crates.io/crates/embedrs) | [rust-embeddings](https://github.com/goliajp/rust-embeddings) | Unified embedding — cloud APIs + local inference, one interface |
+| [chunkedrs](https://crates.io/crates/chunkedrs) | [rust-chunker](https://github.com/goliajp/rust-chunker) | AI-native text chunking — recursive, markdown-aware, semantic |
+
+<!-- ECOSYSTEM END -->
+
 ## License
 
 [MIT](LICENSE)
