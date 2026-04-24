@@ -213,6 +213,22 @@ Call `await init()` once before any other API calls. This loads and compiles the
 
 See [`examples/react-app`](../tiktoken/examples/react-app/) for a complete Vite + React demo application.
 
+<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+
+## Ecosystem
+
+Part of GOLIA's Rust AI-infrastructure family — independent crates in their own repos, composable through crates.io:
+
+| Crate / Package | Repo | Description |
+|---|---|---|
+| [tiktoken](https://crates.io/crates/tiktoken) | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | High-performance BPE tokenizer — 9 encodings, 57 models, multi-provider pricing |
+| **@goliapkg/tiktoken-wasm** (this crate) | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | WASM bindings for tiktoken — browser / Node.js |
+| [instructors](https://crates.io/crates/instructors) | [rust-instructor](https://github.com/goliajp/rust-instructor) | Type-safe structured output extraction from LLMs |
+| [embedrs](https://crates.io/crates/embedrs) | [rust-embeddings](https://github.com/goliajp/rust-embeddings) | Unified embedding — cloud APIs + local inference, one interface |
+| [chunkedrs](https://crates.io/crates/chunkedrs) | [rust-chunker](https://github.com/goliajp/rust-chunker) | AI-native text chunking — recursive, markdown-aware, semantic |
+
+<!-- ECOSYSTEM END -->
+
 ## License
 
 [MIT](LICENSE)
