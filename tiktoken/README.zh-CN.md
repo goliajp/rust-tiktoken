@@ -198,14 +198,21 @@ wasm-pack build --target web --release
 
 </details>
 
+<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+
 ## 生态系统
 
-GOLIA 出品的一系列独立 AI 基础设施 crate，每个各自独立仓：
+GOLIA Rust AI 基础设施系列的一部分 —— 各自独立仓维护，通过 crates.io 组合：
 
-- [**instructors**](https://crates.io/crates/instructors) ([rust-instructor](https://github.com/goliajp/rust-instructor)) —— 类型安全的 LLM 结构化输出提取
-- [**embedrs**](https://crates.io/crates/embedrs) ([rust-embeddings](https://github.com/goliajp/rust-embeddings)) —— 统一 embedding API（云端 + 本地推理）
-- [**chunkedrs**](https://crates.io/crates/chunkedrs) ([rust-chunker](https://github.com/goliajp/rust-chunker)) —— AI 原生文本分块，用于 embedding 和检索
-- [**tiktoken-wasm**](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) —— 本 crate 的 WASM 绑定，同仓维护
+| Crate / Package | 仓库 | 说明 |
+|---|---|---|
+| **tiktoken**（本 crate） | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | 高性能 BPE 分词器 —— 9 套编码、57 个模型、多厂商价格 |
+| [@goliapkg/tiktoken-wasm](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) | [rust-tiktoken](https://github.com/goliajp/rust-tiktoken) | tiktoken 的 WASM 绑定 —— 浏览器 / Node.js |
+| [instructors](https://crates.io/crates/instructors) | [rust-instructor](https://github.com/goliajp/rust-instructor) | 类型安全的 LLM 结构化输出提取 |
+| [embedrs](https://crates.io/crates/embedrs) | [rust-embeddings](https://github.com/goliajp/rust-embeddings) | 统一 embedding —— 云 API + 本地推理，一套接口 |
+| [chunkedrs](https://crates.io/crates/chunkedrs) | [rust-chunker](https://github.com/goliajp/rust-chunker) | AI 原生文本分块 —— 递归、Markdown 感知、语义 |
+
+<!-- ECOSYSTEM END -->
 
 ## 许可证
 
