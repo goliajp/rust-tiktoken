@@ -215,7 +215,7 @@ module.exports = {
 
 完整 Vite + React 示例：[`examples/react-app`](../tiktoken/examples/react-app/)。
 
-<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+<!-- ECOSYSTEM BEGIN (generated — edit ecosystem.toml, not this block) -->
 
 ## 生态系统
 

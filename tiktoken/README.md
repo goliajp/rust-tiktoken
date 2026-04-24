@@ -198,7 +198,7 @@ wasm-pack build --target web --release
 
 </details>
 
-<!-- ECOSYSTEM BEGIN (synced by claws/opensource/scripts/sync-ecosystem.py — edit ecosystem.toml, not this block) -->
+<!-- ECOSYSTEM BEGIN (generated — edit ecosystem.toml, not this block) -->
 
 ## Ecosystem
 
