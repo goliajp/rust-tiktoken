@@ -9,6 +9,13 @@ use crate::vocab::Vocab;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
+/// Pieces up to this byte length use the stack-allocated linear-scan merge
+/// (`byte_pair_merge_small`) instead of the heap-based algorithm. After
+/// pre-tokenization the overwhelming majority of pieces are short (word-sized),
+/// where the heap's allocation + bookkeeping overhead dominates. The heap
+/// algorithm only pays off on long, rarely-occurring pieces.
+const LINEAR_THRESHOLD: usize = 32;
+
 /// BPE merge: find the optimal partition of `piece` into sub-tokens.
 ///
 /// Returns a list of split points (byte offsets into `piece`), e.g.
@@ -39,6 +46,12 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
             return vec![0, 2];
         }
         return vec![0, 1, 2];
+    }
+
+    // short pieces: linear scan with stack-allocated scratch (no heap, no Vec
+    // bookkeeping). This is the common case after pre-tokenization.
+    if n <= LINEAR_THRESHOLD {
+        return byte_pair_merge_small(piece, vocab);
     }
 
     // doubly-linked list over byte positions 0..n
@@ -126,6 +139,88 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
     }
     parts.push(n);
     parts
+}
+
+/// Linear-scan BPE merge for short pieces (`n <= LINEAR_THRESHOLD`).
+///
+/// Equivalent to the heap-based [`byte_pair_merge`] but keeps all scratch state
+/// in fixed-size stack arrays, avoiding the heap allocation and three `Vec`s the
+/// general algorithm needs. The logic mirrors the v2 reference implementation
+/// (find global min rank, merge, recompute the two affected neighbor ranks),
+/// which is O(n*m) but with a tiny constant factor that beats the heap on the
+/// short pieces that dominate real input.
+///
+/// Caller guarantees `3 <= n <= LINEAR_THRESHOLD`.
+fn byte_pair_merge_small(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
+    let n = piece.len();
+
+    // parts[i] = byte offset of the i-th sub-token boundary; plen entries valid.
+    // ranks[i] = rank of the pair (parts[i], parts[i+2]) or u32::MAX if unmergeable.
+    let mut parts = [0u32; LINEAR_THRESHOLD + 1];
+    let mut ranks = [u32::MAX; LINEAR_THRESHOLD + 1];
+    for i in 0..=n {
+        parts[i] = i as u32;
+    }
+    let mut plen = n + 1;
+
+    // initialize ranks for all adjacent single-byte pairs
+    for i in 0..plen {
+        if i + 2 < plen {
+            ranks[i] = vocab.get(&piece[i..i + 2]).unwrap_or(u32::MAX);
+        }
+    }
+
+    loop {
+        if plen <= 2 {
+            break;
+        }
+
+        // find the lowest-rank mergeable pair
+        let mut min_rank = u32::MAX;
+        let mut min_idx = 0;
+        for i in 0..plen - 1 {
+            if ranks[i] < min_rank {
+                min_rank = ranks[i];
+                min_idx = i;
+            }
+        }
+        if min_rank == u32::MAX {
+            break;
+        }
+
+        // merge: drop boundary parts[min_idx+1] (and its rank slot)
+        for j in min_idx + 1..plen - 1 {
+            parts[j] = parts[j + 1];
+            ranks[j] = ranks[j + 1];
+        }
+        plen -= 1;
+
+        // recompute rank of the merged pair at min_idx
+        ranks[min_idx] = if min_idx + 2 < plen {
+            vocab
+                .get(&piece[parts[min_idx] as usize..parts[min_idx + 2] as usize])
+                .unwrap_or(u32::MAX)
+        } else {
+            u32::MAX
+        };
+
+        // recompute rank of the predecessor pair
+        if min_idx > 0 {
+            ranks[min_idx - 1] = if min_idx + 1 < plen {
+                vocab
+                    .get(&piece[parts[min_idx - 1] as usize..parts[min_idx + 1] as usize])
+                    .unwrap_or(u32::MAX)
+            } else {
+                u32::MAX
+            };
+        }
+    }
+
+    let mut result = Vec::with_capacity(plen);
+    for &p in &parts[..plen] {
+        result.push(p as usize);
+    }
+    result
 }
 
 /// BPE-encode a piece, writing tokens directly to result.
