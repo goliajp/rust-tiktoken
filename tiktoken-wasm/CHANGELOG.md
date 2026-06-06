@@ -5,6 +5,14 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.5] - 2026-06-06
+
+### Changed
+- `tiktoken` path-dep bumped to 3.1.5. Inherits the underlying lib's
+  `model_to_encoding` improvements (gpt-5 / gpt-4.5 / ft: / Azure prefix support,
+  davinci-002 / babbage-002 routing fix) and refreshed 2026-06 pricing data.
+- No WASM API changes.
+
 ## [3.2.4] - 2026-04-24
 
 ### Changed
