@@ -12,9 +12,9 @@
 //!   with the source URL recorded next to each entry. Adjust at the call site if your
 //!   billing uses a different hoster. `llama-3.1-405b` / `llama-3.1-70b` are marked
 //!   DEPRECATED because no major hoster still offers them as serverless inference.
-//! - **`gemini-2.5-pro` `cached_input`** is stored as a single value (≤200k tier). Google
-//!   actually charges a two-tier rate ($0.125 ≤200k / $0.25 >200k); the current schema
-//!   cannot represent it.
+//! - **`gemini-2.5-pro`** uses `with_high_tier(...)` for the >200k token tier; `estimate_cost`
+//!   auto-switches when input tokens exceed the 200k threshold. The standard `pricing` field
+//!   holds the ≤200k rates.
 //! - Models marked `DEPRECATED` retain historical prices so existing cost lookups keep
 //!   working. The note records when the API shuts down or removes the model.
 
@@ -55,15 +55,66 @@ pub struct Pricing {
     pub cached_input_per_1m: Option<f64>,
 }
 
-/// Model metadata including pricing, context window, and output limits.
+/// Batch API pricing — OpenAI and Anthropic offer ~50% off for batched requests.
 #[derive(Debug, Clone, Copy)]
+pub struct BatchPricing {
+    /// cost per 1M input tokens in USD when sent via the batch API
+    pub input_per_1m: f64,
+    /// cost per 1M output tokens in USD when sent via the batch API
+    pub output_per_1m: f64,
+}
+
+/// High-tier pricing for input-token-count-based tiers (e.g. Gemini 2.5 Pro).
+/// Applies when input tokens exceed `threshold_tokens`.
+#[derive(Debug, Clone, Copy)]
+pub struct HighTierPricing {
+    pub input_per_1m: f64,
+    pub output_per_1m: f64,
+    pub cached_input_per_1m: Option<f64>,
+    /// switch to this tier when an estimate's input token count is *strictly greater than* this
+    pub threshold_tokens: u32,
+}
+
+/// Audio modality pricing.
+#[derive(Debug, Clone, Copy)]
+pub struct AudioPricing {
+    /// cost per 1M audio input tokens (Gemini 2.5 Flash uses this)
+    pub input_per_1m: Option<f64>,
+    /// cost per minute of audio (some providers bill this way)
+    pub per_minute: Option<f64>,
+}
+
+/// Vision modality pricing — per-image rate.
+#[derive(Debug, Clone, Copy)]
+pub struct VisionPricing {
+    pub per_image: f64,
+}
+
+/// All extended (non-standard) pricing dimensions. Every field is `Option`;
+/// `Default` produces an all-`None` value.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ExtendedPricing {
+    pub batch: Option<BatchPricing>,
+    pub high_tier: Option<HighTierPricing>,
+    pub audio: Option<AudioPricing>,
+    pub vision: Option<VisionPricing>,
+}
+
+/// Model metadata including pricing, context window, and output limits.
+///
+/// Marked `#[non_exhaustive]` to allow future field additions without breaking SemVer;
+/// construct via the internal `model()` helper plus `with_*` builders.
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct Model {
     /// model identifier (e.g. `"gpt-4o"`, `"claude-opus-4"`)
     pub id: &'static str,
     /// which provider this model belongs to
     pub provider: Provider,
-    /// per-token pricing
+    /// standard (low-tier) per-token pricing
     pub pricing: Pricing,
+    /// optional extended dimensions: batch, high-tier, audio, vision
+    pub extended: ExtendedPricing,
     /// maximum input context window in tokens
     pub context_window: u32,
     /// maximum output tokens per request
@@ -71,7 +122,29 @@ pub struct Model {
 }
 
 impl Model {
+    /// Pricing to apply for a given input token count.
+    ///
+    /// Returns high-tier pricing when an `extended.high_tier` is set and the
+    /// total input token count strictly exceeds its `threshold_tokens`; otherwise
+    /// returns the standard `pricing`.
+    pub fn pricing_for_input(&self, input_tokens: u64) -> Pricing {
+        if let Some(ht) = self.extended.high_tier
+            && input_tokens > ht.threshold_tokens as u64
+        {
+            Pricing {
+                input_per_1m: ht.input_per_1m,
+                output_per_1m: ht.output_per_1m,
+                cached_input_per_1m: ht.cached_input_per_1m,
+            }
+        } else {
+            self.pricing
+        }
+    }
+
     /// Estimate cost in USD for a given number of input and output tokens.
+    ///
+    /// Auto-switches to high-tier pricing when applicable (see
+    /// [`Self::pricing_for_input`]).
     ///
     /// # Examples
     ///
@@ -81,8 +154,9 @@ impl Model {
     /// assert!((cost - 7.50).abs() < 0.001); // $2.50 input + $5.00 output
     /// ```
     pub fn estimate_cost(&self, input_tokens: u64, output_tokens: u64) -> f64 {
-        let input_cost = input_tokens as f64 * self.pricing.input_per_1m / 1_000_000.0;
-        let output_cost = output_tokens as f64 * self.pricing.output_per_1m / 1_000_000.0;
+        let p = self.pricing_for_input(input_tokens);
+        let input_cost = input_tokens as f64 * p.input_per_1m / 1_000_000.0;
+        let output_cost = output_tokens as f64 * p.output_per_1m / 1_000_000.0;
         input_cost + output_cost
     }
 
@@ -90,20 +164,78 @@ impl Model {
     ///
     /// `input_tokens` are charged at the normal rate, `cached_tokens` at the
     /// discounted cached rate (falls back to normal rate if caching is not available).
+    /// Auto-switches to high-tier pricing when `input_tokens + cached_tokens`
+    /// exceeds the high-tier threshold.
     pub fn estimate_cost_with_cache(
         &self,
         input_tokens: u64,
         cached_tokens: u64,
         output_tokens: u64,
     ) -> f64 {
-        let cached_rate = self
-            .pricing
-            .cached_input_per_1m
-            .unwrap_or(self.pricing.input_per_1m);
-        let input_cost = input_tokens as f64 * self.pricing.input_per_1m / 1_000_000.0;
+        let p = self.pricing_for_input(input_tokens + cached_tokens);
+        let cached_rate = p.cached_input_per_1m.unwrap_or(p.input_per_1m);
+        let input_cost = input_tokens as f64 * p.input_per_1m / 1_000_000.0;
         let cached_cost = cached_tokens as f64 * cached_rate / 1_000_000.0;
-        let output_cost = output_tokens as f64 * self.pricing.output_per_1m / 1_000_000.0;
+        let output_cost = output_tokens as f64 * p.output_per_1m / 1_000_000.0;
         input_cost + cached_cost + output_cost
+    }
+
+    /// Estimate cost using batch-API rates. Returns `None` if the model has no
+    /// batch pricing set in `extended.batch`.
+    pub fn estimate_batch_cost(&self, input_tokens: u64, output_tokens: u64) -> Option<f64> {
+        let b = self.extended.batch?;
+        Some(
+            input_tokens as f64 * b.input_per_1m / 1_000_000.0
+                + output_tokens as f64 * b.output_per_1m / 1_000_000.0,
+        )
+    }
+
+    /// Set the batch-API pricing. Returns a new `Model`.
+    pub const fn with_batch(mut self, input_per_1m: f64, output_per_1m: f64) -> Self {
+        self.extended.batch = Some(BatchPricing {
+            input_per_1m,
+            output_per_1m,
+        });
+        self
+    }
+
+    /// Set the high-tier (input-token-count-based) pricing. Returns a new `Model`.
+    pub const fn with_high_tier(
+        mut self,
+        input_per_1m: f64,
+        output_per_1m: f64,
+        cached_input_per_1m: Option<f64>,
+        threshold_tokens: u32,
+    ) -> Self {
+        self.extended.high_tier = Some(HighTierPricing {
+            input_per_1m,
+            output_per_1m,
+            cached_input_per_1m,
+            threshold_tokens,
+        });
+        self
+    }
+
+    /// Set the audio-input per-1M-tokens rate. Returns a new `Model`.
+    pub const fn with_audio_input(mut self, per_1m: f64) -> Self {
+        let prev = match self.extended.audio {
+            Some(a) => a,
+            None => AudioPricing {
+                input_per_1m: None,
+                per_minute: None,
+            },
+        };
+        self.extended.audio = Some(AudioPricing {
+            input_per_1m: Some(per_1m),
+            per_minute: prev.per_minute,
+        });
+        self
+    }
+
+    /// Set the vision per-image rate. Returns a new `Model`.
+    pub const fn with_vision_per_image(mut self, per_image: f64) -> Self {
+        self.extended.vision = Some(VisionPricing { per_image });
+        self
     }
 }
 
@@ -178,6 +310,12 @@ const fn model(
             output_per_1m: output,
             cached_input_per_1m: cached,
         },
+        extended: ExtendedPricing {
+            batch: None,
+            high_tier: None,
+            audio: None,
+            vision: None,
+        },
         context_window: ctx,
         max_output: max_out,
     }
@@ -193,7 +331,8 @@ const OPENAI_GPT41: Model = model(
     Some(0.50),
     1_000_000,
     32_768,
-);
+)
+.with_batch(1.00, 4.00);
 
 const OPENAI_GPT41_MINI: Model = model(
     "gpt-4.1-mini",
@@ -203,7 +342,8 @@ const OPENAI_GPT41_MINI: Model = model(
     Some(0.10),
     1_000_000,
     32_768,
-);
+)
+.with_batch(0.20, 0.80);
 
 const OPENAI_GPT41_NANO: Model = model(
     "gpt-4.1-nano",
@@ -213,7 +353,8 @@ const OPENAI_GPT41_NANO: Model = model(
     Some(0.025),
     1_000_000,
     32_768,
-);
+)
+.with_batch(0.05, 0.20);
 
 const OPENAI_GPT4O: Model = model(
     "gpt-4o",
@@ -223,7 +364,8 @@ const OPENAI_GPT4O: Model = model(
     Some(1.25),
     128_000,
     16_384,
-);
+)
+.with_batch(1.25, 5.00);
 
 const OPENAI_GPT4O_MINI: Model = model(
     "gpt-4o-mini",
@@ -233,7 +375,8 @@ const OPENAI_GPT4O_MINI: Model = model(
     Some(0.075),
     128_000,
     16_384,
-);
+)
+.with_batch(0.075, 0.30);
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_O1: Model = model(
@@ -244,7 +387,8 @@ const OPENAI_O1: Model = model(
     Some(7.50),
     200_000,
     100_000,
-);
+)
+.with_batch(7.50, 30.00);
 
 /// DEPRECATED — API shutdown 2026-10-23. Price updated 2026-06: input/output
 /// dropped from $3.00/$12.00 to match the o3-mini rate of $1.10/$4.40.
@@ -256,7 +400,8 @@ const OPENAI_O1_MINI: Model = model(
     Some(0.55),
     128_000,
     65_536,
-);
+)
+.with_batch(0.55, 2.20);
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5-pro.
 const OPENAI_O1_PRO: Model = model(
@@ -277,7 +422,8 @@ const OPENAI_O3: Model = model(
     Some(0.50),
     200_000,
     100_000,
-);
+)
+.with_batch(1.00, 4.00);
 
 const OPENAI_O3_PRO: Model = model(
     "o3-pro",
@@ -287,7 +433,8 @@ const OPENAI_O3_PRO: Model = model(
     None,
     200_000,
     100_000,
-);
+)
+.with_batch(10.00, 40.00);
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_O3_MINI: Model = model(
@@ -298,7 +445,8 @@ const OPENAI_O3_MINI: Model = model(
     Some(0.55),
     200_000,
     100_000,
-);
+)
+.with_batch(0.55, 2.20);
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.4-mini.
 const OPENAI_O4_MINI: Model = model(
@@ -309,7 +457,8 @@ const OPENAI_O4_MINI: Model = model(
     Some(0.275),
     200_000,
     100_000,
-);
+)
+.with_batch(0.55, 2.20);
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_GPT4_TURBO: Model = model(
@@ -320,10 +469,12 @@ const OPENAI_GPT4_TURBO: Model = model(
     None,
     128_000,
     4_096,
-);
+)
+.with_batch(5.00, 15.00);
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
-const OPENAI_GPT4: Model = model("gpt-4", Provider::OpenAI, 30.00, 60.00, None, 8_192, 8_192);
+const OPENAI_GPT4: Model =
+    model("gpt-4", Provider::OpenAI, 30.00, 60.00, None, 8_192, 8_192).with_batch(15.00, 30.00);
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.4-mini.
 const OPENAI_GPT35_TURBO: Model = model(
@@ -334,7 +485,8 @@ const OPENAI_GPT35_TURBO: Model = model(
     None,
     16_385,
     4_096,
-);
+)
+.with_batch(0.25, 0.75);
 
 const OPENAI_EMBED_3_SMALL: Model = model(
     "text-embedding-3-small",
@@ -376,7 +528,8 @@ const CLAUDE_OPUS_46: Model = model(
     Some(0.50),
     200_000,
     128_000,
-);
+)
+.with_batch(2.50, 12.50);
 
 const CLAUDE_SONNET_46: Model = model(
     "claude-sonnet-4.6",
@@ -386,7 +539,8 @@ const CLAUDE_SONNET_46: Model = model(
     Some(0.30),
     200_000,
     64_000,
-);
+)
+.with_batch(1.50, 7.50);
 
 const CLAUDE_HAIKU_45: Model = model(
     "claude-haiku-4.5",
@@ -396,7 +550,8 @@ const CLAUDE_HAIKU_45: Model = model(
     Some(0.10),
     200_000,
     64_000,
-);
+)
+.with_batch(0.50, 2.50);
 
 const CLAUDE_OPUS_45: Model = model(
     "claude-opus-4.5",
@@ -406,7 +561,8 @@ const CLAUDE_OPUS_45: Model = model(
     Some(0.50),
     200_000,
     64_000,
-);
+)
+.with_batch(2.50, 12.50);
 
 const CLAUDE_SONNET_45: Model = model(
     "claude-sonnet-4.5",
@@ -416,7 +572,8 @@ const CLAUDE_SONNET_45: Model = model(
     Some(0.30),
     200_000,
     64_000,
-);
+)
+.with_batch(1.50, 7.50);
 
 /// DEPRECATED — deprecated 2026-04-14, retires 2026-06-15. Replaced by
 /// claude-opus-4.5 / 4.6 / 4.7 / 4.8. Cache price corrected 2026-06:
@@ -491,7 +648,7 @@ const CLAUDE_HAIKU_3: Model = model(
 
 // ── Google Gemini ───────────────────────────────────────
 
-/// Cache price stored as ≤200k tier; >200k tier is $0.25 (not representable in the current schema).
+/// Standard tier is ≤200k input; high-tier auto-applies above that via `with_high_tier`.
 const GEMINI_25_PRO: Model = model(
     "gemini-2.5-pro",
     Provider::Google,
@@ -500,8 +657,10 @@ const GEMINI_25_PRO: Model = model(
     Some(0.125),
     1_048_576,
     65_536,
-);
+)
+.with_high_tier(2.50, 15.00, Some(0.25), 200_000);
 
+/// Text input is $0.30/M (standard); audio input is $1.00/M via `with_audio_input`.
 const GEMINI_25_FLASH: Model = model(
     "gemini-2.5-flash",
     Provider::Google,
@@ -510,7 +669,8 @@ const GEMINI_25_FLASH: Model = model(
     Some(0.075),
     1_048_576,
     65_536,
-);
+)
+.with_audio_input(1.00);
 
 /// DEPRECATED — shut down 2026-06-01. Use gemini-2.5-flash.
 const GEMINI_20_FLASH: Model = model(
@@ -877,6 +1037,64 @@ static ALL_MODELS: &[Model] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_batch_cost_openai_gpt41() {
+        let m = get_model("gpt-4.1").unwrap();
+        let standard = m.estimate_cost(1_000_000, 500_000);
+        let batch = m.estimate_batch_cost(1_000_000, 500_000).unwrap();
+        assert!(
+            (batch - standard / 2.0).abs() < 0.001,
+            "batch should be ~50% of standard: standard={standard}, batch={batch}",
+        );
+    }
+
+    #[test]
+    fn test_batch_cost_not_supported_for_o1_pro() {
+        let m = get_model("o1-pro").unwrap();
+        assert!(m.estimate_batch_cost(1, 1).is_none());
+    }
+
+    #[test]
+    fn test_gemini_25_pro_high_tier_threshold() {
+        let m = get_model("gemini-2.5-pro").unwrap();
+        let low = m.pricing_for_input(100_000);
+        let high = m.pricing_for_input(300_000);
+        assert_eq!(low.input_per_1m, 1.25);
+        assert_eq!(low.output_per_1m, 10.00);
+        assert_eq!(high.input_per_1m, 2.50);
+        assert_eq!(high.output_per_1m, 15.00);
+    }
+
+    #[test]
+    fn test_gemini_25_pro_estimate_cost_auto_switches_tier() {
+        let m = get_model("gemini-2.5-pro").unwrap();
+        // 300k input tokens → high-tier $2.50/M, not standard $1.25/M.
+        let cost = m.estimate_cost(300_000, 0);
+        let expected = 300_000.0 * 2.50 / 1_000_000.0;
+        assert!(
+            (cost - expected).abs() < 0.001,
+            "expected {expected}, got {cost}",
+        );
+    }
+
+    #[test]
+    fn test_gemini_25_flash_audio_input() {
+        let m = get_model("gemini-2.5-flash").unwrap();
+        let audio = m.extended.audio.expect("audio pricing should be set");
+        assert_eq!(audio.input_per_1m, Some(1.00));
+        // standard text input rate unchanged
+        assert_eq!(m.pricing.input_per_1m, 0.30);
+    }
+
+    #[test]
+    fn test_existing_model_no_extended_pricing_unchanged() {
+        let m = get_model("mistral-large").unwrap();
+        assert!(m.extended.batch.is_none());
+        assert!(m.extended.high_tier.is_none());
+        assert!(m.extended.audio.is_none());
+        assert!(m.extended.vision.is_none());
+    }
 
     #[test]
     fn test_get_model_openai() {
