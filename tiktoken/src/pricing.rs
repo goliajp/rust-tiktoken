@@ -8,9 +8,10 @@
 //! - **Anthropic `cached_input`** uses the cache-READ price (≈ input × 10%). Older Claude 3.x
 //!   entries store `input × 50%` (which corresponds to cache-write/2, not cache-read);
 //!   they are kept as-is since those models are retired and no longer billable.
-//! - **Meta llama prices** are sourced from Together AI's ~2024 catalog and do NOT match
-//!   any single hoster's 2026-06 pricing. Use the official hoster you are actually
-//!   billed by for production cost estimates.
+//! - **Meta llama prices** are pinned per-model to a specific hoster (DeepInfra or Groq)
+//!   with the source URL recorded next to each entry. Adjust at the call site if your
+//!   billing uses a different hoster. `llama-3.1-405b` / `llama-3.1-70b` are marked
+//!   DEPRECATED because no major hoster still offers them as serverless inference.
 //! - **`gemini-2.5-pro` `cached_input`** is stored as a single value (≤200k tier). Google
 //!   actually charges a two-tier rate ($0.125 ≤200k / $0.25 >200k); the current schema
 //!   cannot represent it.
@@ -556,11 +557,14 @@ const GEMINI_EMBED: Model = model(
 );
 
 // ── Meta (Llama via hosted APIs) ──────────────────────────
-// Prices below trace to Together AI's ~2024 catalog (single throughput rate,
-// input == output) and do NOT match any single hoster as of 2026-06. They are
-// kept for backwards-compatible cost lookups but should not be used for
-// production billing without re-pinning to the hoster you actually pay.
+// Meta does not sell API access directly. Each model is pinned to a specific
+// hoster's current serverless inference price as of 2026-06; the source URL
+// is recorded per entry. If your billing uses a different hoster, adjust
+// at the call site.
 
+/// DEPRECATED — no major hoster offers serverless llama-3.1-405b as of 2026-06
+/// (Together AI dropped it; DeepInfra / Groq never carried it). Price retained
+/// for historical cost lookups; corresponds to Together AI's 2024 flat rate.
 const META_LLAMA_3_1_405B: Model = model(
     "llama-3.1-405b",
     Provider::Meta,
@@ -571,6 +575,9 @@ const META_LLAMA_3_1_405B: Model = model(
     4_096,
 );
 
+/// DEPRECATED — superseded on most hosters by `llama-3.3-70b`. Together AI
+/// migrated their 70B serverless SKU to 3.3 Turbo; DeepInfra / Groq host
+/// the 3.3 variants only. Price retained for historical cost lookups.
 const META_LLAMA_3_1_70B: Model = model(
     "llama-3.1-70b",
     Provider::Meta,
@@ -581,26 +588,30 @@ const META_LLAMA_3_1_70B: Model = model(
     4_096,
 );
 
+/// Source: DeepInfra serverless inference (https://deepinfra.com/pricing) 2026-06.
 const META_LLAMA_3_1_8B: Model = model(
     "llama-3.1-8b",
     Provider::Meta,
-    0.18,
-    0.18,
+    0.02,
+    0.05,
     None,
     128_000,
     4_096,
 );
 
+/// Source: DeepInfra serverless inference (Llama-3.3-70B-Instruct-Turbo)
+/// https://deepinfra.com/pricing — 2026-06.
 const META_LLAMA_3_3_70B: Model = model(
     "llama-3.3-70b",
     Provider::Meta,
-    0.88,
-    0.88,
+    0.10,
+    0.32,
     None,
     128_000,
     4_096,
 );
 
+/// Source: Groq (https://groq.com/pricing) 2026-06.
 const META_LLAMA_4_SCOUT: Model = model(
     "llama-4-scout",
     Provider::Meta,
@@ -611,6 +622,8 @@ const META_LLAMA_4_SCOUT: Model = model(
     8_192,
 );
 
+/// Source: DeepInfra (Llama-4-Maverick-17B-128E-Instruct-FP8)
+/// https://deepinfra.com/pricing — 2026-06.
 const META_LLAMA_4_MAVERICK: Model = model(
     "llama-4-maverick",
     Provider::Meta,
