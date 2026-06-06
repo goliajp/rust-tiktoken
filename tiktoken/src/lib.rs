@@ -106,6 +106,10 @@ pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
 /// Returns the encoding name (e.g. `"o200k_base"`) for the given model,
 /// or `None` for unknown models. Supports OpenAI, Meta, DeepSeek, Qwen, and Mistral models.
 pub fn model_to_encoding(model: &str) -> Option<&'static str> {
+    // Strip the `ft:` prefix used for fine-tuned model IDs
+    // (e.g. `ft:gpt-4o:my-org::abc123` → `gpt-4o:my-org::abc123`).
+    let model = model.strip_prefix("ft:").unwrap_or(model);
+
     // order matters: more specific prefixes must come before less specific ones.
     // e.g. "gpt-4o" must be checked before "gpt-4" since starts_with("gpt-4")
     // would also match "gpt-4o".
@@ -114,6 +118,8 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
     if model.starts_with("o4-mini")
         || model.starts_with("o3")
         || model.starts_with("o1")
+        || model.starts_with("gpt-5")
+        || model.starts_with("gpt-4.5")
         || model.starts_with("gpt-4.1")
         || model.starts_with("gpt-4o")
         || model.starts_with("chatgpt-4o")
@@ -122,8 +128,14 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
     }
 
     // cl100k_base models
+    // davinci-002 / babbage-002 must be checked here (before the r50k_base block)
+    // since they use the cl100k tokenizer despite sharing a name root with the
+    // r50k davinci/babbage models.
     if model.starts_with("gpt-4")
         || model.starts_with("gpt-3.5")
+        || model.starts_with("gpt-35-turbo")
+        || model.starts_with("davinci-002")
+        || model.starts_with("babbage-002")
         || model.starts_with("text-embedding-ada")
         || model.starts_with("text-embedding-3")
     {
@@ -247,6 +259,40 @@ mod tests {
     #[test]
     fn test_encoding_for_gpt35() {
         assert!(encoding_for_model("gpt-3.5-turbo").is_some());
+    }
+
+    #[test]
+    fn test_encoding_for_gpt5_family() {
+        for m in ["gpt-5", "gpt-5-turbo", "gpt-4.5", "gpt-4.5-preview"] {
+            assert_eq!(model_to_encoding(m), Some("o200k_base"), "{m}");
+        }
+    }
+
+    #[test]
+    fn test_encoding_for_davinci_babbage_002() {
+        // Regression: these were incorrectly routed to r50k_base by
+        // starts_with("davinci")/("babbage"). They use cl100k_base upstream.
+        assert_eq!(model_to_encoding("davinci-002"), Some("cl100k_base"));
+        assert_eq!(model_to_encoding("babbage-002"), Some("cl100k_base"));
+    }
+
+    #[test]
+    fn test_encoding_for_finetuned_models() {
+        assert_eq!(
+            model_to_encoding("ft:gpt-4o:my-org::abc123"),
+            Some("o200k_base")
+        );
+        assert_eq!(model_to_encoding("ft:gpt-4:org::xyz"), Some("cl100k_base"));
+        assert_eq!(
+            model_to_encoding("ft:gpt-3.5-turbo:org::xyz"),
+            Some("cl100k_base")
+        );
+    }
+
+    #[test]
+    fn test_encoding_for_azure_gpt35() {
+        // Azure uses `gpt-35-turbo` instead of `gpt-3.5-turbo`.
+        assert_eq!(model_to_encoding("gpt-35-turbo"), Some("cl100k_base"));
     }
 
     #[test]
