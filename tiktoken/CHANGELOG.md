@@ -1,5 +1,44 @@
 # Changelog
 
+## [3.3.0] - 2026-06-07
+
+### Added
+- `gpt2` registered as the 11th encoding name (alias for `r50k_base`).
+  `model_to_encoding` resolves `gpt2` / `gpt-2` model prefixes to
+  `"r50k_base"`; `get_encoding("gpt2")` shares r50k_base's cache slot.
+- Six OpenAI GPT-5.x model entries with full available tier data:
+  `gpt-5`, `gpt-5-mini`, `gpt-5-nano` (Standard only), `gpt-5.4`
+  (Standard + Batch + Flex + long-context >272K),
+  `gpt-5.4-mini` (Standard + Batch + Flex),
+  `gpt-5.5` (Standard + Batch + Flex + Priority + long-context).
+- `pricing::TierRates { input_per_1m, cached_input_per_1m: Option<f64>,
+  output_per_1m }` — unified rate type shared by all OpenAI service tiers.
+- `ExtendedPricing.flex` and `.priority`, both `Option<TierRates>`.
+- `Model::with_batch_cached`, `with_flex`, `with_priority` const builders.
+- `Model::estimate_flex_cost` and `estimate_priority_cost`.
+
+### Changed
+- **Breaking** — `pricing::VisionPricing` is now a provider-specific enum
+  (`OpenAITileBased` / `OpenAIPatchBased` / `AnthropicDivisor` /
+  `GeminiTileBased`) instead of the 3.2 placeholder
+  `VisionPricing { per_image: f64 }`. Image inputs are billed at the
+  model's standard `input_per_1m` rate, not a flat per-image fee, so the
+  enum captures each provider's published image→tokens formula
+  (`VisionPricing::image_tokens(width, height, detail)`) and
+  `Model::estimate_image_cost(width, height, detail)` returns the
+  end-to-end USD figure (auto-applies high-tier rates above the
+  gemini-2.5-pro 200k threshold). The unused 3.2 builder
+  `with_vision_per_image` is removed; use `with_vision(VisionPricing)`.
+  Vision data populated for gpt-4o / gpt-4o-mini / gpt-4.1 / gpt-4.1-mini /
+  gpt-4.1-nano / o1 / o3 / o4-mini, claude-haiku-4.5, claude-sonnet-4.5 /
+  4.6, claude-opus-4.5 / 4.6, gemini-2.5-pro / 2.5-flash.
+- `pricing::BatchPricing` is now a type alias for `TierRates` (was a
+  distinct struct in 3.2.x). Existing `with_batch(input, output)` calls
+  still compile; the `cached_input_per_1m` field defaults to `None`.
+- README files across all 3 languages × 3 levels bump encoding count
+  `9 → 11` and model count `57 → 63`; added `o200k_harmony` and `gpt2`
+  rows to the Supported Encodings tables.
+
 ## [3.2.0] - 2026-06-06
 
 ### Added
