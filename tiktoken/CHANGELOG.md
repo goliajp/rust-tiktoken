@@ -1,5 +1,43 @@
 # Changelog
 
+## [3.2.0] - 2026-06-06
+
+### Added
+- `o200k_harmony` encoding (10th encoding) for OpenAI gpt-oss models /
+  harmony chat format. Shares o200k_base merge ranks and regex pattern;
+  only the special-token table differs (15 named + 1075 reserved
+  placeholders). `model_to_encoding` gains a `gpt-oss` prefix that
+  routes to it.
+- Pricing schema extensions (`pricing::BatchPricing`,
+  `pricing::HighTierPricing`, `pricing::AudioPricing`,
+  `pricing::VisionPricing`, grouped under `pricing::ExtendedPricing` on
+  `Model`). Optional dimensions for batch-API discounts, Google's
+  input-token-count-based dual-tier rates, and per-modality pricing.
+- `Model::pricing_for_input(input_tokens)` returns the tier-appropriate
+  `Pricing` (auto-switches when `extended.high_tier` is set and input
+  exceeds its threshold).
+- `Model::estimate_batch_cost(input, output)` returns `Some(cost)` when
+  the model has batch pricing, else `None`.
+- `const fn` builder methods on `Model`: `with_batch`, `with_high_tier`,
+  `with_audio_input`, `with_vision_per_image`.
+- Data filled (only where verified by 2026-06 research): batch pricing
+  for 13 OpenAI + 5 active Anthropic models; `gemini-2.5-pro` high-tier
+  (>200k input) rates; `gemini-2.5-flash` audio input rate $1.00/M.
+
+### Changed
+- `pricing::Model` is now `#[non_exhaustive]`. Reading its fields is
+  unchanged, but constructing it via a struct literal outside the crate
+  is no longer allowed (use the internal `model()` + builder pattern
+  instead).
+- `estimate_cost` and `estimate_cost_with_cache` now route through
+  `pricing_for_input`, so they auto-pick high-tier rates for
+  `gemini-2.5-pro` above the 200k input threshold.
+- Meta llama prices re-sourced per-model: pinned to DeepInfra
+  (`llama-3.1-8b`, `llama-3.3-70b`, `llama-4-maverick`) and Groq
+  (`llama-4-scout`) with source URLs in each entry's doc comment.
+  `llama-3.1-405b` and `llama-3.1-70b` marked `DEPRECATED` —
+  no major hoster offers them as serverless inference any longer.
+
 ## [3.1.5] - 2026-06-06
 
 ### Added
