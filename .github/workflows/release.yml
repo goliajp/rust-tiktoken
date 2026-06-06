@@ -14,7 +14,17 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo publish -p tiktoken --token ${{ secrets.CRATES_IO_TOKEN }}
+      - name: publish to crates.io
+        run: |
+          set +e
+          out=$(cargo publish -p tiktoken --token ${{ secrets.CRATES_IO_TOKEN }} 2>&1)
+          rc=$?
+          echo "$out"
+          if [ $rc -ne 0 ] && echo "$out" | grep -q "already exists on crates.io"; then
+            echo "::notice::tiktoken version already published, treating as success"
+            exit 0
+          fi
+          exit $rc
 
   publish-tiktoken-wasm:
     if: startsWith(github.ref, 'refs/tags/tiktoken-wasm-v')
@@ -31,7 +41,16 @@ jobs:
         run: wasm-pack build --target web --release --scope goliapkg
       - name: publish to crates.io
         working-directory: tiktoken-wasm
-        run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }} --allow-dirty
+        run: |
+          set +e
+          out=$(cargo publish --token ${{ secrets.CRATES_IO_TOKEN }} --allow-dirty 2>&1)
+          rc=$?
+          echo "$out"
+          if [ $rc -ne 0 ] && echo "$out" | grep -q "already exists on crates.io"; then
+            echo "::notice::tiktoken-wasm version already published, treating as success"
+            exit 0
+          fi
+          exit $rc
       - uses: actions/setup-node@v6
         with:
           node-version: '24'

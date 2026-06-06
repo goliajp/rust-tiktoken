@@ -159,6 +159,42 @@ pub fn o200k_base() -> CoreBpe {
     CoreBpe::new(encoder, special, O200K_PATTERN)
 }
 
+/// Construct the o200k_harmony encoding (gpt-oss family / harmony chat format).
+///
+/// Shares merge ranks and regex with [`o200k_base`]; the only delta is the
+/// special-token table — 15 named tokens (199998..=200012) plus 1075 reserved
+/// placeholders (`<|reserved_200013|>`..=`<|reserved_201087|>`).
+///
+/// Note: `<|reserved_200018|>` shadows `<|endofprompt|>` from o200k_base
+/// at the same id; this mirrors the upstream Python implementation.
+pub fn o200k_harmony() -> CoreBpe {
+    let encoder = parse_tiktoken_data(O200K_BASE_DATA);
+    let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
+    for (name, id) in [
+        ("<|startoftext|>", 199998_u32),
+        ("<|endoftext|>", 199999),
+        ("<|reserved_200000|>", 200000),
+        ("<|reserved_200001|>", 200001),
+        ("<|return|>", 200002),
+        ("<|constrain|>", 200003),
+        ("<|reserved_200004|>", 200004),
+        ("<|channel|>", 200005),
+        ("<|start|>", 200006),
+        ("<|end|>", 200007),
+        ("<|message|>", 200008),
+        ("<|reserved_200009|>", 200009),
+        ("<|reserved_200010|>", 200010),
+        ("<|reserved_200011|>", 200011),
+        ("<|call|>", 200012),
+    ] {
+        special.insert(name.as_bytes().to_vec(), id);
+    }
+    for id in 200013..=201087_u32 {
+        special.insert(format!("<|reserved_{id}|>").into_bytes(), id);
+    }
+    CoreBpe::new(encoder, special, O200K_PATTERN)
+}
+
 /// Construct the r50k_base encoding (GPT-3 era: davinci, curie, babbage, ada).
 /// Vocabulary size: 50,256 regular tokens + 1 special token.
 /// Uses the same merge ranks and regex pattern as p50k_base.

@@ -1,9 +1,9 @@
 //! High-performance pure-Rust BPE tokenizer compatible with OpenAI's tiktoken
 //! and all mainstream LLM tokenizers.
 //!
-//! Supports 9 encodings across 5 providers: OpenAI (`cl100k_base`, `o200k_base`,
-//! `p50k_base`, `p50k_edit`, `r50k_base`), Meta (`llama3`), DeepSeek (`deepseek_v3`),
-//! Alibaba (`qwen2`), and Mistral (`mistral_v3`).
+//! Supports 10 encodings across 5 providers: OpenAI (`cl100k_base`, `o200k_base`,
+//! `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`), Meta (`llama3`),
+//! DeepSeek (`deepseek_v3`), Alibaba (`qwen2`), and Mistral (`mistral_v3`).
 //!
 //! Includes token encoding, decoding, counting, and multi-provider pricing.
 //!
@@ -35,6 +35,7 @@ use std::sync::OnceLock;
 
 static CL100K_BASE: OnceLock<CoreBpe> = OnceLock::new();
 static O200K_BASE: OnceLock<CoreBpe> = OnceLock::new();
+static O200K_HARMONY: OnceLock<CoreBpe> = OnceLock::new();
 static P50K_BASE: OnceLock<CoreBpe> = OnceLock::new();
 static P50K_EDIT: OnceLock<CoreBpe> = OnceLock::new();
 static R50K_BASE: OnceLock<CoreBpe> = OnceLock::new();
@@ -52,13 +53,15 @@ static MISTRAL_V3: OnceLock<CoreBpe> = OnceLock::new();
 /// ```
 /// let names = tiktoken::list_encodings();
 /// assert!(names.contains(&"cl100k_base"));
+/// assert!(names.contains(&"o200k_harmony"));
 /// assert!(names.contains(&"llama3"));
-/// assert_eq!(names.len(), 9);
+/// assert_eq!(names.len(), 10);
 /// ```
 pub fn list_encodings() -> &'static [&'static str] {
     &[
         "cl100k_base",
         "o200k_base",
+        "o200k_harmony",
         "p50k_base",
         "p50k_edit",
         "r50k_base",
@@ -72,7 +75,7 @@ pub fn list_encodings() -> &'static [&'static str] {
 /// Get a cached tokenizer by encoding name.
 ///
 /// Supported encodings:
-/// - OpenAI: `cl100k_base`, `o200k_base`, `p50k_base`, `p50k_edit`, `r50k_base`
+/// - OpenAI: `cl100k_base`, `o200k_base`, `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`
 /// - Meta: `llama3`
 /// - DeepSeek: `deepseek_v3`
 /// - Alibaba: `qwen2`
@@ -81,6 +84,7 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
     match name {
         "cl100k_base" => Some(CL100K_BASE.get_or_init(encoding::cl100k_base)),
         "o200k_base" => Some(O200K_BASE.get_or_init(encoding::o200k_base)),
+        "o200k_harmony" => Some(O200K_HARMONY.get_or_init(encoding::o200k_harmony)),
         "p50k_base" => Some(P50K_BASE.get_or_init(encoding::p50k_base)),
         "p50k_edit" => Some(P50K_EDIT.get_or_init(encoding::p50k_edit)),
         "r50k_base" => Some(R50K_BASE.get_or_init(encoding::r50k_base)),
@@ -113,6 +117,13 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
     // order matters: more specific prefixes must come before less specific ones.
     // e.g. "gpt-4o" must be checked before "gpt-4" since starts_with("gpt-4")
     // would also match "gpt-4o".
+
+    // o200k_harmony — OpenAI open-source gpt-oss family (harmony chat format).
+    // Must precede the o200k_base block to avoid being shadowed by an unrelated
+    // prefix match.
+    if model.starts_with("gpt-oss") {
+        return Some("o200k_harmony");
+    }
 
     // o200k_base models (newest first)
     if model.starts_with("o4-mini")
@@ -211,6 +222,7 @@ mod tests {
         for name in [
             "cl100k_base",
             "o200k_base",
+            "o200k_harmony",
             "p50k_base",
             "p50k_edit",
             "r50k_base",
@@ -226,6 +238,31 @@ mod tests {
     #[test]
     fn test_get_encoding_unknown() {
         assert!(get_encoding("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_o200k_harmony_roundtrip() {
+        let enc = get_encoding("o200k_harmony").unwrap();
+        let text = "hello world, 你好世界 🚀";
+        let decoded = enc.decode(&enc.encode(text));
+        assert_eq!(std::str::from_utf8(&decoded).unwrap(), text);
+    }
+
+    #[test]
+    fn test_o200k_harmony_matches_base_for_plain_text() {
+        // Same merge ranks + regex → ordinary text encodes identically.
+        let base = get_encoding("o200k_base").unwrap();
+        let harmony = get_encoding("o200k_harmony").unwrap();
+        for text in ["hello world", "the quick brown fox", "你好世界 🚀"] {
+            assert_eq!(base.encode(text), harmony.encode(text), "{text}");
+        }
+    }
+
+    #[test]
+    fn test_encoding_for_gpt_oss() {
+        assert_eq!(model_to_encoding("gpt-oss-20b"), Some("o200k_harmony"));
+        assert_eq!(model_to_encoding("gpt-oss-120b"), Some("o200k_harmony"));
+        assert_ne!(model_to_encoding("gpt-oss-20b"), Some("o200k_base"));
     }
 
     // model mapping
