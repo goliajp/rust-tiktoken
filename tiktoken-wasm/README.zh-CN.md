@@ -123,7 +123,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-列出全部可用编码名（共 9 套）。
+列出全部可用编码名（共 11 套）。
 
 ### `getEncoding(name: string): Encoding`
 
