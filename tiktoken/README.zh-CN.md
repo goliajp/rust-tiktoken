@@ -12,7 +12,7 @@
 
 ## 特性
 
-- **多厂商**：9 种编码，覆盖 5 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral）
+- **多厂商**：11 种编码，覆盖 5 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral）
 - **高性能**：Arena 词表存储、堆加速 BPE 合并、DFA 正则
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
 - **费用估算**：覆盖 7 家厂商共 57 个模型
@@ -90,11 +90,13 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 | 编码 | 厂商 | 适用模型 |
 |---|---|---|
-| `o200k_base` | OpenAI | GPT-4o, GPT-4o-mini, o1, o3, o4-mini |
-| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-* |
+| `o200k_base` | OpenAI | GPT-4o, GPT-4.1, GPT-4.5, GPT-5, o1, o3, o4-mini |
+| `o200k_harmony` | OpenAI | gpt-oss（harmony 对话格式） |
+| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
 | `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | GPT-3 时代：davinci, curie, babbage, ada |
+| `gpt2` | OpenAI | GPT-2（`r50k_base` 的别名） |
 | `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
 | `qwen2` | 阿里巴巴 | Qwen 2.5, Qwen 3 |
