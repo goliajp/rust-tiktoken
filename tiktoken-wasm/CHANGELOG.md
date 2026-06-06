@@ -5,6 +5,18 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-06-06
+
+### Changed
+- `tiktoken` path-dep bumped to 3.2.0. Inherits o200k_harmony encoding
+  support (the new gpt-oss family route), the extended pricing schema
+  (batch / high-tier / audio / vision), and the Meta llama price
+  re-sourcing.
+- Doc comment on `getEncoding` lists `o200k_harmony` as a supported
+  encoding name.
+- No WASM API changes — `listEncodings()` returns the new entry
+  automatically.
+
 ## [3.2.5] - 2026-06-06
 
 ### Changed
