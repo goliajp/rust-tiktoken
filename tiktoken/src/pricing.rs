@@ -22,6 +22,14 @@
 //!   `Model::estimate_image_cost` for the end-to-end USD figure. `pixtral-large` /
 //!   `o1-pro` / `o3-pro` / `gpt-4-turbo` are left UNSET because their formulas are not
 //!   listed verbatim in the providers' current docs (deferred to a separate pass).
+//! - **OpenAI service tiers** (Standard / Batch / Flex / Priority) share a unified
+//!   `TierRates` shape. Flex token rates equal Batch by OpenAI policy but each tier
+//!   keeps its own `cached_input_per_1m` and availability; do not assume Flex == Batch
+//!   for new models. Priority multipliers vary per model (gpt-5.5 is 2.5× standard,
+//!   not the often-cited 5×); store raw values, never compute. Some GPT-5.x SKUs lack
+//!   Priority — `extended.priority` is `Option<TierRates>`. Long-context (>272K input)
+//!   for gpt-5.4 / gpt-5.5 is encoded via `with_high_tier` and auto-applied by
+//!   `estimate_cost` / `pricing_for_input`.
 
 /// Provider identity
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -60,14 +68,25 @@ pub struct Pricing {
     pub cached_input_per_1m: Option<f64>,
 }
 
-/// Batch API pricing — OpenAI and Anthropic offer ~50% off for batched requests.
+/// Per-1M-token rates for a specific OpenAI service tier (Standard, Batch,
+/// Flex, Priority). Reused by [`ExtendedPricing::batch`], `.flex`, and
+/// `.priority`.
+///
+/// Standard tier rates live directly on [`Pricing`] (the model's default).
 #[derive(Debug, Clone, Copy)]
-pub struct BatchPricing {
-    /// cost per 1M input tokens in USD when sent via the batch API
+pub struct TierRates {
+    /// cost per 1M input tokens in USD for this tier
     pub input_per_1m: f64,
-    /// cost per 1M output tokens in USD when sent via the batch API
+    /// cost per 1M cached input tokens in USD for this tier (if the tier supports
+    /// prompt caching). Batch tier typically lacks this; Flex and Priority have it.
+    pub cached_input_per_1m: Option<f64>,
+    /// cost per 1M output tokens in USD for this tier
     pub output_per_1m: f64,
 }
+
+/// Alias kept for backwards compatibility with the 3.2.x API. The `cached_input_per_1m`
+/// field is unused by existing Batch data; new entries can fill it.
+pub type BatchPricing = TierRates;
 
 /// High-tier pricing for input-token-count-based tiers (e.g. Gemini 2.5 Pro).
 /// Applies when input tokens exceed `threshold_tokens`.
@@ -189,6 +208,15 @@ impl VisionPricing {
     }
 }
 
+/// Compute USD cost for `(input_tokens, output_tokens)` at a given tier's
+/// rates. Helper used by `estimate_batch_cost`, `estimate_flex_cost`, and
+/// `estimate_priority_cost`. The cached input rate is not used here; callers
+/// that need cache-aware estimates can split tokens upstream.
+fn tier_cost(input_tokens: u64, output_tokens: u64, t: TierRates) -> f64 {
+    input_tokens as f64 * t.input_per_1m / 1_000_000.0
+        + output_tokens as f64 * t.output_per_1m / 1_000_000.0
+}
+
 /// Scale `(w, h)` down preserving aspect ratio so neither edge exceeds `max_edge`.
 fn rescale_to_fit(w: u32, h: u32, max_edge: u32) -> (u32, u32) {
     if w <= max_edge && h <= max_edge {
@@ -205,7 +233,14 @@ fn rescale_to_fit(w: u32, h: u32, max_edge: u32) -> (u32, u32) {
 /// `Default` produces an all-`None` value.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ExtendedPricing {
-    pub batch: Option<BatchPricing>,
+    /// Batch API tier (asynchronous fulfillment, typically ~50% off Standard).
+    pub batch: Option<TierRates>,
+    /// Flex tier (OpenAI 2026+; token rates equal Batch, but with explicit
+    /// cached input row and narrower model availability).
+    pub flex: Option<TierRates>,
+    /// Priority tier (OpenAI 2026+; opt-in premium for faster fulfillment).
+    /// Multiplier is NOT consistent across models — varies per SKU.
+    pub priority: Option<TierRates>,
     pub high_tier: Option<HighTierPricing>,
     pub audio: Option<AudioPricing>,
     pub vision: Option<VisionPricing>,
@@ -294,17 +329,79 @@ impl Model {
     /// Estimate cost using batch-API rates. Returns `None` if the model has no
     /// batch pricing set in `extended.batch`.
     pub fn estimate_batch_cost(&self, input_tokens: u64, output_tokens: u64) -> Option<f64> {
-        let b = self.extended.batch?;
-        Some(
-            input_tokens as f64 * b.input_per_1m / 1_000_000.0
-                + output_tokens as f64 * b.output_per_1m / 1_000_000.0,
-        )
+        let t = self.extended.batch?;
+        Some(tier_cost(input_tokens, output_tokens, t))
     }
 
-    /// Set the batch-API pricing. Returns a new `Model`.
+    /// Estimate cost using Flex tier rates. Returns `None` if the model has no
+    /// flex pricing set in `extended.flex`.
+    pub fn estimate_flex_cost(&self, input_tokens: u64, output_tokens: u64) -> Option<f64> {
+        let t = self.extended.flex?;
+        Some(tier_cost(input_tokens, output_tokens, t))
+    }
+
+    /// Estimate cost using Priority tier rates. Returns `None` if the model has no
+    /// priority pricing set in `extended.priority`.
+    pub fn estimate_priority_cost(&self, input_tokens: u64, output_tokens: u64) -> Option<f64> {
+        let t = self.extended.priority?;
+        Some(tier_cost(input_tokens, output_tokens, t))
+    }
+
+    /// Set the batch-API pricing. Returns a new `Model`. The cached input rate
+    /// defaults to `None`; use [`Self::with_batch_cached`] when the tier ships
+    /// an explicit cached rate.
     pub const fn with_batch(mut self, input_per_1m: f64, output_per_1m: f64) -> Self {
-        self.extended.batch = Some(BatchPricing {
+        self.extended.batch = Some(TierRates {
             input_per_1m,
+            cached_input_per_1m: None,
+            output_per_1m,
+        });
+        self
+    }
+
+    /// Set the batch-API pricing with an explicit cached-input rate.
+    pub const fn with_batch_cached(
+        mut self,
+        input_per_1m: f64,
+        cached_input_per_1m: f64,
+        output_per_1m: f64,
+    ) -> Self {
+        self.extended.batch = Some(TierRates {
+            input_per_1m,
+            cached_input_per_1m: Some(cached_input_per_1m),
+            output_per_1m,
+        });
+        self
+    }
+
+    /// Set the Flex tier rates. Pass `cached_input_per_1m: None` if the docs
+    /// page shows `—` for the cached column.
+    pub const fn with_flex(
+        mut self,
+        input_per_1m: f64,
+        cached_input_per_1m: Option<f64>,
+        output_per_1m: f64,
+    ) -> Self {
+        self.extended.flex = Some(TierRates {
+            input_per_1m,
+            cached_input_per_1m,
+            output_per_1m,
+        });
+        self
+    }
+
+    /// Set the Priority tier rates. Pass `cached_input_per_1m: None` if the docs
+    /// page shows `—`. OpenAI Priority is opt-in and offered on a narrow subset
+    /// of models — leave unset for models without a Priority row.
+    pub const fn with_priority(
+        mut self,
+        input_per_1m: f64,
+        cached_input_per_1m: Option<f64>,
+        output_per_1m: f64,
+    ) -> Self {
+        self.extended.priority = Some(TierRates {
+            input_per_1m,
+            cached_input_per_1m,
             output_per_1m,
         });
         self
@@ -436,6 +533,8 @@ const fn model(
         },
         extended: ExtendedPricing {
             batch: None,
+            flex: None,
+            priority: None,
             high_tier: None,
             audio: None,
             vision: None,
@@ -446,6 +545,86 @@ const fn model(
 }
 
 // ── OpenAI ──────────────────────────────────────────────
+
+// GPT-5.x family (2026 generation). Standard rates from per-model docs pages;
+// Batch / Flex / Priority rates from the aggregate /api/docs/pricing toggle.
+// Long-context (>272K input) policy: Standard/Batch/Flex inputs multiply by 2×
+// and outputs by 1.5× for gpt-5.4 and gpt-5.5 — encoded via `with_high_tier`.
+
+/// gpt-5.5 — frontier 2026 model. Has Priority tier (rare among GPT-5.x SKUs).
+const OPENAI_GPT55: Model = model(
+    "gpt-5.5",
+    Provider::OpenAI,
+    5.00,
+    30.00,
+    Some(0.50),
+    1_050_000,
+    128_000,
+)
+.with_batch_cached(2.50, 0.25, 15.00)
+.with_flex(2.50, Some(0.25), 15.00)
+.with_priority(12.50, Some(1.25), 75.00)
+.with_high_tier(10.00, 45.00, None, 272_000);
+
+/// gpt-5.4 — 2026 mid-frontier. Long-context multiplier (>272K) per docs.
+const OPENAI_GPT54: Model = model(
+    "gpt-5.4",
+    Provider::OpenAI,
+    2.50,
+    15.00,
+    Some(0.25),
+    1_050_000,
+    128_000,
+)
+.with_batch_cached(1.25, 0.125, 7.50)
+.with_flex(1.25, None, 7.50)
+.with_high_tier(5.00, 22.50, Some(0.50), 272_000);
+
+/// gpt-5.4-mini — 2026 mid-tier. Has Flex; Priority partial data (skipped).
+const OPENAI_GPT54_MINI: Model = model(
+    "gpt-5.4-mini",
+    Provider::OpenAI,
+    0.75,
+    4.50,
+    Some(0.075),
+    400_000,
+    128_000,
+)
+.with_batch_cached(0.375, 0.0375, 2.25)
+.with_flex(0.375, Some(0.0375), 2.25);
+
+/// gpt-5 — 2025-08 launch SKU. Model docs page only lists Standard tier.
+const OPENAI_GPT5: Model = model(
+    "gpt-5",
+    Provider::OpenAI,
+    1.25,
+    10.00,
+    Some(0.125),
+    400_000,
+    128_000,
+);
+
+/// gpt-5-mini — 2025-08 launch. Standard only on docs page.
+const OPENAI_GPT5_MINI: Model = model(
+    "gpt-5-mini",
+    Provider::OpenAI,
+    0.25,
+    2.00,
+    Some(0.025),
+    400_000,
+    128_000,
+);
+
+/// gpt-5-nano — smallest GPT-5 SKU. Standard only; no Flex / Priority anywhere.
+const OPENAI_GPT5_NANO: Model = model(
+    "gpt-5-nano",
+    Provider::OpenAI,
+    0.05,
+    0.40,
+    Some(0.005),
+    400_000,
+    128_000,
+);
 
 const OPENAI_GPT41: Model = model(
     "gpt-4.1",
@@ -1160,6 +1339,12 @@ const MIXTRAL_8X7B: Model = model(
 
 static ALL_MODELS: &[Model] = &[
     // OpenAI
+    OPENAI_GPT55,
+    OPENAI_GPT54,
+    OPENAI_GPT54_MINI,
+    OPENAI_GPT5,
+    OPENAI_GPT5_MINI,
+    OPENAI_GPT5_NANO,
     OPENAI_GPT41,
     OPENAI_GPT41_MINI,
     OPENAI_GPT41_NANO,
@@ -1389,6 +1574,71 @@ mod tests {
             m.estimate_image_cost(1024, 1024, ImageDetail::High)
                 .is_none()
         );
+    }
+
+    // ── GPT-5.x + Flex / Priority tiers ─────────────────────
+
+    #[test]
+    fn test_gpt5_family_registered() {
+        for id in [
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-5-nano",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.5",
+        ] {
+            assert!(get_model(id).is_some(), "missing GPT-5.x model {id}");
+        }
+    }
+
+    #[test]
+    fn test_gpt55_priority_cost_matches_doc_rates() {
+        let m = get_model("gpt-5.5").unwrap();
+        // Priority: $12.50 input + $75.00 output per 1M.
+        let cost = m.estimate_priority_cost(1_000_000, 500_000).unwrap();
+        assert!(
+            (cost - (12.50 + 37.50)).abs() < 1e-6,
+            "expected 50.00, got {cost}",
+        );
+    }
+
+    #[test]
+    fn test_gpt55_flex_equals_batch_token_rates() {
+        // OpenAI Flex guide: Flex token rates equal Batch token rates.
+        let m = get_model("gpt-5.5").unwrap();
+        let f = m.estimate_flex_cost(1_000_000, 500_000).unwrap();
+        let b = m.estimate_batch_cost(1_000_000, 500_000).unwrap();
+        assert!((f - b).abs() < 1e-9, "flex {f} should equal batch {b}");
+    }
+
+    #[test]
+    fn test_gpt5_has_no_flex_or_priority() {
+        let m = get_model("gpt-5").unwrap();
+        assert!(m.extended.flex.is_none());
+        assert!(m.extended.priority.is_none());
+        // Estimators must surface that absence.
+        assert!(m.estimate_flex_cost(1, 1).is_none());
+        assert!(m.estimate_priority_cost(1, 1).is_none());
+    }
+
+    #[test]
+    fn test_gpt54_long_context_auto_applies_high_tier() {
+        let m = get_model("gpt-5.4").unwrap();
+        // Standard input $2.50; long-context >272K input $5.00.
+        let standard = m.estimate_cost(100_000, 0);
+        let long = m.estimate_cost(300_000, 0);
+        // 100k × $2.50/M = $0.25; 300k × $5.00/M = $1.50.
+        assert!((standard - 0.25).abs() < 1e-9);
+        assert!((long - 1.50).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_gpt54_flex_cached_is_none_per_docs() {
+        // Aggregate pricing page shows "—" for gpt-5.4 Flex cached. Keep None.
+        let m = get_model("gpt-5.4").unwrap();
+        let flex = m.extended.flex.unwrap();
+        assert_eq!(flex.cached_input_per_1m, None);
     }
 
     #[test]
