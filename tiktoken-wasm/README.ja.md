@@ -123,7 +123,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-利用可能なエンコーディング名一覧（9 種類）。
+利用可能なエンコーディング名一覧（11 種類）。
 
 ### `getEncoding(name: string): Encoding`
 
@@ -163,7 +163,7 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-USD で API コストを見積もり。7 プロバイダ 57 モデル対応。
+USD で API コストを見積もり。7 プロバイダ 63 モデル対応。
 
 ### `getModelInfo(modelId): ModelInfo`
 
@@ -171,7 +171,7 @@ USD で API コストを見積もり。7 プロバイダ 57 モデル対応。
 
 ### `allModels(): ModelInfo[]`
 
-サポート 57 モデルすべてを価格情報付きで列挙。
+サポート 63 モデルすべてを価格情報付きで列挙。
 
 ### `modelsByProvider(provider): ModelInfo[]`
 

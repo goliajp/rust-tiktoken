@@ -5,6 +5,19 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-06-07
+
+### Changed
+- `tiktoken` path-dep bumped to 3.3.0. Inherits:
+  - gpt2 registered as the 11th encoding (alias for r50k_base).
+  - Six OpenAI GPT-5.x model entries (gpt-5/gpt-5-mini/gpt-5-nano/gpt-5.4/
+    gpt-5.4-mini/gpt-5.5) with Standard/Batch/Flex/Priority and long-context
+    tier data where verified.
+  - VisionPricing rewritten as a provider-specific enum
+    (OpenAI tile-based, OpenAI patch-based, Anthropic divisor, Gemini tile).
+- Doc comment lists `o200k_harmony`, `gpt2` as supported encoding names.
+- No WASM API changes.
+
 ## [3.3.0] - 2026-06-06
 
 ### Changed

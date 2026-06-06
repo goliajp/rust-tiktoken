@@ -122,7 +122,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-List all available encoding names (9 encodings).
+List all available encoding names (11 encodings).
 
 ### `getEncoding(name: string): Encoding`
 
@@ -161,7 +161,7 @@ Map a model name to its encoding name without loading the encoding.
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-Estimate API cost in USD. Supports 57 models across 7 providers.
+Estimate API cost in USD. Supports 63 models across 7 providers.
 
 ### `getModelInfo(modelId): ModelInfo`
 
