@@ -15,7 +15,7 @@
 - **マルチプロバイダ**: 5 社 11 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
 - **高速**: Arena ベースの語彙、ヒープ加速 BPE マージ、DFA 正規表現
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
-- **料金見積もり**: 7 プロバイダ 57 モデルのコスト推定
+- **料金見積もり**: 7 プロバイダ 63 モデルのコスト推定
 - **コンパクト**: ruzstd 圧縮語彙データをコンパイル時に埋め込み
 - **ゼロアロケーションカウント**: `count()` パスはトークンベクタを割り当てません
 
@@ -158,7 +158,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 57 モデルに対応。
+OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 63 モデルに対応。
 
 ## WebAssembly
 

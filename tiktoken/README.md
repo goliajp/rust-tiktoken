@@ -15,7 +15,7 @@ The fastest Rust BPE tokenizer — 7-10x faster than tiktoken-rs. Compatible wit
 - **Multi-provider**: 11 encodings across 5 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral)
 - **Fast**: arena-based vocabulary, heap-accelerated BPE merge, DFA regex
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
-- **Pricing**: cost estimation for 57 models across 7 providers
+- **Pricing**: cost estimation for 63 models across 7 providers
 - **Compact**: ruzstd-compressed vocabulary data embedded at compile time
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
@@ -158,7 +158,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-Supports 57 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
+Supports 63 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 
 ## WebAssembly
 

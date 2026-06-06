@@ -15,7 +15,7 @@
 - **多厂商**：11 种编码，覆盖 5 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral）
 - **高性能**：Arena 词表存储、堆加速 BPE 合并、DFA 正则
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
-- **费用估算**：覆盖 7 家厂商共 57 个模型
+- **费用估算**：覆盖 7 家厂商共 63 个模型
 - **体积紧凑**：ruzstd 压缩词表数据，编译期嵌入
 - **零分配计数**：`count()` 不分配 token 向量
 
@@ -158,7 +158,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 57 个模型。
+支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 63 个模型。
 
 ## WebAssembly
 

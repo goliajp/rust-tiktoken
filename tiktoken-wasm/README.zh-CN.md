@@ -163,7 +163,7 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-按美元估算 API 成本。覆盖 7 家厂商 57 个模型。
+按美元估算 API 成本。覆盖 7 家厂商 63 个模型。
 
 ### `getModelInfo(modelId): ModelInfo`
 
