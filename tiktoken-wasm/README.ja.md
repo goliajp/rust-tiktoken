@@ -123,7 +123,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-利用可能なエンコーディング名一覧（9 種類）。
+利用可能なエンコーディング名一覧（11 種類）。
 
 ### `getEncoding(name: string): Encoding`
 
