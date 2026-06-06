@@ -123,7 +123,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-列出全部可用编码名（共 9 套）。
+列出全部可用编码名（共 11 套）。
 
 ### `getEncoding(name: string): Encoding`
 
@@ -163,7 +163,7 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-按美元估算 API 成本。覆盖 7 家厂商 57 个模型。
+按美元估算 API 成本。覆盖 7 家厂商 63 个模型。
 
 ### `getModelInfo(modelId): ModelInfo`
 
