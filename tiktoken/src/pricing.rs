@@ -1,7 +1,21 @@
 //! Per-model pricing data and cost estimation for OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 //!
-//! Prices are in USD per 1M tokens. Updated as of 2026-03.
+//! Prices are in USD per 1M tokens. Updated as of 2026-06.
 //! Pricing changes frequently — verify against official docs before production billing.
+//!
+//! # Caveats (2026-06 refresh)
+//!
+//! - **Anthropic `cached_input`** uses the cache-READ price (≈ input × 10%). Older Claude 3.x
+//!   entries store `input × 50%` (which corresponds to cache-write/2, not cache-read);
+//!   they are kept as-is since those models are retired and no longer billable.
+//! - **Meta llama prices** are sourced from Together AI's ~2024 catalog and do NOT match
+//!   any single hoster's 2026-06 pricing. Use the official hoster you are actually
+//!   billed by for production cost estimates.
+//! - **`gemini-2.5-pro` `cached_input`** is stored as a single value (≤200k tier). Google
+//!   actually charges a two-tier rate ($0.125 ≤200k / $0.25 >200k); the current schema
+//!   cannot represent it.
+//! - Models marked `DEPRECATED` retain historical prices so existing cost lookups keep
+//!   working. The note records when the API shuts down or removes the model.
 
 /// Provider identity
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -220,6 +234,7 @@ const OPENAI_GPT4O_MINI: Model = model(
     16_384,
 );
 
+/// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_O1: Model = model(
     "o1",
     Provider::OpenAI,
@@ -230,16 +245,19 @@ const OPENAI_O1: Model = model(
     100_000,
 );
 
+/// DEPRECATED — API shutdown 2026-10-23. Price updated 2026-06: input/output
+/// dropped from $3.00/$12.00 to match the o3-mini rate of $1.10/$4.40.
 const OPENAI_O1_MINI: Model = model(
     "o1-mini",
     Provider::OpenAI,
-    3.00,
-    12.00,
-    Some(1.50),
+    1.10,
+    4.40,
+    Some(0.55),
     128_000,
     65_536,
 );
 
+/// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5-pro.
 const OPENAI_O1_PRO: Model = model(
     "o1-pro",
     Provider::OpenAI,
@@ -270,6 +288,7 @@ const OPENAI_O3_PRO: Model = model(
     100_000,
 );
 
+/// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_O3_MINI: Model = model(
     "o3-mini",
     Provider::OpenAI,
@@ -280,6 +299,7 @@ const OPENAI_O3_MINI: Model = model(
     100_000,
 );
 
+/// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.4-mini.
 const OPENAI_O4_MINI: Model = model(
     "o4-mini",
     Provider::OpenAI,
@@ -290,6 +310,7 @@ const OPENAI_O4_MINI: Model = model(
     100_000,
 );
 
+/// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_GPT4_TURBO: Model = model(
     "gpt-4-turbo",
     Provider::OpenAI,
@@ -300,8 +321,10 @@ const OPENAI_GPT4_TURBO: Model = model(
     4_096,
 );
 
+/// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_GPT4: Model = model("gpt-4", Provider::OpenAI, 30.00, 60.00, None, 8_192, 8_192);
 
+/// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.4-mini.
 const OPENAI_GPT35_TURBO: Model = model(
     "gpt-3.5-turbo",
     Provider::OpenAI,
@@ -394,26 +417,34 @@ const CLAUDE_SONNET_45: Model = model(
     64_000,
 );
 
+/// DEPRECATED — deprecated 2026-04-14, retires 2026-06-15. Replaced by
+/// claude-opus-4.5 / 4.6 / 4.7 / 4.8. Cache price corrected 2026-06:
+/// was $7.50 (cache-write/2 convention), now $1.50 (cache-read = input × 10%).
 const CLAUDE_OPUS_4: Model = model(
     "claude-opus-4",
     Provider::Anthropic,
     15.00,
     75.00,
-    Some(7.50),
+    Some(1.50),
     200_000,
     32_000,
 );
 
+/// DEPRECATED — deprecated 2026-04-14, retires 2026-06-15. Replaced by
+/// claude-sonnet-4.5 / 4.6. Cache price corrected 2026-06:
+/// was $1.50 (cache-write/2 convention), now $0.30 (cache-read = input × 10%).
 const CLAUDE_SONNET_4: Model = model(
     "claude-sonnet-4",
     Provider::Anthropic,
     3.00,
     15.00,
-    Some(1.50),
+    Some(0.30),
     200_000,
     64_000,
 );
 
+/// DEPRECATED — retired 2026-02-19 on Anthropic-operated API
+/// (still available on AWS Bedrock and Google Vertex AI).
 const CLAUDE_HAIKU_35: Model = model(
     "claude-3.5-haiku",
     Provider::Anthropic,
@@ -424,6 +455,7 @@ const CLAUDE_HAIKU_35: Model = model(
     8_192,
 );
 
+/// DEPRECATED — retired 2025-10-28.
 const CLAUDE_SONNET_35: Model = model(
     "claude-3.5-sonnet",
     Provider::Anthropic,
@@ -434,6 +466,7 @@ const CLAUDE_SONNET_35: Model = model(
     8_192,
 );
 
+/// DEPRECATED — retired 2026-01-05.
 const CLAUDE_OPUS_3: Model = model(
     "claude-3-opus",
     Provider::Anthropic,
@@ -444,6 +477,7 @@ const CLAUDE_OPUS_3: Model = model(
     4_096,
 );
 
+/// DEPRECATED — retired 2026-04-20.
 const CLAUDE_HAIKU_3: Model = model(
     "claude-3-haiku",
     Provider::Anthropic,
@@ -456,12 +490,13 @@ const CLAUDE_HAIKU_3: Model = model(
 
 // ── Google Gemini ───────────────────────────────────────
 
+/// Cache price stored as ≤200k tier; >200k tier is $0.25 (not representable in the current schema).
 const GEMINI_25_PRO: Model = model(
     "gemini-2.5-pro",
     Provider::Google,
     1.25,
     10.00,
-    Some(0.3125),
+    Some(0.125),
     1_048_576,
     65_536,
 );
@@ -476,6 +511,7 @@ const GEMINI_25_FLASH: Model = model(
     65_536,
 );
 
+/// DEPRECATED — shut down 2026-06-01. Use gemini-2.5-flash.
 const GEMINI_20_FLASH: Model = model(
     "gemini-2.0-flash",
     Provider::Google,
@@ -486,6 +522,7 @@ const GEMINI_20_FLASH: Model = model(
     8_192,
 );
 
+/// DEPRECATED — no longer on the official Gemini pricing page. Use gemini-2.5-pro.
 const GEMINI_15_PRO: Model = model(
     "gemini-1.5-pro",
     Provider::Google,
@@ -496,6 +533,7 @@ const GEMINI_15_PRO: Model = model(
     8_192,
 );
 
+/// DEPRECATED — no longer on the official Gemini pricing page. Use gemini-2.5-flash.
 const GEMINI_15_FLASH: Model = model(
     "gemini-1.5-flash",
     Provider::Google,
@@ -506,6 +544,7 @@ const GEMINI_15_FLASH: Model = model(
     8_192,
 );
 
+/// DEPRECATED — no longer on the official Gemini pricing page.
 const GEMINI_EMBED: Model = model(
     "text-embedding-004",
     Provider::Google,
@@ -517,7 +556,10 @@ const GEMINI_EMBED: Model = model(
 );
 
 // ── Meta (Llama via hosted APIs) ──────────────────────────
-// pricing based on common API providers (Together, Fireworks, etc.)
+// Prices below trace to Together AI's ~2024 catalog (single throughput rate,
+// input == output) and do NOT match any single hoster as of 2026-06. They are
+// kept for backwards-compatible cost lookups but should not be used for
+// production billing without re-pinning to the hoster you actually pay.
 
 const META_LLAMA_3_1_405B: Model = model(
     "llama-3.1-405b",
@@ -581,6 +623,7 @@ const META_LLAMA_4_MAVERICK: Model = model(
 
 // ── DeepSeek ─────────────────────────────────────────────
 
+/// DEPRECATED — alias `deepseek-chat` deprecates 2026-07-24; replaced by `deepseek-v4-flash`.
 const DEEPSEEK_V3: Model = model(
     "deepseek-v3",
     Provider::DeepSeek,
@@ -591,6 +634,7 @@ const DEEPSEEK_V3: Model = model(
     8_192,
 );
 
+/// DEPRECATED — alias `deepseek-reasoner` deprecates 2026-07-24; replaced by `deepseek-v4-pro`.
 const DEEPSEEK_R1: Model = model(
     "deepseek-r1",
     Provider::DeepSeek,
@@ -602,12 +646,13 @@ const DEEPSEEK_R1: Model = model(
 );
 
 // ── Alibaba (Qwen) ──────────────────────────────────────
+// USD prices from Alibaba Cloud Model Studio (International).
 
 const QWEN_2_5_72B: Model = model(
     "qwen2.5-72b",
     Provider::Alibaba,
-    0.90,
-    0.90,
+    1.4,
+    5.6,
     None,
     128_000,
     8_192,
@@ -616,8 +661,8 @@ const QWEN_2_5_72B: Model = model(
 const QWEN_2_5_32B: Model = model(
     "qwen2.5-32b",
     Provider::Alibaba,
-    0.40,
-    0.40,
+    0.7,
+    2.8,
     None,
     128_000,
     8_192,
@@ -626,8 +671,8 @@ const QWEN_2_5_32B: Model = model(
 const QWEN_2_5_7B: Model = model(
     "qwen2.5-7b",
     Provider::Alibaba,
-    0.15,
-    0.15,
+    0.175,
+    0.7,
     None,
     128_000,
     8_192,
@@ -647,17 +692,18 @@ const QWEN_3_PLUS: Model = model(
     "qwen3-plus",
     Provider::Alibaba,
     0.40,
-    1.20,
+    2.4,
     None,
     128_000,
     8_192,
 );
 
+/// Pricing taken from the `qwen3-coder-plus` SKU on Model Studio.
 const QWEN_3_CODER: Model = model(
     "qwen3-coder",
     Provider::Alibaba,
-    0.22,
-    1.00,
+    1.0,
+    5.0,
     None,
     262_144,
     8_192,
@@ -666,8 +712,8 @@ const QWEN_3_CODER: Model = model(
 const QWEN_3_8B: Model = model(
     "qwen3-8b",
     Provider::Alibaba,
-    0.05,
-    0.40,
+    0.18,
+    0.7,
     None,
     128_000,
     8_192,
@@ -678,8 +724,8 @@ const QWEN_3_8B: Model = model(
 const MISTRAL_LARGE: Model = model(
     "mistral-large",
     Provider::Mistral,
-    2.00,
-    6.00,
+    0.5,
+    1.5,
     None,
     128_000,
     4_096,
@@ -708,8 +754,8 @@ const MISTRAL_NEMO: Model = model(
 const MISTRAL_MEDIUM: Model = model(
     "mistral-medium",
     Provider::Mistral,
-    0.40,
-    2.00,
+    1.5,
+    7.5,
     None,
     128_000,
     4_096,
@@ -725,6 +771,7 @@ const CODESTRAL: Model = model(
     4_096,
 );
 
+/// DEPRECATED — no longer listed on the official Mistral La Plateforme pricing page.
 const PIXTRAL_LARGE: Model = model(
     "pixtral-large",
     Provider::Mistral,
@@ -738,8 +785,8 @@ const PIXTRAL_LARGE: Model = model(
 const MIXTRAL_8X7B: Model = model(
     "mixtral-8x7b",
     Provider::Mistral,
-    0.60,
-    0.60,
+    0.7,
+    0.7,
     None,
     32_768,
     4_096,
