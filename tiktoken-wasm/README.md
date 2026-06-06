@@ -122,7 +122,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-List all available encoding names (9 encodings).
+List all available encoding names (11 encodings).
 
 ### `getEncoding(name: string): Encoding`
 
