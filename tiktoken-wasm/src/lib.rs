@@ -99,6 +99,7 @@ pub fn list_encodings() -> Vec<String> {
 /// Supported encodings:
 /// - `"cl100k_base"` — GPT-4, GPT-3.5-turbo
 /// - `"o200k_base"` — GPT-4o, GPT-4.1, o1, o3
+/// - `"o200k_harmony"` — gpt-oss (harmony chat format)
 /// - `"p50k_base"` — text-davinci-002/003
 /// - `"p50k_edit"` — text-davinci-edit
 /// - `"r50k_base"` — GPT-3 (davinci, curie, etc.)
