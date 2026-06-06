@@ -204,6 +204,16 @@ pub fn r50k_base() -> CoreBpe {
     CoreBpe::new(encoder, special, P50K_PATTERN)
 }
 
+/// Construct the `gpt2` encoding (GPT-2 BPE).
+///
+/// Byte-for-byte identical to [`r50k_base`] — same merge ranks, regex, and
+/// single special token (`<|endoftext|>` at 50256). Exposed as a distinct
+/// name for parity with upstream `openai/tiktoken`; the runtime shares
+/// `r50k_base`'s cached instance.
+pub fn gpt2() -> CoreBpe {
+    r50k_base()
+}
+
 /// Construct the llama3 encoding (Llama 3 / 3.1 / 3.2 / 3.3).
 /// Vocabulary size: 128,000 regular tokens + 256 special tokens.
 pub fn llama3() -> CoreBpe {
