@@ -1,5 +1,33 @@
 # Changelog
 
+## [3.1.5] - 2026-06-06
+
+### Added
+- `model_to_encoding` now supports `gpt-5` and `gpt-4.5` prefixes → `o200k_base`.
+- `model_to_encoding` strips a leading `ft:` prefix so fine-tuned model IDs (e.g.
+  `ft:gpt-4o:my-org::abc123`) resolve to the base model's encoding.
+- Azure-style `gpt-35-turbo` alias → `cl100k_base`.
+
+### Fixed
+- `davinci-002` and `babbage-002` now correctly route to `cl100k_base` (they were
+  greedily caught by the `davinci`/`babbage` prefix in the `r50k_base` block).
+
+### Changed
+- Pricing refreshed against official 2026-06 docs across all 7 providers:
+  - 13 price corrections (notably OpenAI `o1-mini` to match `o3-mini` at $1.10/$4.40,
+    Anthropic `claude-opus-4`/`claude-sonnet-4` cache values to cache-read convention,
+    Alibaba Qwen 2.5 family now uses official Model Studio split rates, Mistral
+    `mistral-large` cut to $0.5/$1.5, `mistral-medium` repositioned to $1.5/$7.5).
+  - 21 `DEPRECATED` doc-comments (OpenAI shutdown 2026-10-23, Anthropic Claude 3.x
+    retired, claude-opus-4/sonnet-4 retire 2026-06-15, Gemini 2.0 Flash shutdown,
+    Gemini 1.5 family removed from official pricing, DeepSeek `deepseek-chat`/
+    `deepseek-reasoner` deprecate 2026-07-24, Mistral `pixtral-large`).
+  - Module-level caveats document the Anthropic cache-read convention, the Meta
+    llama legacy-Together source, and the `gemini-2.5-pro` single-tier limitation.
+- Dropped `rust-version` MSRV pin from workspace; tracks current stable.
+- CI release workflow: Node 20 → 24, `wasm-pack` install switched to
+  `taiki-e/install-action` (prebuilt binary, ~5s vs ~5–10 min compile).
+
 ## [3.1.4] - 2026-04-24
 
 ### Changed
