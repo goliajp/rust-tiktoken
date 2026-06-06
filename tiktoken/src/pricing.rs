@@ -17,6 +17,11 @@
 //!   holds the ≤200k rates.
 //! - Models marked `DEPRECATED` retain historical prices so existing cost lookups keep
 //!   working. The note records when the API shuts down or removes the model.
+//! - **Vision pricing** is modelled as `VisionPricing` enum variants per provider; image
+//!   inputs are billed via the model's standard `input_per_1m` rate. Use
+//!   `Model::estimate_image_cost` for the end-to-end USD figure. `pixtral-large` /
+//!   `o1-pro` / `o3-pro` / `gpt-4-turbo` are left UNSET because their formulas are not
+//!   listed verbatim in the providers' current docs (deferred to a separate pass).
 
 /// Provider identity
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -84,10 +89,116 @@ pub struct AudioPricing {
     pub per_minute: Option<f64>,
 }
 
-/// Vision modality pricing — per-image rate.
+/// OpenAI image-detail parameter. Other providers ignore it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ImageDetail {
+    /// detail=low — caps tokens at the base/flat rate (OpenAI only).
+    Low,
+    /// detail=high (default) — full token count.
+    #[default]
+    High,
+}
+
+/// How a model converts an input image to billable input tokens.
+///
+/// All current providers charge image inputs at the model's standard
+/// `input_per_1m` rate; this enum captures *how many tokens an image of
+/// `(width, height)` resolves to* per provider's published formula. Use
+/// [`Self::image_tokens`] to compute, or [`Model::estimate_image_cost`] for the
+/// end-to-end USD figure.
 #[derive(Debug, Clone, Copy)]
-pub struct VisionPricing {
-    pub per_image: f64,
+pub enum VisionPricing {
+    /// OpenAI tile-based family (gpt-4o, gpt-4.1, o1, o3).
+    ///
+    /// Image is rescaled to fit a 2048×2048 box, then split into
+    /// `tile_px`-edged tiles. Tokens =
+    /// `base_tokens + ceil(w/tile) * ceil(h/tile) * per_tile_tokens`.
+    /// `ImageDetail::Low` returns just `base_tokens`.
+    OpenAITileBased {
+        base_tokens: u32,
+        per_tile_tokens: u32,
+        tile_px: u32,
+    },
+    /// OpenAI patch-based family (gpt-4.1-mini, gpt-4.1-nano, o4-mini).
+    ///
+    /// Image is sampled into `patch_px`-edged patches; tokens ≈
+    /// `round(patches × multiplier)`. `ImageDetail` has no effect on this family.
+    OpenAIPatchBased { patch_px: u32, multiplier: f64 },
+    /// Anthropic Claude vision.
+    ///
+    /// Tokens ≈ `(width * height) / divisor`, capped at `cap_tokens`.
+    AnthropicDivisor { divisor: u32, cap_tokens: u32 },
+    /// Google Gemini vision (2.5 Pro/Flash).
+    ///
+    /// Images with both edges ≤ `flat_threshold_px` charge a flat `flat_tokens`.
+    /// Larger images: crop unit = `floor(min(w,h)/1.5)`, tile count =
+    /// `ceil(w/crop) × ceil(h/crop)`, each tile = `tile_tokens`.
+    GeminiTileBased {
+        flat_threshold_px: u32,
+        flat_tokens: u32,
+        tile_tokens: u32,
+    },
+}
+
+impl VisionPricing {
+    /// Compute approximate input token count for an image of `width × height` px.
+    pub fn image_tokens(&self, width: u32, height: u32, detail: ImageDetail) -> u64 {
+        match *self {
+            VisionPricing::OpenAITileBased {
+                base_tokens,
+                per_tile_tokens,
+                tile_px,
+            } => {
+                if matches!(detail, ImageDetail::Low) {
+                    return base_tokens as u64;
+                }
+                let (w, h) = rescale_to_fit(width, height, 2048);
+                let tiles_w = w.div_ceil(tile_px) as u64;
+                let tiles_h = h.div_ceil(tile_px) as u64;
+                base_tokens as u64 + tiles_w * tiles_h * per_tile_tokens as u64
+            }
+            VisionPricing::OpenAIPatchBased {
+                patch_px,
+                multiplier,
+            } => {
+                let pw = width.div_ceil(patch_px) as f64;
+                let ph = height.div_ceil(patch_px) as f64;
+                (pw * ph * multiplier).round() as u64
+            }
+            VisionPricing::AnthropicDivisor {
+                divisor,
+                cap_tokens,
+            } => {
+                let raw = (width as u64 * height as u64) / divisor as u64;
+                raw.min(cap_tokens as u64)
+            }
+            VisionPricing::GeminiTileBased {
+                flat_threshold_px,
+                flat_tokens,
+                tile_tokens,
+            } => {
+                if width <= flat_threshold_px && height <= flat_threshold_px {
+                    return flat_tokens as u64;
+                }
+                let crop_unit = (width.min(height) as f64 / 1.5).floor().max(1.0) as u32;
+                let tiles_w = width.div_ceil(crop_unit) as u64;
+                let tiles_h = height.div_ceil(crop_unit) as u64;
+                tiles_w * tiles_h * tile_tokens as u64
+            }
+        }
+    }
+}
+
+/// Scale `(w, h)` down preserving aspect ratio so neither edge exceeds `max_edge`.
+fn rescale_to_fit(w: u32, h: u32, max_edge: u32) -> (u32, u32) {
+    if w <= max_edge && h <= max_edge {
+        return (w, h);
+    }
+    let ratio = (w as f64 / max_edge as f64).max(h as f64 / max_edge as f64);
+    (
+        (w as f64 / ratio).round() as u32,
+        (h as f64 / ratio).round() as u32,
+    )
 }
 
 /// All extended (non-standard) pricing dimensions. Every field is `Option`;
@@ -232,10 +343,23 @@ impl Model {
         self
     }
 
-    /// Set the vision per-image rate. Returns a new `Model`.
-    pub const fn with_vision_per_image(mut self, per_image: f64) -> Self {
-        self.extended.vision = Some(VisionPricing { per_image });
+    /// Set the vision pricing variant. Returns a new `Model`.
+    pub const fn with_vision(mut self, v: VisionPricing) -> Self {
+        self.extended.vision = Some(v);
         self
+    }
+
+    /// Estimate the USD cost for one image input, end-to-end
+    /// (image → tokens → input rate).
+    ///
+    /// Returns `None` when the model has no `extended.vision` set.
+    /// Image tokens count toward the `pricing_for_input` tier-selection threshold,
+    /// so the rate auto-switches to high-tier for `gemini-2.5-pro` above 200k.
+    pub fn estimate_image_cost(&self, width: u32, height: u32, detail: ImageDetail) -> Option<f64> {
+        let v = self.extended.vision?;
+        let tokens = v.image_tokens(width, height, detail);
+        let p = self.pricing_for_input(tokens);
+        Some(tokens as f64 * p.input_per_1m / 1_000_000.0)
     }
 }
 
@@ -332,7 +456,12 @@ const OPENAI_GPT41: Model = model(
     1_000_000,
     32_768,
 )
-.with_batch(1.00, 4.00);
+.with_batch(1.00, 4.00)
+.with_vision(VisionPricing::OpenAITileBased {
+    base_tokens: 85,
+    per_tile_tokens: 170,
+    tile_px: 512,
+});
 
 const OPENAI_GPT41_MINI: Model = model(
     "gpt-4.1-mini",
@@ -343,7 +472,11 @@ const OPENAI_GPT41_MINI: Model = model(
     1_000_000,
     32_768,
 )
-.with_batch(0.20, 0.80);
+.with_batch(0.20, 0.80)
+.with_vision(VisionPricing::OpenAIPatchBased {
+    patch_px: 32,
+    multiplier: 1.62,
+});
 
 const OPENAI_GPT41_NANO: Model = model(
     "gpt-4.1-nano",
@@ -354,7 +487,11 @@ const OPENAI_GPT41_NANO: Model = model(
     1_000_000,
     32_768,
 )
-.with_batch(0.05, 0.20);
+.with_batch(0.05, 0.20)
+.with_vision(VisionPricing::OpenAIPatchBased {
+    patch_px: 32,
+    multiplier: 2.46,
+});
 
 const OPENAI_GPT4O: Model = model(
     "gpt-4o",
@@ -365,7 +502,12 @@ const OPENAI_GPT4O: Model = model(
     128_000,
     16_384,
 )
-.with_batch(1.25, 5.00);
+.with_batch(1.25, 5.00)
+.with_vision(VisionPricing::OpenAITileBased {
+    base_tokens: 85,
+    per_tile_tokens: 170,
+    tile_px: 512,
+});
 
 const OPENAI_GPT4O_MINI: Model = model(
     "gpt-4o-mini",
@@ -376,7 +518,12 @@ const OPENAI_GPT4O_MINI: Model = model(
     128_000,
     16_384,
 )
-.with_batch(0.075, 0.30);
+.with_batch(0.075, 0.30)
+.with_vision(VisionPricing::OpenAITileBased {
+    base_tokens: 2833,
+    per_tile_tokens: 5667,
+    tile_px: 512,
+});
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_O1: Model = model(
@@ -388,7 +535,12 @@ const OPENAI_O1: Model = model(
     200_000,
     100_000,
 )
-.with_batch(7.50, 30.00);
+.with_batch(7.50, 30.00)
+.with_vision(VisionPricing::OpenAITileBased {
+    base_tokens: 75,
+    per_tile_tokens: 150,
+    tile_px: 512,
+});
 
 /// DEPRECATED — API shutdown 2026-10-23. Price updated 2026-06: input/output
 /// dropped from $3.00/$12.00 to match the o3-mini rate of $1.10/$4.40.
@@ -423,7 +575,12 @@ const OPENAI_O3: Model = model(
     200_000,
     100_000,
 )
-.with_batch(1.00, 4.00);
+.with_batch(1.00, 4.00)
+.with_vision(VisionPricing::OpenAITileBased {
+    base_tokens: 75,
+    per_tile_tokens: 150,
+    tile_px: 512,
+});
 
 const OPENAI_O3_PRO: Model = model(
     "o3-pro",
@@ -458,7 +615,11 @@ const OPENAI_O4_MINI: Model = model(
     200_000,
     100_000,
 )
-.with_batch(0.55, 2.20);
+.with_batch(0.55, 2.20)
+.with_vision(VisionPricing::OpenAIPatchBased {
+    patch_px: 32,
+    multiplier: 1.72,
+});
 
 /// DEPRECATED — API shutdown 2026-10-23, replaced by gpt-5.5.
 const OPENAI_GPT4_TURBO: Model = model(
@@ -529,7 +690,11 @@ const CLAUDE_OPUS_46: Model = model(
     200_000,
     128_000,
 )
-.with_batch(2.50, 12.50);
+.with_batch(2.50, 12.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
 
 const CLAUDE_SONNET_46: Model = model(
     "claude-sonnet-4.6",
@@ -540,7 +705,11 @@ const CLAUDE_SONNET_46: Model = model(
     200_000,
     64_000,
 )
-.with_batch(1.50, 7.50);
+.with_batch(1.50, 7.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
 
 const CLAUDE_HAIKU_45: Model = model(
     "claude-haiku-4.5",
@@ -551,7 +720,11 @@ const CLAUDE_HAIKU_45: Model = model(
     200_000,
     64_000,
 )
-.with_batch(0.50, 2.50);
+.with_batch(0.50, 2.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
 
 const CLAUDE_OPUS_45: Model = model(
     "claude-opus-4.5",
@@ -562,7 +735,11 @@ const CLAUDE_OPUS_45: Model = model(
     200_000,
     64_000,
 )
-.with_batch(2.50, 12.50);
+.with_batch(2.50, 12.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
 
 const CLAUDE_SONNET_45: Model = model(
     "claude-sonnet-4.5",
@@ -573,7 +750,11 @@ const CLAUDE_SONNET_45: Model = model(
     200_000,
     64_000,
 )
-.with_batch(1.50, 7.50);
+.with_batch(1.50, 7.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
 
 /// DEPRECATED — deprecated 2026-04-14, retires 2026-06-15. Replaced by
 /// claude-opus-4.5 / 4.6 / 4.7 / 4.8. Cache price corrected 2026-06:
@@ -658,7 +839,12 @@ const GEMINI_25_PRO: Model = model(
     1_048_576,
     65_536,
 )
-.with_high_tier(2.50, 15.00, Some(0.25), 200_000);
+.with_high_tier(2.50, 15.00, Some(0.25), 200_000)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
 
 /// Text input is $0.30/M (standard); audio input is $1.00/M via `with_audio_input`.
 const GEMINI_25_FLASH: Model = model(
@@ -670,7 +856,12 @@ const GEMINI_25_FLASH: Model = model(
     1_048_576,
     65_536,
 )
-.with_audio_input(1.00);
+.with_audio_input(1.00)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
 
 /// DEPRECATED — shut down 2026-06-01. Use gemini-2.5-flash.
 const GEMINI_20_FLASH: Model = model(
@@ -1094,6 +1285,110 @@ mod tests {
         assert!(m.extended.high_tier.is_none());
         assert!(m.extended.audio.is_none());
         assert!(m.extended.vision.is_none());
+    }
+
+    // ── Vision ──────────────────────────────────────────────
+
+    #[test]
+    fn test_vision_openai_tile_low_detail_returns_base() {
+        let m = get_model("gpt-4o").unwrap();
+        let toks = m
+            .extended
+            .vision
+            .unwrap()
+            .image_tokens(2048, 2048, ImageDetail::Low);
+        assert_eq!(toks, 85);
+    }
+
+    #[test]
+    fn test_vision_openai_tile_high_detail_1024x1024() {
+        let m = get_model("gpt-4o").unwrap();
+        // 1024 fits the 2048 box. ceil(1024/512)=2 tiles per side → 4 tiles total.
+        // 85 + 4*170 = 765.
+        let toks = m
+            .extended
+            .vision
+            .unwrap()
+            .image_tokens(1024, 1024, ImageDetail::High);
+        assert_eq!(toks, 765);
+    }
+
+    #[test]
+    fn test_vision_openai_patch_mini_64x64() {
+        let m = get_model("gpt-4.1-mini").unwrap();
+        // ceil(64/32)^2 = 4 patches * 1.62 = 6.48 → 6 tokens.
+        let toks = m
+            .extended
+            .vision
+            .unwrap()
+            .image_tokens(64, 64, ImageDetail::High);
+        assert_eq!(toks, 6);
+    }
+
+    #[test]
+    fn test_vision_anthropic_divisor_under_cap() {
+        let m = get_model("claude-haiku-4.5").unwrap();
+        // 1000 × 750 = 750_000; / 750 = 1000 tokens (well under the 1568 cap).
+        let toks = m
+            .extended
+            .vision
+            .unwrap()
+            .image_tokens(1000, 750, ImageDetail::High);
+        assert_eq!(toks, 1000);
+    }
+
+    #[test]
+    fn test_vision_anthropic_cap_applies_for_large_image() {
+        let m = get_model("claude-sonnet-4.6").unwrap();
+        // 4000 × 4000 = 16_000_000; / 750 = 21_333 → capped at 1568.
+        let toks = m
+            .extended
+            .vision
+            .unwrap()
+            .image_tokens(4000, 4000, ImageDetail::High);
+        assert_eq!(toks, 1568);
+    }
+
+    #[test]
+    fn test_vision_gemini_flat_under_threshold() {
+        let m = get_model("gemini-2.5-pro").unwrap();
+        let toks = m
+            .extended
+            .vision
+            .unwrap()
+            .image_tokens(100, 100, ImageDetail::High);
+        assert_eq!(toks, 258);
+    }
+
+    #[test]
+    fn test_vision_gemini_tile_960x540_matches_official_example() {
+        // From ai.google.dev/gemini-api/docs/image-understanding:
+        // 960×540 → 1548 tokens (6 tiles × 258).
+        let m = get_model("gemini-2.5-flash").unwrap();
+        let toks = m
+            .extended
+            .vision
+            .unwrap()
+            .image_tokens(960, 540, ImageDetail::High);
+        assert_eq!(toks, 1548);
+    }
+
+    #[test]
+    fn test_estimate_image_cost_haiku() {
+        let m = get_model("claude-haiku-4.5").unwrap();
+        // 1000×750 → 1000 tokens × $1/M = $0.001
+        let cost = m.estimate_image_cost(1000, 750, ImageDetail::High).unwrap();
+        assert!((cost - 0.001).abs() < 1e-6, "expected ~0.001, got {cost}",);
+    }
+
+    #[test]
+    fn test_estimate_image_cost_none_for_pixtral_large() {
+        // pixtral-large has no verified vision formula — should return None.
+        let m = get_model("pixtral-large").unwrap();
+        assert!(
+            m.estimate_image_cost(1024, 1024, ImageDetail::High)
+                .is_none()
+        );
     }
 
     #[test]
