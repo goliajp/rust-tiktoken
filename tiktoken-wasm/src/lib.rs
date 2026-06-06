@@ -103,6 +103,7 @@ pub fn list_encodings() -> Vec<String> {
 /// - `"p50k_base"` — text-davinci-002/003
 /// - `"p50k_edit"` — text-davinci-edit
 /// - `"r50k_base"` — GPT-3 (davinci, curie, etc.)
+/// - `"gpt2"` — GPT-2 (alias for r50k_base)
 /// - `"llama3"` — Meta Llama 3/4
 /// - `"deepseek_v3"` — DeepSeek V3/R1
 /// - `"qwen2"` — Qwen 2/2.5/3
