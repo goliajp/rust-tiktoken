@@ -1,8 +1,8 @@
 //! High-performance pure-Rust BPE tokenizer compatible with OpenAI's tiktoken
 //! and all mainstream LLM tokenizers.
 //!
-//! Supports 10 encodings across 5 providers: OpenAI (`cl100k_base`, `o200k_base`,
-//! `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`), Meta (`llama3`),
+//! Supports 11 encodings across 5 providers: OpenAI (`cl100k_base`, `o200k_base`,
+//! `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`, `gpt2`), Meta (`llama3`),
 //! DeepSeek (`deepseek_v3`), Alibaba (`qwen2`), and Mistral (`mistral_v3`).
 //!
 //! Includes token encoding, decoding, counting, and multi-provider pricing.
@@ -54,8 +54,9 @@ static MISTRAL_V3: OnceLock<CoreBpe> = OnceLock::new();
 /// let names = tiktoken::list_encodings();
 /// assert!(names.contains(&"cl100k_base"));
 /// assert!(names.contains(&"o200k_harmony"));
+/// assert!(names.contains(&"gpt2"));
 /// assert!(names.contains(&"llama3"));
-/// assert_eq!(names.len(), 10);
+/// assert_eq!(names.len(), 11);
 /// ```
 pub fn list_encodings() -> &'static [&'static str] {
     &[
@@ -65,6 +66,7 @@ pub fn list_encodings() -> &'static [&'static str] {
         "p50k_base",
         "p50k_edit",
         "r50k_base",
+        "gpt2",
         "llama3",
         "deepseek_v3",
         "qwen2",
@@ -75,11 +77,13 @@ pub fn list_encodings() -> &'static [&'static str] {
 /// Get a cached tokenizer by encoding name.
 ///
 /// Supported encodings:
-/// - OpenAI: `cl100k_base`, `o200k_base`, `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`
+/// - OpenAI: `cl100k_base`, `o200k_base`, `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`, `gpt2`
 /// - Meta: `llama3`
 /// - DeepSeek: `deepseek_v3`
 /// - Alibaba: `qwen2`
 /// - Mistral: `mistral_v3`
+///
+/// Note: `gpt2` is a name-level alias for `r50k_base`; both return the same cached instance.
 pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
     match name {
         "cl100k_base" => Some(CL100K_BASE.get_or_init(encoding::cl100k_base)),
@@ -87,7 +91,8 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
         "o200k_harmony" => Some(O200K_HARMONY.get_or_init(encoding::o200k_harmony)),
         "p50k_base" => Some(P50K_BASE.get_or_init(encoding::p50k_base)),
         "p50k_edit" => Some(P50K_EDIT.get_or_init(encoding::p50k_edit)),
-        "r50k_base" => Some(R50K_BASE.get_or_init(encoding::r50k_base)),
+        // gpt2 shares r50k_base's cache slot — same vocab, same regex, same special token.
+        "r50k_base" | "gpt2" => Some(R50K_BASE.get_or_init(encoding::r50k_base)),
         "llama3" => Some(LLAMA3.get_or_init(encoding::llama3)),
         "deepseek_v3" => Some(DEEPSEEK_V3.get_or_init(encoding::deepseek_v3)),
         "qwen2" => Some(QWEN2.get_or_init(encoding::qwen2)),
@@ -162,7 +167,7 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
         return Some("p50k_base");
     }
 
-    // r50k_base models
+    // r50k_base models (gpt2 / gpt-2 share the same encoding)
     if model.starts_with("text-davinci-001")
         || model.starts_with("text-curie")
         || model.starts_with("text-babbage")
@@ -171,6 +176,8 @@ pub fn model_to_encoding(model: &str) -> Option<&'static str> {
         || model.starts_with("curie")
         || model.starts_with("babbage")
         || model.starts_with("ada")
+        || model.starts_with("gpt-2")
+        || model.starts_with("gpt2")
     {
         return Some("r50k_base");
     }
@@ -263,6 +270,41 @@ mod tests {
         assert_eq!(model_to_encoding("gpt-oss-20b"), Some("o200k_harmony"));
         assert_eq!(model_to_encoding("gpt-oss-120b"), Some("o200k_harmony"));
         assert_ne!(model_to_encoding("gpt-oss-20b"), Some("o200k_base"));
+    }
+
+    #[test]
+    fn test_gpt2_in_registry() {
+        assert!(get_encoding("gpt2").is_some());
+        assert!(list_encodings().contains(&"gpt2"));
+    }
+
+    #[test]
+    fn test_gpt2_shares_r50k_base_instance() {
+        // gpt2 and r50k_base hit the same OnceLock slot, so the returned references
+        // point to the exact same CoreBpe instance.
+        let a = get_encoding("gpt2").unwrap() as *const _;
+        let b = get_encoding("r50k_base").unwrap() as *const _;
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_gpt2_encodes_like_r50k_base() {
+        let g = get_encoding("gpt2").unwrap();
+        let r = get_encoding("r50k_base").unwrap();
+        for text in [
+            "hello world",
+            "the quick brown fox",
+            "let me think about this",
+        ] {
+            assert_eq!(g.encode(text), r.encode(text), "{text}");
+        }
+    }
+
+    #[test]
+    fn test_encoding_for_gpt2_models() {
+        assert_eq!(model_to_encoding("gpt2"), Some("r50k_base"));
+        assert_eq!(model_to_encoding("gpt-2"), Some("r50k_base"));
+        assert!(encoding_for_model("gpt2").is_some());
     }
 
     // model mapping
