@@ -12,10 +12,10 @@
 
 ## 特徴
 
-- **マルチプロバイダ**: 5 社 9 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
+- **マルチプロバイダ**: 5 社 11 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
 - **高速**: Arena ベースの語彙、ヒープ加速 BPE マージ、DFA 正規表現
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
-- **料金見積もり**: 7 プロバイダ 57 モデルのコスト推定
+- **料金見積もり**: 7 プロバイダ 63 モデルのコスト推定
 - **コンパクト**: ruzstd 圧縮語彙データをコンパイル時に埋め込み
 - **ゼロアロケーションカウント**: `count()` パスはトークンベクタを割り当てません
 
@@ -90,11 +90,13 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 | エンコーディング | プロバイダ | 対応モデル |
 |---|---|---|
-| `o200k_base` | OpenAI | GPT-4o, GPT-4o-mini, o1, o3, o4-mini |
-| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-* |
+| `o200k_base` | OpenAI | GPT-4o, GPT-4.1, GPT-4.5, GPT-5, o1, o3, o4-mini |
+| `o200k_harmony` | OpenAI | gpt-oss（harmony チャットフォーマット） |
+| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
 | `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | GPT-3 世代: davinci, curie, babbage, ada |
+| `gpt2` | OpenAI | GPT-2（`r50k_base` のエイリアス） |
 | `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
 | `qwen2` | Alibaba | Qwen 2.5, Qwen 3 |
@@ -156,7 +158,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 57 モデルに対応。
+OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 63 モデルに対応。
 
 ## WebAssembly
 

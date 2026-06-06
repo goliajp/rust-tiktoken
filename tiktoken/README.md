@@ -12,10 +12,10 @@ The fastest Rust BPE tokenizer — 7-10x faster than tiktoken-rs. Compatible wit
 
 ## Features
 
-- **Multi-provider**: 9 encodings across 5 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral)
+- **Multi-provider**: 11 encodings across 5 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral)
 - **Fast**: arena-based vocabulary, heap-accelerated BPE merge, DFA regex
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
-- **Pricing**: cost estimation for 57 models across 7 providers
+- **Pricing**: cost estimation for 63 models across 7 providers
 - **Compact**: ruzstd-compressed vocabulary data embedded at compile time
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
@@ -90,11 +90,13 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 | Encoding | Provider | Models |
 |---|---|---|
-| `o200k_base` | OpenAI | GPT-4o, GPT-4o-mini, o1, o3, o4-mini |
-| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-* |
+| `o200k_base` | OpenAI | GPT-4o, GPT-4.1, GPT-4.5, GPT-5, o1, o3, o4-mini |
+| `o200k_harmony` | OpenAI | gpt-oss (harmony chat format) |
+| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
 | `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | GPT-3 era: davinci, curie, babbage, ada |
+| `gpt2` | OpenAI | GPT-2 (alias for `r50k_base`) |
 | `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
 | `qwen2` | Alibaba | Qwen 2.5, Qwen 3 |
@@ -156,7 +158,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-Supports 57 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
+Supports 63 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 
 ## WebAssembly
 
