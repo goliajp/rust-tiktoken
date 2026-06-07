@@ -2,7 +2,7 @@ use regex::Regex;
 use rustc_hash::FxHashMap;
 
 use crate::merge;
-use crate::pretokenize::{PreTokenizer, RegexPreTokenizer};
+use crate::pretokenize::{FastPath, PreTokenizer, RegexPreTokenizer};
 use crate::vocab::Vocab;
 
 /// A Byte Pair Encoding tokenizer engine.
@@ -39,8 +39,9 @@ impl CoreBpe {
         encoder: FxHashMap<Vec<u8>, u32>,
         special_encoder: FxHashMap<Vec<u8>, u32>,
         pattern: &str,
+        fast: FastPath,
     ) -> Self {
-        let pre_tokenizer = RegexPreTokenizer::new(pattern);
+        let pre_tokenizer = RegexPreTokenizer::new(pattern, fast);
 
         let special_regex = if special_encoder.is_empty() {
             None
@@ -256,7 +257,13 @@ impl CoreBpe {
     pub fn encode_parallel(&self, text: &str) -> Vec<u32> {
         use rayon::prelude::*;
 
-        const THRESHOLD: usize = 4096;
+        // Below this size, single-threaded encode wins: the ASCII fast-path made
+        // serial tokenization cheap, and pre-tokenization (~60% of the work)
+        // stays serial here, so rayon's dispatch/join overhead dominates. Measured
+        // break-even on an M4 Pro is ~460 KB (45 KB: 1.8x slower; 180 KB: 1.1x
+        // slower; 900 KB: 1.2x faster). 512 KB keeps the parallel path strictly a
+        // win. Even above it the ceiling is only ~20% (Amdahl, serial pre-tokenize).
+        const THRESHOLD: usize = 512 * 1024;
         if text.len() < THRESHOLD {
             return self.encode(text);
         }
@@ -269,26 +276,37 @@ impl CoreBpe {
             pos = end;
         }
 
-        // encode each piece in parallel
+        // Encode the pieces in parallel, but grouped into contiguous chunks so
+        // each rayon task fills a single local buffer instead of allocating one
+        // Vec per piece (which would be tens of thousands of tiny allocations on
+        // large inputs). Aim for a few chunks per worker thread for load balance.
         let bytes = text.as_bytes();
-        let chunks: Vec<Vec<u32>> = ranges
-            .par_iter()
-            .map(|&(start, end)| {
-                let piece = &bytes[start..end];
-                if let Some(token) = self.vocab.get(piece) {
-                    vec![token]
-                } else {
-                    let mut tokens = Vec::with_capacity((end - start) / 3);
-                    merge::bpe_encode(piece, &self.vocab, &mut tokens);
-                    tokens
+        let chunk_size = ranges
+            .len()
+            .div_ceil(rayon::current_num_threads() * 4)
+            .max(1);
+        let parts: Vec<Vec<u32>> = ranges
+            .par_chunks(chunk_size)
+            .map(|chunk| {
+                let span = chunk.last().map_or(0, |&(_, end)| end)
+                    - chunk.first().map_or(0, |&(start, _)| start);
+                let mut local = Vec::with_capacity(span / 3 + 1);
+                for &(start, end) in chunk {
+                    let piece = &bytes[start..end];
+                    if let Some(token) = self.vocab.get(piece) {
+                        local.push(token);
+                    } else {
+                        merge::bpe_encode(piece, &self.vocab, &mut local);
+                    }
                 }
+                local
             })
             .collect();
 
-        let total: usize = chunks.iter().map(|c| c.len()).sum();
+        let total: usize = parts.iter().map(|c| c.len()).sum();
         let mut result = Vec::with_capacity(total);
-        for chunk in chunks {
-            result.extend_from_slice(&chunk);
+        for part in parts {
+            result.extend_from_slice(&part);
         }
         result
     }
@@ -354,14 +372,14 @@ mod tests {
         encoder.insert(b"abc".to_vec(), 5);
 
         let special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
-        CoreBpe::new(encoder, special, r"\w+|\S")
+        CoreBpe::new(encoder, special, r"\w+|\S", FastPath::None)
     }
 
     #[test]
     fn test_byte_pair_merge_single_byte() {
         let mut ranks: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         ranks.insert(b"x".to_vec(), 0);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("x");
         assert_eq!(tokens, vec![0]);
     }
@@ -372,7 +390,7 @@ mod tests {
         ranks.insert(b"a".to_vec(), 0);
         ranks.insert(b"b".to_vec(), 1);
         ranks.insert(b"ab".to_vec(), 2);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("ab");
         assert_eq!(tokens, vec![2]);
     }
@@ -382,7 +400,7 @@ mod tests {
         let mut ranks: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         ranks.insert(b"a".to_vec(), 0);
         ranks.insert(b"b".to_vec(), 1);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w|\S", FastPath::None);
         let tokens = bpe.encode("ab");
         assert_eq!(tokens, vec![0, 1]);
     }
@@ -418,7 +436,7 @@ mod tests {
         ranks.insert(b"f".to_vec(), 2);
         ranks.insert(b"de".to_vec(), 3);
         ranks.insert(b"ef".to_vec(), 4);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("def");
         assert_eq!(tokens, vec![3, 2]); // de=3, f=2
     }
@@ -427,7 +445,7 @@ mod tests {
     fn test_decode_to_string_invalid_utf8() {
         let mut encoder: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         encoder.insert(vec![0xFF, 0xFE], 0);
-        let bpe = CoreBpe::new(encoder, FxHashMap::default(), r"[\s\S]+");
+        let bpe = CoreBpe::new(encoder, FxHashMap::default(), r"[\s\S]+", FastPath::None);
         assert!(bpe.decode_to_string(&[0]).is_err());
     }
 
@@ -444,7 +462,7 @@ mod tests {
         encoder.insert(b"y".to_vec(), 1);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|end|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w|\S", FastPath::None);
         let tokens = bpe.encode_with_special_tokens("x<|end|>y");
         assert_eq!(tokens, vec![0, 99, 1]);
     }
@@ -455,7 +473,7 @@ mod tests {
         encoder.insert(b"hi".to_vec(), 0);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|end|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w+|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w+|\S", FastPath::None);
         let decoded = bpe.decode(&[0, 99]);
         assert_eq!(&decoded, b"hi<|end|>");
     }
@@ -468,14 +486,14 @@ mod tests {
         ranks.insert(b"c".to_vec(), 30);
         ranks.insert(b"ab".to_vec(), 5);
         ranks.insert(b"abc".to_vec(), 3);
-        let bpe = CoreBpe::new(ranks.clone(), FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks.clone(), FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("abc");
         assert_eq!(tokens, vec![3]);
 
         ranks.insert(b"d".to_vec(), 40);
         ranks.insert(b"cd".to_vec(), 7);
         ranks.insert(b"abcd".to_vec(), 1);
-        let bpe2 = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe2 = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens2 = bpe2.encode("abcd");
         assert_eq!(tokens2, vec![1]);
     }
@@ -491,7 +509,7 @@ mod tests {
         ranks.insert(b"abc".to_vec(), 2);
         ranks.insert(b"cx".to_vec(), 15);
         ranks.insert(b"abcx".to_vec(), 1);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         assert_eq!(bpe.encode("abcx"), vec![1]);
     }
 
@@ -500,7 +518,7 @@ mod tests {
         let mut ranks: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         ranks.insert(b"a".to_vec(), 0);
         ranks.insert(b"b".to_vec(), 1);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         assert_eq!(bpe.count("ab"), 2);
         assert_eq!(bpe.encode("ab"), vec![0, 1]);
     }
@@ -512,7 +530,7 @@ mod tests {
         encoder.insert(b"y".to_vec(), 1);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|end|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w|\S", FastPath::None);
 
         assert_eq!(
             bpe.count_with_special_tokens("x<|end|>y"),
@@ -533,7 +551,7 @@ mod tests {
         encoder.insert(b"b".to_vec(), 1);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|s|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w|\S", FastPath::None);
         let tokens = bpe.encode_with_special_tokens("a<|s|>b");
         assert_eq!(tokens, vec![0, 99, 1]);
     }

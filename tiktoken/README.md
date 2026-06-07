@@ -8,14 +8,14 @@
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-The fastest Rust BPE tokenizer — 7-10x faster than tiktoken-rs. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, and Mistral.
+The fastest Rust BPE tokenizer — 15–40x faster than tiktoken-rs on ASCII text (≈2x on CJK/Unicode), thanks to a hand-written ASCII fast-path. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, and Mistral.
 
 ## Features
 
 - **Multi-provider**: 11 encodings across 5 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral)
-- **Fast**: arena-based vocabulary, heap-accelerated BPE merge, DFA regex
+- **Fast**: hand-written ASCII fast-path pre-tokenizer (bypasses the regex), arena-based vocabulary, hybrid BPE merge
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
-- **Pricing**: cost estimation for 63 models across 7 providers
+- **Pricing**: cost estimation for 68 models across 7 providers
 - **Compact**: ruzstd-compressed vocabulary data embedded at compile time
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
@@ -25,23 +25,23 @@ All benchmarks on Apple M4 Mac mini, single-threaded. Token output verified iden
 
 #### cl100k_base encode
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
+| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| short (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.6x** | **14x** |
-| medium (900 B) | 32.2 us | 53.8 us | **7.2 us** | **7.5x** | **4.5x** |
-| long (45 KB) | 1,500 us | 2,611 us | **366 us** | **7.1x** | **4.1x** |
-| unicode (4.5 KB) | 141 us | 164 us | **101 us** | **1.6x** | **1.4x** |
-| code (3.9 KB) | 247 us | 264 us | **42 us** | **6.3x** | **5.9x** |
+| short (13 B) | 1,700 ns | 1,248 ns | **43 ns** | **29x** | **40x** |
+| medium (900 B) | 32.2 us | 53.8 us | **1.5 us** | **35x** | **21x** |
+| long (45 KB) | 1,500 us | 2,611 us | **74 us** | **35x** | **20x** |
+| unicode (4.5 KB) | 141 us | 164 us | **91 us** | **1.8x** | **1.6x** |
+| code (3.9 KB) | 247 us | 264 us | **17 us** | **16x** | **15x** |
 
 #### o200k_base encode
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
+| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| short (13 B) | 1,600 ns | 1,051 ns | **115 ns** | **9.1x** | **14x** |
-| medium (900 B) | 58.3 us | 56.2 us | **7.1 us** | **7.9x** | **8.2x** |
-| long (45 KB) | 2,900 us | 2,799 us | **365 us** | **7.7x** | **7.9x** |
-| unicode (4.5 KB) | 204 us | 187 us | **99 us** | **1.9x** | **2.1x** |
-| code (3.9 KB) | 332 us | 253 us | **41 us** | **6.2x** | **8.1x** |
+| short (13 B) | 1,600 ns | 1,051 ns | **40 ns** | **26x** | **40x** |
+| medium (900 B) | 58.3 us | 56.2 us | **1.5 us** | **37x** | **39x** |
+| long (45 KB) | 2,900 us | 2,799 us | **73 us** | **38x** | **40x** |
+| unicode (4.5 KB) | 204 us | 187 us | **95 us** | **2.0x** | **2.2x** |
+| code (3.9 KB) | 332 us | 253 us | **16 us** | **16x** | **21x** |
 
 <details>
 <summary>Why is it faster?</summary>
@@ -49,9 +49,10 @@ All benchmarks on Apple M4 Mac mini, single-threaded. Token output verified iden
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
 | Vocab storage | Arena-based (single alloc, cache-friendly) | `HashMap<Vec<u8>>` (200k allocs) | Rust `HashMap` behind PyO3 |
-| Regex engine | `regex` (DFA, linear time) | `fancy-regex` (backtracking) | `regex` via PyO3 + FFI overhead |
+| Pre-tokenize (ASCII) | Hand-written ASCII fast-path, skips the regex | always runs the regex | always runs the regex |
+| Regex engine (fallback) | `regex` (DFA, linear time) | `fancy-regex` (backtracking) | `regex` via PyO3 + FFI overhead |
 | Hash map | Custom open-addressing + `FxHash` | `rustc-hash` v1 | standard `HashMap` |
-| BPE merge | Heap-accelerated O(n log n) | O(n*m) linear scan | O(n*m) linear scan |
+| BPE merge | Hybrid: stack linear-scan (short pieces) + heap (long) | O(n*m) linear scan | O(n*m) linear scan |
 | `count()` without alloc | yes | no | no |
 
 Benchmark source: [`benches/`](benches/). Reproducible via `cargo bench`.
@@ -158,7 +159,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-Supports 63 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
+Supports 68 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 
 ## WebAssembly
 

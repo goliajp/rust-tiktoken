@@ -860,6 +860,39 @@ const OPENAI_EMBED_ADA_002: Model = model(
 
 // ── Anthropic Claude ────────────────────────────────────
 
+// Opus 4.8 / 4.7 share Opus 4.x list pricing ($5/$25, cache-read $0.50, batch
+// 2.50/12.50). Note: Opus 4.7+ use a new tokenizer (may emit up to ~35% more
+// tokens for the same text) — this affects token counts, not the per-token rate.
+const CLAUDE_OPUS_48: Model = model(
+    "claude-opus-4.8",
+    Provider::Anthropic,
+    5.00,
+    25.00,
+    Some(0.50),
+    200_000,
+    128_000,
+)
+.with_batch(2.50, 12.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
+
+const CLAUDE_OPUS_47: Model = model(
+    "claude-opus-4.7",
+    Provider::Anthropic,
+    5.00,
+    25.00,
+    Some(0.50),
+    200_000,
+    128_000,
+)
+.with_batch(2.50, 12.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
+
 const CLAUDE_OPUS_46: Model = model(
     "claude-opus-4.6",
     Provider::Anthropic,
@@ -1009,6 +1042,56 @@ const CLAUDE_HAIKU_3: Model = model(
 // ── Google Gemini ───────────────────────────────────────
 
 /// Standard tier is ≤200k input; high-tier auto-applies above that via `with_high_tier`.
+// Gemini 3 series (current lineup). Pro uses context-tiered pricing (>200k) via
+// with_high_tier, like 2.5 Pro. IDs follow the official pricing-page names.
+const GEMINI_31_PRO: Model = model(
+    "gemini-3.1-pro-preview",
+    Provider::Google,
+    2.00,
+    12.00,
+    Some(0.20),
+    1_048_576,
+    65_536,
+)
+.with_high_tier(4.00, 18.00, Some(0.40), 200_000)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
+
+const GEMINI_35_FLASH: Model = model(
+    "gemini-3.5-flash",
+    Provider::Google,
+    1.50,
+    9.00,
+    Some(0.15),
+    1_048_576,
+    65_536,
+)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
+
+/// Text input is $0.25/M (standard); audio input is $0.50/M via `with_audio_input`.
+const GEMINI_31_FLASH_LITE: Model = model(
+    "gemini-3.1-flash-lite",
+    Provider::Google,
+    0.25,
+    1.50,
+    Some(0.025),
+    1_048_576,
+    65_536,
+)
+.with_audio_input(0.50)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
+
 const GEMINI_25_PRO: Model = model(
     "gemini-2.5-pro",
     Provider::Google,
@@ -1364,6 +1447,8 @@ static ALL_MODELS: &[Model] = &[
     OPENAI_EMBED_3_LARGE,
     OPENAI_EMBED_ADA_002,
     // Anthropic
+    CLAUDE_OPUS_48,
+    CLAUDE_OPUS_47,
     CLAUDE_OPUS_46,
     CLAUDE_SONNET_46,
     CLAUDE_HAIKU_45,
@@ -1376,6 +1461,9 @@ static ALL_MODELS: &[Model] = &[
     CLAUDE_OPUS_3,
     CLAUDE_HAIKU_3,
     // Google
+    GEMINI_31_PRO,
+    GEMINI_35_FLASH,
+    GEMINI_31_FLASH_LITE,
     GEMINI_25_PRO,
     GEMINI_25_FLASH,
     GEMINI_20_FLASH,
