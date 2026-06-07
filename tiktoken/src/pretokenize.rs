@@ -71,6 +71,16 @@ impl PreTokenizer for RegexPreTokenizer {
     }
 }
 
+/// Consume a run of `\r`/`\n` starting at `k`, returning the new offset.
+/// Implements the trailing `[\r\n]*` shared by several pattern rules.
+#[inline]
+fn take_crlf(b: &[u8], mut k: usize) -> usize {
+    while k < b.len() && (b[k] == b'\r' || b[k] == b'\n') {
+        k += 1;
+    }
+    k
+}
+
 /// Shared ASCII handler for the digit and punctuation rules. The punctuation
 /// rule (` ?[^\s\p{L}\p{N}]+[\r\n]*`) is identical across patterns; the digit
 /// rule's repeat cap varies: `\p{N}{1,3}` for cl100k/o200k (`max_digits = 3`),
@@ -130,10 +140,7 @@ fn ascii_num_punct(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, usiz
         if k < n && b[k] >= 0x80 {
             return None;
         }
-        // trailing [\r\n]*
-        while k < n && (b[k] == b'\r' || b[k] == b'\n') {
-            k += 1;
-        }
+        k = take_crlf(b, k);
         return Some((i, k));
     }
 
@@ -343,9 +350,7 @@ fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
         if k < n && b[k] >= 0x80 {
             return None; // a Unicode \p{P}/\p{S} could extend the run
         }
-        while k < n && (b[k] == b'\r' || b[k] == b'\n') {
-            k += 1;
-        }
+        k = take_crlf(b, k);
         return Some((i, k));
     }
 
@@ -383,9 +388,7 @@ fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
                 if k < n && b[k] >= 0x80 {
                     return None;
                 }
-                while k < n && (b[k] == b'\r' || b[k] == b'\n') {
-                    k += 1;
-                }
+                k = take_crlf(b, k);
                 return Some((i, k));
             }
             // space followed by digit/space/eof → whitespace rules → defer
