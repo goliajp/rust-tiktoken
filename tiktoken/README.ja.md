@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/tiktoken?style=flat-square&logo=rust)](https://crates.io/crates/tiktoken)
 [![docs.rs](https://img.shields.io/docsrs/tiktoken?style=flat-square&logo=docs.rs)](https://docs.rs/tiktoken)
-[![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](#ライセンス)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue?style=flat-square&logo=rust)](Cargo.toml)
 [![Downloads](https://img.shields.io/crates/d/tiktoken?style=flat-square)](https://crates.io/crates/tiktoken)
 
@@ -211,6 +211,6 @@ wasm-pack build --target web --release
 
 ## ライセンス
 
-[MIT](LICENSE)
+[MIT](LICENSE-MIT) または [Apache-2.0](LICENSE-APACHE) のいずれか、あなたの選択でライセンスされます。
 
 サードパーティ語彙データのライセンス: [LICENSE-3RD-PARTY](LICENSE-3RD-PARTY) を参照。
