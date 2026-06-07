@@ -151,6 +151,7 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
 /// short pieces that dominate real input.
 ///
 /// Caller guarantees `3 <= n <= LINEAR_THRESHOLD`.
+#[allow(clippy::needless_range_loop)] // index loops mirror the Viterbi reference; clearer than iterators
 fn byte_pair_merge_small(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
     let n = piece.len();
 
@@ -408,7 +409,7 @@ mod tests {
             b"xyz123",
             b"  hello  ",
             b"\n\n\n",
-            b"supercalifragilisticexpialidocious",      // 34 bytes > threshold
+            b"supercalifragilisticexpialidocious", // 34 bytes > threshold
             b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 64 bytes
             b"0123456789012345678901234567890123456789", // 40 digit bytes
             b"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", // 40 punct bytes
