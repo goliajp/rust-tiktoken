@@ -195,24 +195,20 @@ fn byte_pair_merge_small(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
         }
         plen -= 1;
 
-        // recompute rank of the merged pair at min_idx
-        ranks[min_idx] = if min_idx + 2 < plen {
-            vocab
-                .get(&piece[parts[min_idx] as usize..parts[min_idx + 2] as usize])
-                .unwrap_or(u32::MAX)
-        } else {
-            u32::MAX
-        };
-
-        // recompute rank of the predecessor pair
-        if min_idx > 0 {
-            ranks[min_idx - 1] = if min_idx + 1 < plen {
+        // recompute the rank of the pair spanning parts[a]..parts[b]
+        let rank_of = |a: usize, b: usize| {
+            if b < plen {
                 vocab
-                    .get(&piece[parts[min_idx - 1] as usize..parts[min_idx + 1] as usize])
+                    .get(&piece[parts[a] as usize..parts[b] as usize])
                     .unwrap_or(u32::MAX)
             } else {
                 u32::MAX
-            };
+            }
+        };
+        // the merged pair at min_idx, then its predecessor
+        ranks[min_idx] = rank_of(min_idx, min_idx + 2);
+        if min_idx > 0 {
+            ranks[min_idx - 1] = rank_of(min_idx - 1, min_idx + 1);
         }
     }
 
