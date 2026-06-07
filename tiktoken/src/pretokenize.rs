@@ -27,6 +27,9 @@ pub(crate) enum FastPath {
     Cl100k,
     /// o200k_base / o200k_harmony pattern.
     O200k,
+    /// qwen2 pattern: identical to cl100k except `\p{N}` matches a single digit
+    /// (not 1-3), so it reuses the cl100k scanner with a max-digit cap of 1.
+    Qwen2,
 }
 
 /// Regex-based pre-tokenizer wrapping the existing regex + whitespace adjustment logic.
@@ -50,7 +53,8 @@ impl PreTokenizer for RegexPreTokenizer {
     fn next_match(&self, text: &str, pos: usize) -> Option<(usize, usize)> {
         let bytes = text.as_bytes();
         let fast = match self.fast {
-            FastPath::Cl100k => cl100k_ascii_next(bytes, pos),
+            FastPath::Cl100k => cl100k_ascii_next(bytes, pos, 3),
+            FastPath::Qwen2 => cl100k_ascii_next(bytes, pos, 1),
             FastPath::O200k => o200k_ascii_next(bytes, pos),
             FastPath::None => None,
         };
@@ -64,29 +68,31 @@ impl PreTokenizer for RegexPreTokenizer {
     }
 }
 
-/// Shared ASCII handler for the digit and punctuation rules, which are identical
-/// in the cl100k and o200k patterns: `\p{N}{1,3}` and ` ?[^\s\p{L}\p{N}]+[\r\n]*`.
+/// Shared ASCII handler for the digit and punctuation rules. The punctuation
+/// rule (` ?[^\s\p{L}\p{N}]+[\r\n]*`) is identical across patterns; the digit
+/// rule's repeat cap varies: `\p{N}{1,3}` for cl100k/o200k (`max_digits = 3`),
+/// `\p{N}` for qwen2 (`max_digits = 1`).
 ///
 /// Returns `Some((i, end))` on a match, or `None` to defer to the regex (the
 /// start is whitespace, or a non-ASCII byte could extend the run under Unicode
 /// semantics). Caller guarantees `i < n` and `b[i] < 0x80`.
 #[inline]
-fn ascii_num_punct(b: &[u8], i: usize) -> Option<(usize, usize)> {
+fn ascii_num_punct(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, usize)> {
     let n = b.len();
     let c0 = b[i];
 
-    // Rule: \p{N}{1,3}
+    // Rule: \p{N}{1,max_digits}
     if c0.is_ascii_digit() {
         let mut j = i;
         let mut k = 0;
-        while j < n && k < 3 && b[j] < 0x80 && b[j].is_ascii_digit() {
+        while j < n && k < max_digits && b[j] < 0x80 && b[j].is_ascii_digit() {
             j += 1;
             k += 1;
         }
-        // Fewer than 3 digits and a non-ASCII byte next: it may be a Unicode
+        // Fewer than max digits and a non-ASCII byte next: it may be a Unicode
         // \p{N} (superscripts, other-number) the regex would fold in — defer.
-        // At 3 digits the {1,3} cap stops the regex anyway, so it's safe.
-        if k < 3 && j < n && b[j] >= 0x80 {
+        // At the cap the regex stops regardless, so it's safe to return.
+        if k < max_digits && j < n && b[j] >= 0x80 {
             return None;
         }
         return Some((i, j));
@@ -132,14 +138,15 @@ fn ascii_num_punct(b: &[u8], i: usize) -> Option<(usize, usize)> {
     None
 }
 
-/// ASCII fast-path pre-tokenizer for the cl100k pattern.
+/// ASCII fast-path pre-tokenizer for the cl100k pattern (and qwen2, which is
+/// identical except `max_digits = 1` instead of 3).
 ///
 /// Returns `Some((pos, end))` for a piece it can resolve entirely within ASCII,
 /// or `None` to defer to the regex (non-ASCII byte at a decision point, or a
 /// whitespace-run start whose `\s*[\r\n]+|\s+` + lookahead semantics we don't
 /// replicate here). Alternatives are tried in the regex's leftmost-first order.
 #[inline]
-fn cl100k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
+fn cl100k_ascii_next(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, usize)> {
     let n = b.len();
     if i >= n {
         return None;
@@ -190,7 +197,7 @@ fn cl100k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
     }
 
     // Rules 3 & 4: digits, punctuation. Rules 5/6 (whitespace) → defer.
-    ascii_num_punct(b, i)
+    ascii_num_punct(b, i, max_digits)
 }
 
 /// ASCII fast-path pre-tokenizer for the o200k pattern.
@@ -220,11 +227,11 @@ fn o200k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
         // next byte is an ASCII letter; otherwise it's a digit/punct/ws piece.
         match b.get(i + 1) {
             Some(&c1) if c1 < 0x80 && c1.is_ascii_alphabetic() => i + 1,
-            _ => return ascii_num_punct(b, i),
+            _ => return ascii_num_punct(b, i, 3),
         }
     } else {
         // digit, or \r\n
-        return ascii_num_punct(b, i);
+        return ascii_num_punct(b, i, 3);
     };
 
     // Scan the uppercase run from `p`.
@@ -360,7 +367,7 @@ mod tests {
     // Single source of truth: the real production patterns. Importing them here
     // (rather than copying) guarantees the fast-path equivalence proptests below
     // validate against exactly the patterns used in production.
-    use crate::encoding::{CL100K_PATTERN, O200K_PATTERN, P50K_PATTERN};
+    use crate::encoding::{CL100K_PATTERN, O200K_PATTERN, P50K_PATTERN, QWEN2_PATTERN};
 
     // verify RegexPreTokenizer matches the v2 behavior by comparing
     // piece-by-piece with v2's regex.find_at + adjust_whitespace_end
@@ -581,6 +588,22 @@ mod tests {
             let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
             let fast = collect_matches(&pt, &text);
             let reference = v2_collect_matches(O200K_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_qwen2_fast_matches_regex(text in ".*") {
+            let pt = RegexPreTokenizer::new(QWEN2_PATTERN, FastPath::Qwen2);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(QWEN2_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_qwen2_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
+            let pt = RegexPreTokenizer::new(QWEN2_PATTERN, FastPath::Qwen2);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(QWEN2_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
     }

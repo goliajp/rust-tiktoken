@@ -65,7 +65,7 @@ const DEEPSEEK_V3_PATTERN: &str = concat!(
 );
 
 // qwen2 pattern: similar to cl100k but \p{N} matches single digits (not 1-3)
-const QWEN2_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
+pub(crate) const QWEN2_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
 
 // mistral v3 (tekken) pattern: same as cl100k
 const MISTRAL_V3_PATTERN: &str = CL100K_PATTERN;
@@ -265,7 +265,7 @@ pub fn qwen2() -> CoreBpe {
         ("<|image_pad|>", 151655),
         ("<|video_pad|>", 151656),
     ]);
-    CoreBpe::new(encoder, special, QWEN2_PATTERN, FastPath::None)
+    CoreBpe::new(encoder, special, QWEN2_PATTERN, FastPath::Qwen2)
 }
 
 /// Construct the mistral_v3 encoding (Mistral, Mixtral with Tekken tokenizer).
