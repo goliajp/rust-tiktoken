@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [master, develop]
+    # git-flow long-lived / integration branches. feature/* branches are
+    # covered by the pull_request trigger when their PR (→ develop) is opened.
+    branches: [master, develop, 'release/**', 'hotfix/**']
   pull_request:
 
 concurrency:
