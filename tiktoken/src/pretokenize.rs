@@ -15,15 +15,32 @@ pub trait PreTokenizer: Send + Sync {
     fn next_match(&self, text: &str, pos: usize) -> Option<(usize, usize)>;
 }
 
+/// Selects which ASCII fast-path scanner (if any) a [`RegexPreTokenizer`] tries
+/// before falling back to the regex. Chosen by the caller in `encoding.rs`,
+/// which owns the pattern definitions — the pre-tokenizer itself stays unaware
+/// of any specific encoding's pattern string.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FastPath {
+    /// No fast path: always use the regex (for patterns without a scanner).
+    None,
+    /// cl100k_base / llama3 / mistral_v3 pattern.
+    Cl100k,
+    /// o200k_base / o200k_harmony pattern.
+    O200k,
+}
+
 /// Regex-based pre-tokenizer wrapping the existing regex + whitespace adjustment logic.
 pub struct RegexPreTokenizer {
     regex: Regex,
+    /// Which ASCII fast-path scanner (if any) to try before the regex.
+    fast: FastPath,
 }
 
 impl RegexPreTokenizer {
-    pub(crate) fn new(pattern: &str) -> Self {
+    pub(crate) fn new(pattern: &str, fast: FastPath) -> Self {
         Self {
             regex: Regex::new(pattern).expect("invalid regex pattern"),
+            fast,
         }
     }
 }
@@ -31,10 +48,246 @@ impl RegexPreTokenizer {
 impl PreTokenizer for RegexPreTokenizer {
     #[inline]
     fn next_match(&self, text: &str, pos: usize) -> Option<(usize, usize)> {
+        let bytes = text.as_bytes();
+        let fast = match self.fast {
+            FastPath::Cl100k => cl100k_ascii_next(bytes, pos),
+            FastPath::O200k => o200k_ascii_next(bytes, pos),
+            FastPath::None => None,
+        };
+        if let Some(r) = fast {
+            return Some(r);
+        }
         let mat = self.regex.find_at(text, pos)?;
         let start = mat.start();
-        let end = adjust_whitespace_end(text.as_bytes(), start, mat.end());
+        let end = adjust_whitespace_end(bytes, start, mat.end());
         Some((start, end))
+    }
+}
+
+/// Shared ASCII handler for the digit and punctuation rules, which are identical
+/// in the cl100k and o200k patterns: `\p{N}{1,3}` and ` ?[^\s\p{L}\p{N}]+[\r\n]*`.
+///
+/// Returns `Some((i, end))` on a match, or `None` to defer to the regex (the
+/// start is whitespace, or a non-ASCII byte could extend the run under Unicode
+/// semantics). Caller guarantees `i < n` and `b[i] < 0x80`.
+#[inline]
+fn ascii_num_punct(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    let n = b.len();
+    let c0 = b[i];
+
+    // Rule: \p{N}{1,3}
+    if c0.is_ascii_digit() {
+        let mut j = i;
+        let mut k = 0;
+        while j < n && k < 3 && b[j] < 0x80 && b[j].is_ascii_digit() {
+            j += 1;
+            k += 1;
+        }
+        // Fewer than 3 digits and a non-ASCII byte next: it may be a Unicode
+        // \p{N} (superscripts, other-number) the regex would fold in — defer.
+        // At 3 digits the {1,3} cap stops the regex anyway, so it's safe.
+        if k < 3 && j < n && b[j] >= 0x80 {
+            return None;
+        }
+        return Some((i, j));
+    }
+
+    // Rule: ` ?[^\s\p{L}\p{N}]+[\r\n]*`
+    let mut j = i;
+    if c0 == b' ' {
+        // optional single leading space, but only if a punct run follows
+        match b.get(i + 1) {
+            Some(&c1)
+                if c1 < 0x80 && !is_ascii_ws(c1) && !c1.is_ascii_alphabetic() && !c1.is_ascii_digit() =>
+            {
+                j = i + 1;
+            }
+            // space not followed by ASCII punct → whitespace rules → defer
+            _ => return None,
+        }
+    }
+    let cj = b[j];
+    if cj < 0x80 && !is_ascii_ws(cj) && !cj.is_ascii_alphabetic() && !cj.is_ascii_digit() {
+        let mut k = j;
+        while k < n
+            && b[k] < 0x80
+            && !is_ascii_ws(b[k])
+            && !b[k].is_ascii_alphabetic()
+            && !b[k].is_ascii_digit()
+        {
+            k += 1;
+        }
+        // non-ASCII symbol/punct could extend the run under the regex — defer.
+        if k < n && b[k] >= 0x80 {
+            return None;
+        }
+        // trailing [\r\n]*
+        while k < n && (b[k] == b'\r' || b[k] == b'\n') {
+            k += 1;
+        }
+        return Some((i, k));
+    }
+
+    // whitespace run (or other) → defer to regex
+    None
+}
+
+/// ASCII fast-path pre-tokenizer for the cl100k pattern.
+///
+/// Returns `Some((pos, end))` for a piece it can resolve entirely within ASCII,
+/// or `None` to defer to the regex (non-ASCII byte at a decision point, or a
+/// whitespace-run start whose `\s*[\r\n]+|\s+` + lookahead semantics we don't
+/// replicate here). Alternatives are tried in the regex's leftmost-first order.
+#[inline]
+fn cl100k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    let n = b.len();
+    if i >= n {
+        return None;
+    }
+    let c0 = b[i];
+    if c0 >= 0x80 {
+        return None;
+    }
+
+    // Rule 1: (?i:'s|'t|'re|'ve|'m|'ll|'d)
+    if c0 == b'\'' {
+        if let Some(len) = match_contraction(b, i) {
+            return Some((i, i + len));
+        }
+        // no contraction: fall through; the quote may act as a rule-2 leading
+        // char or a rule-4 punctuation run.
+    }
+
+    // Rule 2: [^\r\n\p{L}\p{N}]?\p{L}+
+    // case A: one leading non-CRLF non-alnum char, then letters
+    if c0 != b'\r' && c0 != b'\n' && !c0.is_ascii_alphabetic() && !c0.is_ascii_digit() {
+        if let Some(&c1) = b.get(i + 1)
+            && c1 < 0x80
+            && c1.is_ascii_alphabetic()
+        {
+            let mut j = i + 1;
+            while j < n && b[j] < 0x80 && b[j].is_ascii_alphabetic() {
+                j += 1;
+            }
+            // next byte non-ASCII could be a Unicode letter the regex would
+            // fold into this piece — defer to be safe.
+            if j < n && b[j] >= 0x80 {
+                return None;
+            }
+            return Some((i, j));
+        }
+    }
+    // case B: no leading char, c0 is a letter
+    if c0.is_ascii_alphabetic() {
+        let mut j = i;
+        while j < n && b[j] < 0x80 && b[j].is_ascii_alphabetic() {
+            j += 1;
+        }
+        if j < n && b[j] >= 0x80 {
+            return None;
+        }
+        return Some((i, j));
+    }
+
+    // Rules 3 & 4: digits, punctuation. Rules 5/6 (whitespace) → defer.
+    ascii_num_punct(b, i)
+}
+
+/// ASCII fast-path pre-tokenizer for the o200k pattern.
+///
+/// The letter rules differ from cl100k: o200k splits on case
+/// (`[\p{Lu}…]*[\p{Ll}…]+` then `[\p{Lu}…]+[\p{Ll}…]*`, CamelCase-aware) and
+/// attaches an optional contraction suffix to the word. Within ASCII the upper
+/// class is `[A-Z]` and the lower class is `[a-z]` (Lt/Lm/Lo/M are empty in
+/// ASCII). Digit/punct/whitespace rules are identical to cl100k.
+#[inline]
+fn o200k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    let n = b.len();
+    if i >= n {
+        return None;
+    }
+    let c0 = b[i];
+    if c0 >= 0x80 {
+        return None;
+    }
+
+    // Determine the letter start `p`: either c0 itself (a letter), or one
+    // leading non-CRLF non-alnum char followed by an ASCII letter.
+    let p = if c0.is_ascii_alphabetic() {
+        i
+    } else if c0 != b'\r' && c0 != b'\n' && !c0.is_ascii_digit() {
+        // eligible leading char (punct/space). Letter rule applies only if the
+        // next byte is an ASCII letter; otherwise it's a digit/punct/ws piece.
+        match b.get(i + 1) {
+            Some(&c1) if c1 < 0x80 && c1.is_ascii_alphabetic() => i + 1,
+            _ => return ascii_num_punct(b, i),
+        }
+    } else {
+        // digit, or \r\n
+        return ascii_num_punct(b, i);
+    };
+
+    // Scan the uppercase run from `p`.
+    let mut q = p;
+    while q < n && b[q] < 0x80 && b[q].is_ascii_uppercase() {
+        q += 1;
+    }
+    // A non-ASCII byte after the uppercase run could be a Unicode letter/mark
+    // the regex would include — defer.
+    if q < n && b[q] >= 0x80 {
+        return None;
+    }
+
+    let letters_end = if q > p {
+        // started with uppercase(s)
+        if q < n && b[q].is_ascii_lowercase() {
+            // Rule A: [A-Z]*[a-z]+  (greedy uppercase, then lowercase run)
+            let mut r = q;
+            while r < n && b[r] < 0x80 && b[r].is_ascii_lowercase() {
+                r += 1;
+            }
+            if r < n && b[r] >= 0x80 {
+                return None;
+            }
+            r
+        } else {
+            // Rule B: [A-Z]+  (no trailing lowercase)
+            q
+        }
+    } else {
+        // b[p] is lowercase (it's a letter but not uppercase): Rule A lowercase+
+        let mut r = p;
+        while r < n && b[r] < 0x80 && b[r].is_ascii_lowercase() {
+            r += 1;
+        }
+        if r < n && b[r] >= 0x80 {
+            return None;
+        }
+        r
+    };
+
+    // Optional contraction suffix attached to the word: (?i:'s|'t|…)?
+    let mut end = letters_end;
+    if end < n && b[end] == b'\'' {
+        if let Some(len) = match_contraction(b, end) {
+            end += len;
+        }
+    }
+    Some((i, end))
+}
+
+/// Match a contraction at `b[i] == '\''`, returning its byte length (2 or 3) or
+/// `None`. Case-insensitive, matching `(?i:'s|'t|'re|'ve|'m|'ll|'d)`. Shared by
+/// both patterns (standalone alternative in cl100k, word suffix in o200k).
+#[inline]
+fn match_contraction(b: &[u8], i: usize) -> Option<usize> {
+    let c1 = b.get(i + 1).copied()?.to_ascii_lowercase();
+    match c1 {
+        b's' | b't' | b'm' | b'd' => Some(2),
+        b'r' if b.get(i + 2).map(|c| c.to_ascii_lowercase()) == Some(b'e') => Some(3),
+        b'v' if b.get(i + 2).map(|c| c.to_ascii_lowercase()) == Some(b'e') => Some(3),
+        b'l' if b.get(i + 2).map(|c| c.to_ascii_lowercase()) == Some(b'l') => Some(3),
+        _ => None,
     }
 }
 
@@ -104,19 +357,10 @@ mod tests {
         result
     }
 
-    // patterns from encoding.rs
-    const CL100K_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
-    const O200K_PATTERN: &str = concat!(
-        r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+",
-        r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
-        r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*",
-        r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
-        r"|\p{N}{1,3}",
-        r"| ?[^\s\p{L}\p{N}]+[\r\n]*",
-        r"|\s*[\r\n]+",
-        r"|\s+",
-    );
-    const P50K_PATTERN: &str = r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
+    // Single source of truth: the real production patterns. Importing them here
+    // (rather than copying) guarantees the fast-path equivalence proptests below
+    // validate against exactly the patterns used in production.
+    use crate::encoding::{CL100K_PATTERN, O200K_PATTERN, P50K_PATTERN};
 
     // verify RegexPreTokenizer matches the v2 behavior by comparing
     // piece-by-piece with v2's regex.find_at + adjust_whitespace_end
@@ -140,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_cl100k_english() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN);
+        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let v2 = v2_collect_matches(CL100K_PATTERN, "Hello, world!");
         let v3 = collect_matches(&pt, "Hello, world!");
         assert_eq!(v2, v3);
@@ -148,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_cl100k_cjk() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN);
+        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "你好世界";
         let v2 = v2_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
@@ -157,7 +401,7 @@ mod tests {
 
     #[test]
     fn test_cl100k_contractions() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN);
+        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "I'm don't they're we've she'll it'd";
         let v2 = v2_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
@@ -166,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_o200k_english() {
-        let pt = RegexPreTokenizer::new(O200K_PATTERN);
+        let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
         let text = "Hello, world! CamelCase mixedScript123";
         let v2 = v2_collect_matches(O200K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
@@ -175,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_p50k_english() {
-        let pt = RegexPreTokenizer::new(P50K_PATTERN);
+        let pt = RegexPreTokenizer::new(P50K_PATTERN, FastPath::None);
         let text = "Hello world, I'm testing!";
         let v2 = v2_collect_matches(P50K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
@@ -184,13 +428,13 @@ mod tests {
 
     #[test]
     fn test_empty_input() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN);
+        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         assert_eq!(collect_matches(&pt, ""), vec![]);
     }
 
     #[test]
     fn test_only_whitespace() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN);
+        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "   \n  \t  ";
         let v2 = v2_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
@@ -199,7 +443,7 @@ mod tests {
 
     #[test]
     fn test_emoji() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN);
+        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "🎉🚀💡";
         let v2 = v2_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
@@ -208,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_mixed_script() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN);
+        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "Hello 你好 World 🌍";
         let v2 = v2_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
@@ -287,13 +531,57 @@ mod tests {
             "hello world! 你好 🚀 test 123",
         ];
 
-        for &pattern in &[CL100K_PATTERN, O200K_PATTERN, P50K_PATTERN] {
-            let pt = RegexPreTokenizer::new(pattern);
+        for &(pattern, fast) in &[
+            (CL100K_PATTERN, FastPath::Cl100k),
+            (O200K_PATTERN, FastPath::O200k),
+            (P50K_PATTERN, FastPath::None),
+        ] {
+            let pt = RegexPreTokenizer::new(pattern, fast);
             for text in &texts {
                 let v2 = v2_collect_matches(pattern, text);
                 let v3 = collect_matches(&pt, text);
                 assert_eq!(v2, v3, "mismatch for pattern / text: {text:?}");
             }
+        }
+    }
+
+    // ASCII fast-path equivalence: the cl100k fast path (now built into
+    // RegexPreTokenizer) must produce byte-for-byte identical pieces to the
+    // pure-regex reference for ANY input.
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(20000))]
+
+        #[test]
+        fn prop_cl100k_fast_matches_regex(text in ".*") {
+            let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(CL100K_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        // ASCII-heavy generator to stress the fast path specifically.
+        #[test]
+        fn prop_cl100k_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
+            let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(CL100K_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_o200k_fast_matches_regex(text in ".*") {
+            let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(O200K_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_o200k_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
+            let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(O200K_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
     }
 }

@@ -11,6 +11,7 @@ use base64::Engine;
 use rustc_hash::FxHashMap;
 
 use crate::bpe::CoreBpe;
+use crate::pretokenize::FastPath;
 
 // embedded encoding data files — zstd-compressed, decompressed on first use via OnceLock in lib.rs
 const CL100K_BASE_DATA: &[u8] = include_bytes!("encodings/cl100k_base.tiktoken.zst");
@@ -26,11 +27,11 @@ const MISTRAL_V3_DATA: &[u8] = include_bytes!("encodings/mistral_v3.tiktoken.zst
 // original tiktoken uses `\s+(?!\S)|\s+` but we use plain `\s+` and emulate the negative
 // lookahead in bpe.rs::adjust_whitespace_end — this lets us use the `regex` crate's DFA engine
 // instead of a slower backtracking engine like fancy-regex or pcre2.
-const CL100K_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
+pub(crate) const CL100K_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
 
 // o200k pattern: similar to cl100k but with finer Unicode category distinctions
 // (Lu/Lt/Lm/Lo/M vs plain \p{L}), supporting better CamelCase and mixed-script splitting
-const O200K_PATTERN: &str = concat!(
+pub(crate) const O200K_PATTERN: &str = concat!(
     r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+",
     r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
     r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*",
@@ -42,7 +43,7 @@ const O200K_PATTERN: &str = concat!(
 );
 
 // p50k/r50k pattern: simpler, older pattern used by GPT-3 era models
-const P50K_PATTERN: &str = r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
+pub(crate) const P50K_PATTERN: &str = r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
 
 // llama3 pattern: same structure as cl100k (contractions, letters, numbers, punctuation, whitespace)
 // original uses `\s+(?!\S)|\s+` — we emulate the lookahead in pretokenize.rs
@@ -127,7 +128,7 @@ pub fn cl100k_base() -> CoreBpe {
         ("<|fim_suffix|>", 100260),
         ("<|endofprompt|>", 100276),
     ]);
-    CoreBpe::new(encoder, special, CL100K_PATTERN)
+    CoreBpe::new(encoder, special, CL100K_PATTERN, FastPath::Cl100k)
 }
 
 /// Construct the p50k_base encoding (text-davinci-002/003, code-davinci, code-cushman).
@@ -135,7 +136,7 @@ pub fn cl100k_base() -> CoreBpe {
 pub fn p50k_base() -> CoreBpe {
     let encoder = parse_tiktoken_data(P50K_BASE_DATA);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
-    CoreBpe::new(encoder, special, P50K_PATTERN)
+    CoreBpe::new(encoder, special, P50K_PATTERN, FastPath::None)
 }
 
 /// Construct the p50k_edit encoding (text-davinci-edit, code-davinci-edit).
@@ -148,7 +149,7 @@ pub fn p50k_edit() -> CoreBpe {
         ("<|fim_middle|>", 50282),
         ("<|fim_suffix|>", 50283),
     ]);
-    CoreBpe::new(encoder, special, P50K_PATTERN)
+    CoreBpe::new(encoder, special, P50K_PATTERN, FastPath::None)
 }
 
 /// Construct the o200k_base encoding (GPT-4o, o1, o3, o4-mini).
@@ -156,7 +157,7 @@ pub fn p50k_edit() -> CoreBpe {
 pub fn o200k_base() -> CoreBpe {
     let encoder = parse_tiktoken_data(O200K_BASE_DATA);
     let special = special_tokens(&[("<|endoftext|>", 199999), ("<|endofprompt|>", 200018)]);
-    CoreBpe::new(encoder, special, O200K_PATTERN)
+    CoreBpe::new(encoder, special, O200K_PATTERN, FastPath::O200k)
 }
 
 /// Construct the o200k_harmony encoding (gpt-oss family / harmony chat format).
@@ -192,7 +193,7 @@ pub fn o200k_harmony() -> CoreBpe {
     for id in 200013..=201087_u32 {
         special.insert(format!("<|reserved_{id}|>").into_bytes(), id);
     }
-    CoreBpe::new(encoder, special, O200K_PATTERN)
+    CoreBpe::new(encoder, special, O200K_PATTERN, FastPath::O200k)
 }
 
 /// Construct the r50k_base encoding (GPT-3 era: davinci, curie, babbage, ada).
@@ -201,7 +202,7 @@ pub fn o200k_harmony() -> CoreBpe {
 pub fn r50k_base() -> CoreBpe {
     let encoder = parse_tiktoken_data(R50K_BASE_DATA);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
-    CoreBpe::new(encoder, special, P50K_PATTERN)
+    CoreBpe::new(encoder, special, P50K_PATTERN, FastPath::None)
 }
 
 /// Construct the `gpt2` encoding (GPT-2 BPE).
@@ -228,7 +229,7 @@ pub fn llama3() -> CoreBpe {
         ("<|eot_id|>", 128009),
         ("<|python_tag|>", 128010),
     ]);
-    CoreBpe::new(encoder, special, LLAMA3_PATTERN)
+    CoreBpe::new(encoder, special, LLAMA3_PATTERN, FastPath::Cl100k)
 }
 
 /// Construct the deepseek_v3 encoding (DeepSeek V3, R1).
@@ -241,7 +242,7 @@ pub fn deepseek_v3() -> CoreBpe {
         ("<｜▁pad▁｜>", 2),
         ("<|EOT|>", 128805),
     ]);
-    CoreBpe::new(encoder, special, DEEPSEEK_V3_PATTERN)
+    CoreBpe::new(encoder, special, DEEPSEEK_V3_PATTERN, FastPath::None)
 }
 
 /// Construct the qwen2 encoding (Qwen 2.5 / 3).
@@ -264,7 +265,7 @@ pub fn qwen2() -> CoreBpe {
         ("<|image_pad|>", 151655),
         ("<|video_pad|>", 151656),
     ]);
-    CoreBpe::new(encoder, special, QWEN2_PATTERN)
+    CoreBpe::new(encoder, special, QWEN2_PATTERN, FastPath::None)
 }
 
 /// Construct the mistral_v3 encoding (Mistral, Mixtral with Tekken tokenizer).
@@ -289,7 +290,7 @@ pub fn mistral_v3() -> CoreBpe {
         ("[MIDDLE]", 15),
         ("[SUFFIX]", 16),
     ]);
-    CoreBpe::new(encoder, special, MISTRAL_V3_PATTERN)
+    CoreBpe::new(encoder, special, MISTRAL_V3_PATTERN, FastPath::Cl100k)
 }
 
 /// Expose cl100k rank map for internal tests (e.g. Vocab equivalence)

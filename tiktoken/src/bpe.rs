@@ -2,7 +2,7 @@ use regex::Regex;
 use rustc_hash::FxHashMap;
 
 use crate::merge;
-use crate::pretokenize::{PreTokenizer, RegexPreTokenizer};
+use crate::pretokenize::{FastPath, PreTokenizer, RegexPreTokenizer};
 use crate::vocab::Vocab;
 
 /// A Byte Pair Encoding tokenizer engine.
@@ -39,8 +39,9 @@ impl CoreBpe {
         encoder: FxHashMap<Vec<u8>, u32>,
         special_encoder: FxHashMap<Vec<u8>, u32>,
         pattern: &str,
+        fast: FastPath,
     ) -> Self {
-        let pre_tokenizer = RegexPreTokenizer::new(pattern);
+        let pre_tokenizer = RegexPreTokenizer::new(pattern, fast);
 
         let special_regex = if special_encoder.is_empty() {
             None
@@ -354,14 +355,14 @@ mod tests {
         encoder.insert(b"abc".to_vec(), 5);
 
         let special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
-        CoreBpe::new(encoder, special, r"\w+|\S")
+        CoreBpe::new(encoder, special, r"\w+|\S", FastPath::None)
     }
 
     #[test]
     fn test_byte_pair_merge_single_byte() {
         let mut ranks: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         ranks.insert(b"x".to_vec(), 0);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("x");
         assert_eq!(tokens, vec![0]);
     }
@@ -372,7 +373,7 @@ mod tests {
         ranks.insert(b"a".to_vec(), 0);
         ranks.insert(b"b".to_vec(), 1);
         ranks.insert(b"ab".to_vec(), 2);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("ab");
         assert_eq!(tokens, vec![2]);
     }
@@ -382,7 +383,7 @@ mod tests {
         let mut ranks: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         ranks.insert(b"a".to_vec(), 0);
         ranks.insert(b"b".to_vec(), 1);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w|\S", FastPath::None);
         let tokens = bpe.encode("ab");
         assert_eq!(tokens, vec![0, 1]);
     }
@@ -418,7 +419,7 @@ mod tests {
         ranks.insert(b"f".to_vec(), 2);
         ranks.insert(b"de".to_vec(), 3);
         ranks.insert(b"ef".to_vec(), 4);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("def");
         assert_eq!(tokens, vec![3, 2]); // de=3, f=2
     }
@@ -427,7 +428,7 @@ mod tests {
     fn test_decode_to_string_invalid_utf8() {
         let mut encoder: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         encoder.insert(vec![0xFF, 0xFE], 0);
-        let bpe = CoreBpe::new(encoder, FxHashMap::default(), r"[\s\S]+");
+        let bpe = CoreBpe::new(encoder, FxHashMap::default(), r"[\s\S]+", FastPath::None);
         assert!(bpe.decode_to_string(&[0]).is_err());
     }
 
@@ -444,7 +445,7 @@ mod tests {
         encoder.insert(b"y".to_vec(), 1);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|end|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w|\S", FastPath::None);
         let tokens = bpe.encode_with_special_tokens("x<|end|>y");
         assert_eq!(tokens, vec![0, 99, 1]);
     }
@@ -455,7 +456,7 @@ mod tests {
         encoder.insert(b"hi".to_vec(), 0);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|end|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w+|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w+|\S", FastPath::None);
         let decoded = bpe.decode(&[0, 99]);
         assert_eq!(&decoded, b"hi<|end|>");
     }
@@ -468,14 +469,14 @@ mod tests {
         ranks.insert(b"c".to_vec(), 30);
         ranks.insert(b"ab".to_vec(), 5);
         ranks.insert(b"abc".to_vec(), 3);
-        let bpe = CoreBpe::new(ranks.clone(), FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks.clone(), FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens = bpe.encode("abc");
         assert_eq!(tokens, vec![3]);
 
         ranks.insert(b"d".to_vec(), 40);
         ranks.insert(b"cd".to_vec(), 7);
         ranks.insert(b"abcd".to_vec(), 1);
-        let bpe2 = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe2 = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         let tokens2 = bpe2.encode("abcd");
         assert_eq!(tokens2, vec![1]);
     }
@@ -491,7 +492,7 @@ mod tests {
         ranks.insert(b"abc".to_vec(), 2);
         ranks.insert(b"cx".to_vec(), 15);
         ranks.insert(b"abcx".to_vec(), 1);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         assert_eq!(bpe.encode("abcx"), vec![1]);
     }
 
@@ -500,7 +501,7 @@ mod tests {
         let mut ranks: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         ranks.insert(b"a".to_vec(), 0);
         ranks.insert(b"b".to_vec(), 1);
-        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S");
+        let bpe = CoreBpe::new(ranks, FxHashMap::default(), r"\w+|\S", FastPath::None);
         assert_eq!(bpe.count("ab"), 2);
         assert_eq!(bpe.encode("ab"), vec![0, 1]);
     }
@@ -512,7 +513,7 @@ mod tests {
         encoder.insert(b"y".to_vec(), 1);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|end|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w|\S", FastPath::None);
 
         assert_eq!(
             bpe.count_with_special_tokens("x<|end|>y"),
@@ -533,7 +534,7 @@ mod tests {
         encoder.insert(b"b".to_vec(), 1);
         let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
         special.insert(b"<|s|>".to_vec(), 99);
-        let bpe = CoreBpe::new(encoder, special, r"\w|\S");
+        let bpe = CoreBpe::new(encoder, special, r"\w|\S", FastPath::None);
         let tokens = bpe.encode_with_special_tokens("a<|s|>b");
         assert_eq!(tokens, vec![0, 99, 1]);
     }
