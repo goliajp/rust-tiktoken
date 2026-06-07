@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [3.5.0] - 2026-06-07
+
+> Version note: `tiktoken` and `tiktoken-wasm` are now kept in lockstep at the
+> same version number (both jump to 3.5.0 here), so a given release tag means the
+> same code across both packages.
 
 ### Added
 - ASCII fast-path pre-tokenizers for the `cl100k`, `o200k`, `qwen2`, and
