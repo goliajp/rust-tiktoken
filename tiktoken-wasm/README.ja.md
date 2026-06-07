@@ -1,7 +1,7 @@
 # @goliapkg/tiktoken-wasm
 
 [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm?style=flat-square&logo=npm)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)
-[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](#ライセンス)
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
@@ -225,4 +225,4 @@ USD で API コストを見積もり。7 プロバイダ 68 モデル対応。
 
 ## ライセンス
 
-[MIT](LICENSE)
+[MIT](LICENSE-MIT) または [Apache-2.0](LICENSE-APACHE) のいずれか、あなたの選択でライセンスされます。

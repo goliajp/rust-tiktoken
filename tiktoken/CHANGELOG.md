@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.5.1] - 2026-06-07
+
+### Changed
+- Dual-licensed under **MIT OR Apache-2.0** (previously MIT only). `LICENSE` is
+  split into `LICENSE-MIT` + `LICENSE-APACHE`, and the crate `license` field is
+  now `"MIT OR Apache-2.0"` — the conventional permissive dual-license for Rust
+  crates.
+
+### Internal
+- rustfmt + clippy (`-D warnings`) cleanup of the 3.5.0 fast-path code — no
+  behavior change. Workspace README rewritten; `LICENSE-MIT` copyright year
+  unified to 2023–2026.
+
 ## [3.5.0] - 2026-06-07
 
 > Version note: `tiktoken` and `tiktoken-wasm` are now kept in lockstep at the

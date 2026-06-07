@@ -1,7 +1,7 @@
 # @goliapkg/tiktoken-wasm
 
 [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm?style=flat-square&logo=npm)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)
-[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](#许可证)
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
@@ -225,4 +225,4 @@ module.exports = {
 
 ## 许可证
 
-[MIT](LICENSE)
+采用 [MIT](LICENSE-MIT) 或 [Apache-2.0](LICENSE-APACHE) 双重许可，由你任选其一。

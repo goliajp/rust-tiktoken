@@ -1,28 +1,77 @@
 # rust-tiktoken
 
+[![tiktoken on crates.io](https://img.shields.io/crates/v/tiktoken?style=flat-square&logo=rust&label=tiktoken)](https://crates.io/crates/tiktoken)
+[![tiktoken-wasm on npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm?style=flat-square&logo=npm&label=tiktoken-wasm)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)
+[![CI](https://img.shields.io/github/actions/workflow/status/goliajp/rust-tiktoken/ci.yml?branch=develop&style=flat-square&logo=github&label=ci)](https://github.com/goliajp/rust-tiktoken/actions/workflows/ci.yml)
+[![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](#ライセンス)
+
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
-OpenAI の tiktoken BPE トークナイザーの高速な純 Rust 実装と、ブラウザ / Node.js
-向けの WebAssembly バインディング。
+最速の Rust BPE トークナイザーと、その WebAssembly バインディング。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral）もサポート。手書きの ASCII 高速パスにより、ASCII テキストは **tiktoken-rs より 15〜40 倍高速**（CJK/Unicode では約 2 倍）。
 
 ## このワークスペースの crate
 
 | パス | Crate / Package | 説明 | バージョン |
 |:-----|:----------------|:-----|:-----------|
-| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE トークナイザー — 11 エンコーディング、63 モデル、各社料金 | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
+| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE トークナイザー — 11 エンコーディング、68 モデル、各社料金 | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`tiktoken-wasm`](https://crates.io/crates/tiktoken-wasm) (Rust) | 上記の WASM バインディング crate | [![crates.io](https://img.shields.io/crates/v/tiktoken-wasm.svg?style=flat-square)](https://crates.io/crates/tiktoken-wasm) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) (npm) | 同じものを `wasm-pack` で npm へ公開 | [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm.svg?style=flat-square)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) |
 
-両 crate が同一リポジトリにあるのは、`tiktoken` のリリースごとに
-`tiktoken-wasm` も連動リリースが必要だからです。単一ワークスペースで
-同期するほうが、2 リポジトリ間の調整より安価です。
+> 2 つの crate は同一ワークスペースにあり、**バージョンは常に同期（lockstep）** — リリースのたびに両方を同じバージョン番号で発行します。
+
+## 特長
+
+- **ASCII 高速パス（事前トークン化）** — よくある ASCII の断片（英字・数字・記号・短縮形）を正規表現エンジンを使わずに解決。cl100k / o200k / qwen2 / deepseek の ASCII テキストで `encode` / `count` が **2.3〜5.5 倍高速**。Unicode/CJK は自動的に正規表現へフォールバック。
+- **11 エンコーディング・68 モデル・7 プロバイダ** — OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek、Qwen、Mistral。さらに USD のコスト見積もり（料金は Anthropic・Google も含む）。
+- **軽量・移植性** — Arena ベースの語彙、線形/ヒープのハイブリッド BPE マージ、オプションの rayon 並列、ゼロアロケーションの `count()`、C 依存ゼロの純 Rust、小さな wasm ビルド、zstd 圧縮語彙をコンパイル時に埋め込み。
+
+API・対応モデル表・ベンチマークは各 crate の README を参照：**[`tiktoken/`](tiktoken/README.md)** ·  **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。
+
+## クイックスタート
+
+### Rust
+
+```toml
+[dependencies]
+tiktoken = "3.5"
+```
+
+```rust
+// エンコーディング名で取得
+let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+let tokens = enc.encode("hello world");
+assert_eq!(enc.decode_to_string(&tokens).unwrap(), "hello world");
+
+// トークンベクタを割り当てずにカウント
+let n = enc.count("The quick brown fox.");
+
+// モデル名で解決
+let enc = tiktoken::encoding_for_model("gpt-4o").unwrap();
+```
+
+### WebAssembly（ブラウザ / Node.js）
+
+```bash
+npm install @goliapkg/tiktoken-wasm
+```
+
+```js
+import init, { getEncoding } from '@goliapkg/tiktoken-wasm'
+await init()
+const enc = getEncoding('o200k_base')
+const tokens = enc.encode('hello world')
+```
+
+## パフォーマンス
+
+Apple M4 Mac mini での測定で、ASCII の `encode` / `count` は **tiktoken-rs より 15〜40 倍**、**Python tiktoken より約 20〜40 倍** 高速（正規表現へフォールバックする CJK/Unicode では約 2 倍）。エンコーディングごとの詳細表と方法論は [`tiktoken/README.md#performance`](tiktoken/README.md#performance) を参照。
 
 ## ビルド
 
 ```bash
-# Rust
 cargo test -p tiktoken
-cargo clippy --workspace --all-targets
+cargo fmt --all --check
+cargo clippy --workspace --lib -- -D warnings
 
 # WASM (wasm-pack が必要: cargo install wasm-pack)
 cd tiktoken-wasm
@@ -31,20 +80,18 @@ wasm-pack build --target web --release --scope goliapkg
 
 ## リリース
 
-各 crate は独立したリリースサイクルを持ち、タグ接頭辞で分岐します:
+`tiktoken` と `tiktoken-wasm` はバージョンを同期し、git-flow で一緒にリリースします（PR なし）：
 
 ```bash
-# tiktoken (Rust crate)
-git flow release start 3.1.4
-# ... tiktoken/Cargo.toml と tiktoken/CHANGELOG.md を更新 ...
-git flow release finish 3.1.4      # v3.1.4 タグを作成、CI が公開
-
-# tiktoken-wasm (Rust crate + npm パッケージ)
-# ... tiktoken-wasm/Cargo.toml と pkg/package.json のバージョンを更新 ...
-git tag -a tiktoken-wasm-v3.2.4 -m "release tiktoken-wasm 3.2.4"
-git push origin tiktoken-wasm-v3.2.4   # CI が crates.io と npm の両方へ公開
+git flow release start X.Y.Z
+# バージョンを X.Y.Z に更新: tiktoken/Cargo.toml、tiktoken-wasm/Cargo.toml
+#（およびその tiktoken パス依存）。両方の CHANGELOG を確定。
+git flow release finish X.Y.Z                       # master へマージ、vX.Y.Z タグ、develop へ戻しマージ
+git tag -a tiktoken-wasm-vX.Y.Z vX.Y.Z^{commit} -m "tiktoken-wasm X.Y.Z"
+git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
+# タグ `v*` が tiktoken crate を、`tiktoken-wasm-v*` が wasm crate + npm を公開
 ```
 
 ## ライセンス
 
-[MIT](LICENSE)
+[MIT](LICENSE-MIT) または [Apache-2.0](LICENSE-APACHE) のいずれか、あなたの選択でライセンスされます。
