@@ -8,14 +8,14 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器 — 比 tiktoken-rs 快 7-10 倍。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
+最快的 Rust BPE 分词器 — ASCII 文本上比 tiktoken-rs 快 15〜40 倍（CJK/Unicode 约 2 倍），得益于手写的 ASCII 快路径。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
 
 ## 特性
 
 - **多厂商**：11 种编码，覆盖 5 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral）
-- **高性能**：Arena 词表存储、堆加速 BPE 合并、DFA 正则
+- **高性能**：手写 ASCII 快路径（绕开正则）、Arena 词表存储、混合 BPE 合并
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
-- **费用估算**：覆盖 7 家厂商共 63 个模型
+- **费用估算**：覆盖 7 家厂商共 68 个模型
 - **体积紧凑**：ruzstd 压缩词表数据，编译期嵌入
 - **零分配计数**：`count()` 不分配 token 向量
 
@@ -25,23 +25,23 @@
 
 #### cl100k_base encode
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
+| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.6x** | **14x** |
-| 中等文本 (900 B) | 32.2 us | 53.8 us | **7.2 us** | **7.5x** | **4.5x** |
-| 长文本 (45 KB) | 1,500 us | 2,611 us | **366 us** | **7.1x** | **4.1x** |
-| Unicode (4.5 KB) | 141 us | 164 us | **101 us** | **1.6x** | **1.4x** |
-| 代码 (3.9 KB) | 247 us | 264 us | **42 us** | **6.3x** | **5.9x** |
+| 短文本 (13 B) | 1,700 ns | 1,248 ns | **43 ns** | **29x** | **40x** |
+| 中等文本 (900 B) | 32.2 us | 53.8 us | **1.5 us** | **35x** | **21x** |
+| 长文本 (45 KB) | 1,500 us | 2,611 us | **74 us** | **35x** | **20x** |
+| Unicode (4.5 KB) | 141 us | 164 us | **91 us** | **1.8x** | **1.6x** |
+| 代码 (3.9 KB) | 247 us | 264 us | **17 us** | **16x** | **15x** |
 
 #### o200k_base encode
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
+| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1,600 ns | 1,051 ns | **115 ns** | **9.1x** | **14x** |
-| 中等文本 (900 B) | 58.3 us | 56.2 us | **7.1 us** | **7.9x** | **8.2x** |
-| 长文本 (45 KB) | 2,900 us | 2,799 us | **365 us** | **7.7x** | **7.9x** |
-| Unicode (4.5 KB) | 204 us | 187 us | **99 us** | **1.9x** | **2.1x** |
-| 代码 (3.9 KB) | 332 us | 253 us | **41 us** | **6.2x** | **8.1x** |
+| 短文本 (13 B) | 1,600 ns | 1,051 ns | **40 ns** | **26x** | **40x** |
+| 中等文本 (900 B) | 58.3 us | 56.2 us | **1.5 us** | **37x** | **39x** |
+| 长文本 (45 KB) | 2,900 us | 2,799 us | **73 us** | **38x** | **40x** |
+| Unicode (4.5 KB) | 204 us | 187 us | **95 us** | **2.0x** | **2.2x** |
+| 代码 (3.9 KB) | 332 us | 253 us | **16 us** | **16x** | **21x** |
 
 <details>
 <summary>为什么更快？</summary>
@@ -49,9 +49,10 @@
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
 | 词表存储 | Arena（单次分配，缓存友好） | `HashMap<Vec<u8>>`（20 万次分配） | PyO3 背后的 Rust `HashMap` |
-| 正则引擎 | `regex`（DFA，线性时间） | `fancy-regex`（回溯） | `regex` 经 PyO3 + FFI 开销 |
+| 预分词（ASCII） | 手写 ASCII 快路径，绕开正则 | 总是走正则 | 总是走正则 |
+| 正则引擎（兜底） | `regex`（DFA，线性时间） | `fancy-regex`（回溯） | `regex` 经 PyO3 + FFI 开销 |
 | 哈希表 | 自定义开放寻址 + `FxHash` | `rustc-hash` v1 | 标准 `HashMap` |
-| BPE 合并 | 堆加速 O(n log n) | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
+| BPE 合并 | 混合：栈上线性扫描（短片段）+ 堆（长片段） | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
 | 零分配 `count()` | 有 | 无 | 无 |
 
 基准测试源码：[`benches/`](benches/)。可通过 `cargo bench` 复现。
@@ -158,7 +159,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 63 个模型。
+支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 68 个模型。
 
 ## WebAssembly
 
