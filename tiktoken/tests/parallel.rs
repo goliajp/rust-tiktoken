@@ -32,8 +32,7 @@ const PARALLEL_THRESHOLD: usize = 512 * 1024;
 #[test]
 fn parallel_all_encodings() {
     // Large enough (> threshold) to actually exercise the parallel branch.
-    let text =
-        "The quick brown fox jumps over the lazy dog. 你好世界！\n".repeat(12000);
+    let text = "The quick brown fox jumps over the lazy dog. 你好世界！\n".repeat(12000);
     assert!(text.len() > PARALLEL_THRESHOLD);
     for name in [
         "cl100k_base",

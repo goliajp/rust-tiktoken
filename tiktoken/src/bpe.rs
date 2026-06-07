@@ -486,7 +486,12 @@ mod tests {
         ranks.insert(b"c".to_vec(), 30);
         ranks.insert(b"ab".to_vec(), 5);
         ranks.insert(b"abc".to_vec(), 3);
-        let bpe = CoreBpe::new(ranks.clone(), FxHashMap::default(), r"\w+|\S", FastPath::None);
+        let bpe = CoreBpe::new(
+            ranks.clone(),
+            FxHashMap::default(),
+            r"\w+|\S",
+            FastPath::None,
+        );
         let tokens = bpe.encode("abc");
         assert_eq!(tokens, vec![3]);
 

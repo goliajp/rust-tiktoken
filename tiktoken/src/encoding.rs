@@ -43,7 +43,8 @@ pub(crate) const O200K_PATTERN: &str = concat!(
 );
 
 // p50k/r50k pattern: simpler, older pattern used by GPT-3 era models
-pub(crate) const P50K_PATTERN: &str = r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
+pub(crate) const P50K_PATTERN: &str =
+    r"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
 
 // llama3 pattern: same structure as cl100k (contractions, letters, numbers, punctuation, whitespace)
 // original uses `\s+(?!\S)|\s+` — we emulate the lookahead in pretokenize.rs

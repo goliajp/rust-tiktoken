@@ -117,7 +117,10 @@ fn ascii_num_punct(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, usiz
         // optional single leading space, but only if a punct run follows
         match b.get(i + 1) {
             Some(&c1)
-                if c1 < 0x80 && !is_ascii_ws(c1) && !c1.is_ascii_alphabetic() && !c1.is_ascii_digit() =>
+                if c1 < 0x80
+                    && !is_ascii_ws(c1)
+                    && !c1.is_ascii_alphabetic()
+                    && !c1.is_ascii_digit() =>
             {
                 j = i + 1;
             }
@@ -166,33 +169,34 @@ fn cl100k_ascii_next(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, us
         return None;
     }
 
-    // Rule 1: (?i:'s|'t|'re|'ve|'m|'ll|'d)
-    if c0 == b'\'' {
-        if let Some(len) = match_contraction(b, i) {
-            return Some((i, i + len));
-        }
-        // no contraction: fall through; the quote may act as a rule-2 leading
-        // char or a rule-4 punctuation run.
+    // Rule 1: (?i:'s|'t|'re|'ve|'m|'ll|'d). On no contraction, fall through; the
+    // quote may act as a rule-2 leading char or a rule-4 punctuation run.
+    if c0 == b'\''
+        && let Some(len) = match_contraction(b, i)
+    {
+        return Some((i, i + len));
     }
 
     // Rule 2: [^\r\n\p{L}\p{N}]?\p{L}+
     // case A: one leading non-CRLF non-alnum char, then letters
-    if c0 != b'\r' && c0 != b'\n' && !c0.is_ascii_alphabetic() && !c0.is_ascii_digit() {
-        if let Some(&c1) = b.get(i + 1)
-            && c1 < 0x80
-            && c1.is_ascii_alphabetic()
-        {
-            let mut j = i + 1;
-            while j < n && b[j] < 0x80 && b[j].is_ascii_alphabetic() {
-                j += 1;
-            }
-            // next byte non-ASCII could be a Unicode letter the regex would
-            // fold into this piece — defer to be safe.
-            if j < n && b[j] >= 0x80 {
-                return None;
-            }
-            return Some((i, j));
+    if c0 != b'\r'
+        && c0 != b'\n'
+        && !c0.is_ascii_alphabetic()
+        && !c0.is_ascii_digit()
+        && let Some(&c1) = b.get(i + 1)
+        && c1 < 0x80
+        && c1.is_ascii_alphabetic()
+    {
+        let mut j = i + 1;
+        while j < n && b[j] < 0x80 && b[j].is_ascii_alphabetic() {
+            j += 1;
         }
+        // next byte non-ASCII could be a Unicode letter the regex would
+        // fold into this piece — defer to be safe.
+        if j < n && b[j] >= 0x80 {
+            return None;
+        }
+        return Some((i, j));
     }
     // case B: no leading char, c0 is a letter
     if c0.is_ascii_alphabetic() {
@@ -285,10 +289,11 @@ fn o200k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
 
     // Optional contraction suffix attached to the word: (?i:'s|'t|…)?
     let mut end = letters_end;
-    if end < n && b[end] == b'\'' {
-        if let Some(len) = match_contraction(b, end) {
-            end += len;
-        }
+    if end < n
+        && b[end] == b'\''
+        && let Some(len) = match_contraction(b, end)
+    {
+        end += len;
     }
     Some((i, end))
 }
