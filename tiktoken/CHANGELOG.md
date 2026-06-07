@@ -1,5 +1,43 @@
 # Changelog
 
+## [3.5.0] - 2026-06-07
+
+> Version note: `tiktoken` and `tiktoken-wasm` are now kept in lockstep at the
+> same version number (both jump to 3.5.0 here), so a given release tag means the
+> same code across both packages.
+
+### Added
+- ASCII fast-path pre-tokenizers for the `cl100k`, `o200k`, `qwen2`, and
+  `deepseek_v3` patterns (also covering `llama3` / `mistral_v3`, which share the
+  cl100k pattern). These hand-written scanners resolve the common ASCII pieces
+  (letters, digits, punctuation, contractions) without invoking the regex
+  engine, deferring to it only on non-ASCII bytes or whitespace runs. The
+  scanner is selected per-encoding via an internal `FastPath` injected from
+  `encoding.rs`, so the pre-tokenizer stays unaware of any specific pattern
+  string. Verified byte-for-byte identical to the regex by per-pattern
+  equivalence proptests (20k cases each).
+- Pricing entries: `claude-opus-4.8`, `claude-opus-4.7`,
+  `gemini-3.1-pro-preview`, `gemini-3.5-flash`, `gemini-3.1-flash-lite`
+  (verified against official docs; Claude/Gemini remain pricing-only — neither
+  vendor publishes a tokenizer, so they have no encoding).
+
+### Changed
+- BPE merge is now hybrid: pieces up to 32 bytes use an allocation-free,
+  stack-based linear scan; longer pieces keep the heap-accelerated O(n log n)
+  algorithm. After pre-tokenization most pieces are word-sized, where the heap's
+  allocation + bookkeeping overhead dominated.
+- `encode_parallel` rewritten as a chunked two-pass (one buffer per worker
+  instead of one `Vec` per piece) and its serial-fallback threshold raised from
+  4 KB to 512 KB: with the fast-path making serial encoding cheap and
+  pre-tokenization staying serial (Amdahl), the parallel path only wins above
+  ~460 KB.
+
+### Performance
+- ASCII-heavy `encode` / `count` is **2.3–5.5x faster** across cl100k / o200k /
+  qwen2 / deepseek (e.g. cl100k encode of 45 KB English: ~350 µs → ~70 µs on an
+  Apple M4 Mac mini). Unicode/CJK text is unchanged — it defers to the regex,
+  whose Unicode-property matching was never the bottleneck the fast-path targets.
+
 ## [3.3.0] - 2026-06-07
 
 ### Added

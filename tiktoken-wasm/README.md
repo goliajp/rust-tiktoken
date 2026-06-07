@@ -161,7 +161,7 @@ Map a model name to its encoding name without loading the encoding.
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-Estimate API cost in USD. Supports 63 models across 7 providers.
+Estimate API cost in USD. Supports 68 models across 7 providers.
 
 ### `getModelInfo(modelId): ModelInfo`
 
@@ -169,7 +169,7 @@ Get model metadata with full TypeScript typing.
 
 ### `allModels(): ModelInfo[]`
 
-List all 57 supported models with pricing info.
+List all 68 supported models with pricing info.
 
 ### `modelsByProvider(provider): ModelInfo[]`
 
