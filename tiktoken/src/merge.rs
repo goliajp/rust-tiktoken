@@ -395,7 +395,9 @@ mod tests {
         let entries: Vec<_> = hashmap.iter().map(|(k, &v)| (k.clone(), v)).collect();
         let vocab = Vocab::from_entries(entries);
 
-        // test various pieces that would go through the BPE merge path
+        // test various pieces that would go through the BPE merge path.
+        // The last few exceed LINEAR_THRESHOLD (32 bytes) on purpose, so they
+        // exercise the heap-based path rather than the short-piece linear scan.
         let test_pieces: Vec<&[u8]> = vec![
             b"hello",
             b"world",
@@ -406,6 +408,10 @@ mod tests {
             b"xyz123",
             b"  hello  ",
             b"\n\n\n",
+            b"supercalifragilisticexpialidocious",      // 34 bytes > threshold
+            b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // 64 bytes
+            b"0123456789012345678901234567890123456789", // 40 digit bytes
+            b"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", // 40 punct bytes
         ];
 
         for piece in test_pieces {
