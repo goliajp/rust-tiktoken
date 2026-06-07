@@ -1,7 +1,7 @@
 # @goliapkg/tiktoken-wasm
 
 [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm?style=flat-square&logo=npm)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)
-[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/npm/l/@goliapkg/tiktoken-wasm?style=flat-square)](#license)
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
@@ -223,4 +223,4 @@ See [`examples/react-app`](../tiktoken/examples/react-app/) for a complete Vite 
 
 ## License
 
-[MIT](LICENSE)
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
