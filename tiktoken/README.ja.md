@@ -8,14 +8,14 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
-最速の Rust BPE トークナイザ — tiktoken-rs より 7-10 倍高速。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral。
+最速の Rust BPE トークナイザ — ASCII テキストで tiktoken-rs より 15〜40 倍高速（CJK/Unicode では約 2 倍）。手書きの ASCII 高速パスによる。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral。
 
 ## 特徴
 
 - **マルチプロバイダ**: 5 社 11 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
-- **高速**: Arena ベースの語彙、ヒープ加速 BPE マージ、DFA 正規表現
+- **高速**: 手書き ASCII 高速パス（正規表現をバイパス）、Arena ベースの語彙、ハイブリッド BPE マージ
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
-- **料金見積もり**: 7 プロバイダ 63 モデルのコスト推定
+- **料金見積もり**: 7 プロバイダ 68 モデルのコスト推定
 - **コンパクト**: ruzstd 圧縮語彙データをコンパイル時に埋め込み
 - **ゼロアロケーションカウント**: `count()` パスはトークンベクタを割り当てません
 
@@ -25,23 +25,23 @@ Apple M4 Mac mini、シングルスレッドで測定。3 実装のトークン�
 
 #### cl100k_base encode
 
-| 入力 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
+| 入力 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| 短文 (13 B) | 1,700 ns | 1,248 ns | **118 ns** | **10.6x** | **14x** |
-| 中文 (900 B) | 32.2 us | 53.8 us | **7.2 us** | **7.5x** | **4.5x** |
-| 長文 (45 KB) | 1,500 us | 2,611 us | **366 us** | **7.1x** | **4.1x** |
-| Unicode (4.5 KB) | 141 us | 164 us | **101 us** | **1.6x** | **1.4x** |
-| コード (3.9 KB) | 247 us | 264 us | **42 us** | **6.3x** | **5.9x** |
+| 短文 (13 B) | 1,700 ns | 1,248 ns | **43 ns** | **29x** | **40x** |
+| 中文 (900 B) | 32.2 us | 53.8 us | **1.5 us** | **35x** | **21x** |
+| 長文 (45 KB) | 1,500 us | 2,611 us | **74 us** | **35x** | **20x** |
+| Unicode (4.5 KB) | 141 us | 164 us | **91 us** | **1.8x** | **1.6x** |
+| コード (3.9 KB) | 247 us | 264 us | **17 us** | **16x** | **15x** |
 
 #### o200k_base encode
 
-| 入力 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken 3.1** | vs tiktoken-rs | vs Python |
+| 入力 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
 |---|---|---|---|---|---|
-| 短文 (13 B) | 1,600 ns | 1,051 ns | **115 ns** | **9.1x** | **14x** |
-| 中文 (900 B) | 58.3 us | 56.2 us | **7.1 us** | **7.9x** | **8.2x** |
-| 長文 (45 KB) | 2,900 us | 2,799 us | **365 us** | **7.7x** | **7.9x** |
-| Unicode (4.5 KB) | 204 us | 187 us | **99 us** | **1.9x** | **2.1x** |
-| コード (3.9 KB) | 332 us | 253 us | **41 us** | **6.2x** | **8.1x** |
+| 短文 (13 B) | 1,600 ns | 1,051 ns | **40 ns** | **26x** | **40x** |
+| 中文 (900 B) | 58.3 us | 56.2 us | **1.5 us** | **37x** | **39x** |
+| 長文 (45 KB) | 2,900 us | 2,799 us | **73 us** | **38x** | **40x** |
+| Unicode (4.5 KB) | 204 us | 187 us | **95 us** | **2.0x** | **2.2x** |
+| コード (3.9 KB) | 332 us | 253 us | **16 us** | **16x** | **21x** |
 
 <details>
 <summary>なぜ速いのか？</summary>
@@ -49,9 +49,10 @@ Apple M4 Mac mini、シングルスレッドで測定。3 実装のトークン�
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
 | 語彙ストレージ | Arena ベース（単一アロケーション、キャッシュフレンドリー） | `HashMap<Vec<u8>>`（20 万回アロケーション） | PyO3 背後の Rust `HashMap` |
-| 正規表現エンジン | `regex`（DFA、線形時間） | `fancy-regex`（バックトラッキング） | `regex`（PyO3 + FFI オーバーヘッド経由） |
+| 事前トークン化（ASCII） | 手書き ASCII 高速パス、正規表現をスキップ | 常に正規表現を実行 | 常に正規表現を実行 |
+| 正規表現エンジン（フォールバック） | `regex`（DFA、線形時間） | `fancy-regex`（バックトラッキング） | `regex`（PyO3 + FFI オーバーヘッド経由） |
 | ハッシュマップ | カスタムオープンアドレス + `FxHash` | `rustc-hash` v1 | 標準 `HashMap` |
-| BPE マージ | ヒープ加速 O(n log n) | O(n*m) 線形スキャン | O(n*m) 線形スキャン |
+| BPE マージ | ハイブリッド: スタック線形スキャン（短い断片）+ ヒープ（長い断片） | O(n*m) 線形スキャン | O(n*m) 線形スキャン |
 | ゼロアロケーション `count()` | あり | なし | なし |
 
 ベンチマークソース：[`benches/`](benches/)。`cargo bench` で再現可能。
@@ -158,7 +159,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 63 モデルに対応。
+OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 68 モデルに対応。
 
 ## WebAssembly
 
