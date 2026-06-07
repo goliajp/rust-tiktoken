@@ -5,6 +5,18 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-06-07
+
+> From this release, `tiktoken` and `tiktoken-wasm` share one version number and
+> are released in lockstep (this crate jumps 3.4.0 → 3.5.0 to match `tiktoken`).
+
+### Changed
+- `tiktoken` path-dep bumped to 3.5.0. Inherits the ASCII fast-path
+  pre-tokenizers (cl100k / o200k / qwen2 / deepseek — 2.3–5.5x faster ASCII
+  `encode`/`count`), the hybrid linear/heap BPE merge, the chunked two-pass
+  `encode_parallel`, and pricing for Claude Opus 4.7/4.8 + the Gemini 3 series
+  (68 models total).
+
 ## [3.4.0] - 2026-06-07
 
 ### Changed
