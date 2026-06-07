@@ -53,7 +53,7 @@ const LLAMA3_PATTERN: &str = CL100K_PATTERN;
 // priority: numbers (1-3 digits) > CJK/Japanese > general pattern
 // final catch-all `[\s\S]` ensures format chars (ZWJ etc.) are not skipped,
 // matching HF's Split/Isolated behavior where non-matching text is kept.
-const DEEPSEEK_V3_PATTERN: &str = concat!(
+pub(crate) const DEEPSEEK_V3_PATTERN: &str = concat!(
     r"\p{N}{1,3}",
     r"|[一-龥\x{3040}-\x{309F}\x{30A0}-\x{30FF}]+",
     r"|[!-/:-@\[-`{-~][A-Za-z]+",
@@ -242,7 +242,7 @@ pub fn deepseek_v3() -> CoreBpe {
         ("<｜▁pad▁｜>", 2),
         ("<|EOT|>", 128805),
     ]);
-    CoreBpe::new(encoder, special, DEEPSEEK_V3_PATTERN, FastPath::None)
+    CoreBpe::new(encoder, special, DEEPSEEK_V3_PATTERN, FastPath::Deepseek)
 }
 
 /// Construct the qwen2 encoding (Qwen 2.5 / 3).

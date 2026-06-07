@@ -30,6 +30,8 @@ pub(crate) enum FastPath {
     /// qwen2 pattern: identical to cl100k except `\p{N}` matches a single digit
     /// (not 1-3), so it reuses the cl100k scanner with a max-digit cap of 1.
     Qwen2,
+    /// deepseek_v3 pattern (digits, CJK, punct+letters, letters, punct runs).
+    Deepseek,
 }
 
 /// Regex-based pre-tokenizer wrapping the existing regex + whitespace adjustment logic.
@@ -56,6 +58,7 @@ impl PreTokenizer for RegexPreTokenizer {
             FastPath::Cl100k => cl100k_ascii_next(bytes, pos, 3),
             FastPath::Qwen2 => cl100k_ascii_next(bytes, pos, 1),
             FastPath::O200k => o200k_ascii_next(bytes, pos),
+            FastPath::Deepseek => deepseek_ascii_next(bytes, pos),
             FastPath::None => None,
         };
         if let Some(r) = fast {
@@ -283,6 +286,117 @@ fn o200k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
     Some((i, end))
 }
 
+/// ASCII fast-path pre-tokenizer for the deepseek_v3 pattern.
+///
+/// Pattern (leftmost-first): `\p{N}{1,3}` | CJK/kana+ | `[ascii-punct][A-Za-z]+`
+/// | `[^\r\n\p{L}\p{P}\p{S}]?[\p{L}\p{M}]+` | ` ?[\p{P}\p{S}]+[\r\n]*` | `\s*[\r\n]+`
+/// | `\s+` | `[\s\S]`. ASCII `[\p{P}\p{S}]` is exactly `u8::is_ascii_punctuation()`.
+///
+/// Conservative: resolves digits, letters, punct+letters, punct runs, and the
+/// common space-led letter/punct pieces; defers to the regex on any non-ASCII
+/// byte, whitespace/control start, or catch-all case (deferral is always safe).
+#[inline]
+fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
+    let n = b.len();
+    if i >= n {
+        return None;
+    }
+    let c0 = b[i];
+    if c0 >= 0x80 {
+        return None; // non-ASCII incl. CJK/kana (rule 2) → defer
+    }
+
+    // Rule 1: \p{N}{1,3}
+    if c0.is_ascii_digit() {
+        let mut j = i;
+        let mut k = 0;
+        while j < n && k < 3 && b[j].is_ascii_digit() {
+            j += 1;
+            k += 1;
+        }
+        if k < 3 && j < n && b[j] >= 0x80 {
+            return None; // a Unicode \p{N} could extend the run
+        }
+        return Some((i, j));
+    }
+
+    // Rule 3: [ascii-punct][A-Za-z]+ (one punct glued to a letter run).
+    // Rule 5: ` ?[\p{P}\p{S}]+[\r\n]*` (here with no leading space — c0 is punct).
+    if c0.is_ascii_punctuation() {
+        if let Some(&c1) = b.get(i + 1)
+            && c1 < 0x80
+            && c1.is_ascii_alphabetic()
+        {
+            // Rule 3 — note its letters are [A-Za-z], so a non-ASCII byte simply
+            // ends the run (no defer needed).
+            let mut j = i + 1;
+            while j < n && b[j].is_ascii_alphabetic() {
+                j += 1;
+            }
+            return Some((i, j));
+        }
+        // Rule 5: punctuation/symbol run, then trailing newlines.
+        let mut k = i;
+        while k < n && b[k] < 0x80 && b[k].is_ascii_punctuation() {
+            k += 1;
+        }
+        if k < n && b[k] >= 0x80 {
+            return None; // a Unicode \p{P}/\p{S} could extend the run
+        }
+        while k < n && (b[k] == b'\r' || b[k] == b'\n') {
+            k += 1;
+        }
+        return Some((i, k));
+    }
+
+    // Rule 4 (no leading char): [\p{L}\p{M}]+ — for ASCII, a letter run.
+    if c0.is_ascii_alphabetic() {
+        let mut j = i;
+        while j < n && b[j].is_ascii_alphabetic() {
+            j += 1;
+        }
+        if j < n && b[j] >= 0x80 {
+            return None; // a Unicode letter/mark could extend the run
+        }
+        return Some((i, j));
+    }
+
+    // Leading space: Rule 4 (space + letters) or Rule 5 (space + punct run).
+    if c0 == b' ' {
+        match b.get(i + 1) {
+            Some(&c1) if c1 >= 0x80 => return None, // unicode letter/punct ambiguous
+            Some(&c1) if c1.is_ascii_alphabetic() => {
+                let mut j = i + 1;
+                while j < n && b[j].is_ascii_alphabetic() {
+                    j += 1;
+                }
+                if j < n && b[j] >= 0x80 {
+                    return None;
+                }
+                return Some((i, j));
+            }
+            Some(&c1) if c1.is_ascii_punctuation() => {
+                let mut k = i + 1;
+                while k < n && b[k] < 0x80 && b[k].is_ascii_punctuation() {
+                    k += 1;
+                }
+                if k < n && b[k] >= 0x80 {
+                    return None;
+                }
+                while k < n && (b[k] == b'\r' || b[k] == b'\n') {
+                    k += 1;
+                }
+                return Some((i, k));
+            }
+            // space followed by digit/space/eof → whitespace rules → defer
+            _ => return None,
+        }
+    }
+
+    // other whitespace, control chars, catch-all → defer to regex
+    None
+}
+
 /// Match a contraction at `b[i] == '\''`, returning its byte length (2 or 3) or
 /// `None`. Case-insensitive, matching `(?i:'s|'t|'re|'ve|'m|'ll|'d)`. Shared by
 /// both patterns (standalone alternative in cl100k, word suffix in o200k).
@@ -367,7 +481,9 @@ mod tests {
     // Single source of truth: the real production patterns. Importing them here
     // (rather than copying) guarantees the fast-path equivalence proptests below
     // validate against exactly the patterns used in production.
-    use crate::encoding::{CL100K_PATTERN, O200K_PATTERN, P50K_PATTERN, QWEN2_PATTERN};
+    use crate::encoding::{
+        CL100K_PATTERN, DEEPSEEK_V3_PATTERN, O200K_PATTERN, P50K_PATTERN, QWEN2_PATTERN,
+    };
 
     // verify RegexPreTokenizer matches the v2 behavior by comparing
     // piece-by-piece with v2's regex.find_at + adjust_whitespace_end
@@ -604,6 +720,22 @@ mod tests {
             let pt = RegexPreTokenizer::new(QWEN2_PATTERN, FastPath::Qwen2);
             let fast = collect_matches(&pt, &text);
             let reference = v2_collect_matches(QWEN2_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_deepseek_fast_matches_regex(text in ".*") {
+            let pt = RegexPreTokenizer::new(DEEPSEEK_V3_PATTERN, FastPath::Deepseek);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(DEEPSEEK_V3_PATTERN, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_deepseek_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
+            let pt = RegexPreTokenizer::new(DEEPSEEK_V3_PATTERN, FastPath::Deepseek);
+            let fast = collect_matches(&pt, &text);
+            let reference = v2_collect_matches(DEEPSEEK_V3_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
     }
