@@ -257,7 +257,13 @@ impl CoreBpe {
     pub fn encode_parallel(&self, text: &str) -> Vec<u32> {
         use rayon::prelude::*;
 
-        const THRESHOLD: usize = 4096;
+        // Below this size, single-threaded encode wins: the ASCII fast-path made
+        // serial tokenization cheap, and pre-tokenization (~60% of the work)
+        // stays serial here, so rayon's dispatch/join overhead dominates. Measured
+        // break-even on an M4 Pro is ~460 KB (45 KB: 1.8x slower; 180 KB: 1.1x
+        // slower; 900 KB: 1.2x faster). 512 KB keeps the parallel path strictly a
+        // win. Even above it the ceiling is only ~20% (Amdahl, serial pre-tokenize).
+        const THRESHOLD: usize = 512 * 1024;
         if text.len() < THRESHOLD {
             return self.encode(text);
         }
@@ -270,26 +276,37 @@ impl CoreBpe {
             pos = end;
         }
 
-        // encode each piece in parallel
+        // Encode the pieces in parallel, but grouped into contiguous chunks so
+        // each rayon task fills a single local buffer instead of allocating one
+        // Vec per piece (which would be tens of thousands of tiny allocations on
+        // large inputs). Aim for a few chunks per worker thread for load balance.
         let bytes = text.as_bytes();
-        let chunks: Vec<Vec<u32>> = ranges
-            .par_iter()
-            .map(|&(start, end)| {
-                let piece = &bytes[start..end];
-                if let Some(token) = self.vocab.get(piece) {
-                    vec![token]
-                } else {
-                    let mut tokens = Vec::with_capacity((end - start) / 3);
-                    merge::bpe_encode(piece, &self.vocab, &mut tokens);
-                    tokens
+        let chunk_size = ranges
+            .len()
+            .div_ceil(rayon::current_num_threads() * 4)
+            .max(1);
+        let parts: Vec<Vec<u32>> = ranges
+            .par_chunks(chunk_size)
+            .map(|chunk| {
+                let span = chunk.last().map_or(0, |&(_, end)| end)
+                    - chunk.first().map_or(0, |&(start, _)| start);
+                let mut local = Vec::with_capacity(span / 3 + 1);
+                for &(start, end) in chunk {
+                    let piece = &bytes[start..end];
+                    if let Some(token) = self.vocab.get(piece) {
+                        local.push(token);
+                    } else {
+                        merge::bpe_encode(piece, &self.vocab, &mut local);
+                    }
                 }
+                local
             })
             .collect();
 
-        let total: usize = chunks.iter().map(|c| c.len()).sum();
+        let total: usize = parts.iter().map(|c| c.len()).sum();
         let mut result = Vec::with_capacity(total);
-        for chunk in chunks {
-            result.extend_from_slice(&chunk);
+        for part in parts {
+            result.extend_from_slice(&part);
         }
         result
     }

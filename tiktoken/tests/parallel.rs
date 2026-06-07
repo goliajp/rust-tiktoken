@@ -26,9 +26,15 @@ fn parallel_empty_text() {
     assert_eq!(enc.encode_parallel(""), enc.encode(""));
 }
 
+// Must match the THRESHOLD in CoreBpe::encode_parallel.
+const PARALLEL_THRESHOLD: usize = 512 * 1024;
+
 #[test]
 fn parallel_all_encodings() {
-    let text = "The quick brown fox jumps over the lazy dog. 你好世界！\n".repeat(100);
+    // Large enough (> threshold) to actually exercise the parallel branch.
+    let text =
+        "The quick brown fox jumps over the lazy dog. 你好世界！\n".repeat(12000);
+    assert!(text.len() > PARALLEL_THRESHOLD);
     for name in [
         "cl100k_base",
         "o200k_base",
@@ -57,30 +63,28 @@ fn parallel_unicode_heavy() {
 }
 
 #[test]
-fn parallel_exactly_4096_bytes() {
-    let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-    let text = "x".repeat(4096);
-    assert_eq!(enc.encode_parallel(&text), enc.encode(&text));
-}
-
-#[test]
 fn parallel_just_under_threshold() {
+    // Falls back to serial; must still match.
     let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-    let text = "x".repeat(4095);
+    let text = "abc ".repeat(PARALLEL_THRESHOLD / 4 - 1);
+    assert!(text.len() < PARALLEL_THRESHOLD);
     assert_eq!(enc.encode_parallel(&text), enc.encode(&text));
 }
 
 #[test]
-fn parallel_just_over_threshold() {
+fn parallel_over_threshold_uses_parallel_path() {
+    // Large enough to take the real parallel (chunked two-pass) branch.
     let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-    let text = "x".repeat(4097);
+    let text = "The quick brown fox. ".repeat(40000);
+    assert!(text.len() > PARALLEL_THRESHOLD);
     assert_eq!(enc.encode_parallel(&text), enc.encode(&text));
 }
 
 #[test]
 fn parallel_single_large_word() {
+    // One huge piece above threshold: a single chunk, heavy BPE merge.
     let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-    let text = "a".repeat(5000);
+    let text = "a".repeat(PARALLEL_THRESHOLD + 1000);
     assert_eq!(enc.encode_parallel(&text), enc.encode(&text));
 }
 
