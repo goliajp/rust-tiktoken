@@ -13,6 +13,52 @@ const ALL_ENCODINGS: &[&str] = &[
     "mistral_v3",
 ];
 
+#[test]
+fn openai_newline_boundaries_match_canonical_token_ids() {
+    let cases = [
+        (
+            "cl100k_base",
+            [
+                ("word\n\nnext", &[1178, 271, 3684][..]),
+                ("word \nnext", &[1178, 720, 3684][..]),
+                ("\r\n@rem", &[319, 31, 1864][..]),
+            ],
+        ),
+        (
+            "o200k_base",
+            [
+                ("word\n\nnext", &[1801, 279, 7311][..]),
+                ("word \nnext", &[1801, 793, 7311][..]),
+                ("\r\n@rem", &[370, 31, 1935][..]),
+            ],
+        ),
+        (
+            "p50k_base",
+            [
+                ("word\n\nnext", &[4775, 198, 198, 19545][..]),
+                ("word \nnext", &[4775, 220, 198, 19545][..]),
+                ("\r\n@rem", &[201, 198, 31, 2787][..]),
+            ],
+        ),
+        (
+            "r50k_base",
+            [
+                ("word\n\nnext", &[4775, 198, 198, 19545][..]),
+                ("word \nnext", &[4775, 220, 198, 19545][..]),
+                ("\r\n@rem", &[201, 198, 31, 2787][..]),
+            ],
+        ),
+    ];
+
+    for (name, samples) in cases {
+        let enc = tiktoken::get_encoding(name).unwrap();
+        for (text, expected) in samples {
+            assert_eq!(enc.encode(text), expected, "[{name}] {text:?}");
+            assert_eq!(enc.count(text), expected.len(), "[{name}] {text:?}");
+        }
+    }
+}
+
 // helper: known special tokens for each encoding
 fn special_tokens_for(name: &str) -> Vec<&'static str> {
     match name {

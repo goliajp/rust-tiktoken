@@ -34,6 +34,13 @@ pub(crate) enum FastPath {
     Deepseek,
 }
 
+impl FastPath {
+    /// Whether the associated pattern has a dedicated `\s*[\r\n]+` branch.
+    const fn has_newline_branch(self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
 /// Regex-based pre-tokenizer wrapping the existing regex + whitespace adjustment logic.
 pub struct RegexPreTokenizer {
     regex: Regex,
@@ -66,7 +73,7 @@ impl PreTokenizer for RegexPreTokenizer {
         }
         let mat = self.regex.find_at(text, pos)?;
         let start = mat.start();
-        let end = adjust_whitespace_end(bytes, start, mat.end());
+        let end = adjust_match_end(bytes, start, mat.end(), self.fast.has_newline_branch());
         Some((start, end))
     }
 }
@@ -423,6 +430,14 @@ fn match_contraction(b: &[u8], i: usize) -> Option<usize> {
 /// Emulates `\s+(?!\S)|\s+` from original tiktoken patterns.
 /// Pure byte-level fast path for ASCII whitespace, char-level fallback for Unicode.
 #[inline]
+fn adjust_match_end(bytes: &[u8], start: usize, end: usize, has_newline_branch: bool) -> usize {
+    if has_newline_branch && end > start && matches!(bytes[end - 1], b'\r' | b'\n') {
+        return end;
+    }
+    adjust_whitespace_end(bytes, start, end)
+}
+
+#[inline]
 fn adjust_whitespace_end(bytes: &[u8], start: usize, end: usize) -> usize {
     if end - start <= 1 || end >= bytes.len() {
         return end;
@@ -493,9 +508,10 @@ mod tests {
         CL100K_PATTERN, DEEPSEEK_V3_PATTERN, O200K_PATTERN, P50K_PATTERN, QWEN2_PATTERN,
     };
 
-    // verify RegexPreTokenizer matches the v2 behavior by comparing
-    // piece-by-piece with v2's regex.find_at + adjust_whitespace_end
-    fn v2_collect_matches(pattern: &str, text: &str) -> Vec<(usize, usize)> {
+    // Compare the fast scanner piece-by-piece with the regex path. Patterns
+    // with a dedicated newline branch preserve those matches; the legacy
+    // GPT-2 pattern still receives the generic whitespace adjustment.
+    fn regex_collect_matches(pattern: &str, text: &str) -> Vec<(usize, usize)> {
         let regex = Regex::new(pattern).unwrap();
         let bytes = text.as_bytes();
         let mut result = vec![];
@@ -506,7 +522,7 @@ mod tests {
                 None => break,
             };
             let start = mat.start();
-            let end = adjust_whitespace_end(bytes, start, mat.end());
+            let end = adjust_match_end(bytes, start, mat.end(), pattern != P50K_PATTERN);
             result.push((start, end));
             pos = end;
         }
@@ -516,7 +532,7 @@ mod tests {
     #[test]
     fn test_cl100k_english() {
         let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
-        let v2 = v2_collect_matches(CL100K_PATTERN, "Hello, world!");
+        let v2 = regex_collect_matches(CL100K_PATTERN, "Hello, world!");
         let v3 = collect_matches(&pt, "Hello, world!");
         assert_eq!(v2, v3);
     }
@@ -525,7 +541,7 @@ mod tests {
     fn test_cl100k_cjk() {
         let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "你好世界";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
+        let v2 = regex_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
         assert_eq!(v2, v3);
     }
@@ -534,7 +550,7 @@ mod tests {
     fn test_cl100k_contractions() {
         let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "I'm don't they're we've she'll it'd";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
+        let v2 = regex_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
         assert_eq!(v2, v3);
     }
@@ -543,7 +559,7 @@ mod tests {
     fn test_o200k_english() {
         let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
         let text = "Hello, world! CamelCase mixedScript123";
-        let v2 = v2_collect_matches(O200K_PATTERN, text);
+        let v2 = regex_collect_matches(O200K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
         assert_eq!(v2, v3);
     }
@@ -552,7 +568,7 @@ mod tests {
     fn test_p50k_english() {
         let pt = RegexPreTokenizer::new(P50K_PATTERN, FastPath::None);
         let text = "Hello world, I'm testing!";
-        let v2 = v2_collect_matches(P50K_PATTERN, text);
+        let v2 = regex_collect_matches(P50K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
         assert_eq!(v2, v3);
     }
@@ -567,7 +583,7 @@ mod tests {
     fn test_only_whitespace() {
         let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "   \n  \t  ";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
+        let v2 = regex_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
         assert_eq!(v2, v3);
     }
@@ -576,7 +592,7 @@ mod tests {
     fn test_emoji() {
         let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "🎉🚀💡";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
+        let v2 = regex_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
         assert_eq!(v2, v3);
     }
@@ -585,7 +601,7 @@ mod tests {
     fn test_mixed_script() {
         let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
         let text = "Hello 你好 World 🌍";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
+        let v2 = regex_collect_matches(CL100K_PATTERN, text);
         let v3 = collect_matches(&pt, text);
         assert_eq!(v2, v3);
     }
@@ -669,7 +685,7 @@ mod tests {
         ] {
             let pt = RegexPreTokenizer::new(pattern, fast);
             for text in &texts {
-                let v2 = v2_collect_matches(pattern, text);
+                let v2 = regex_collect_matches(pattern, text);
                 let v3 = collect_matches(&pt, text);
                 assert_eq!(v2, v3, "mismatch for pattern / text: {text:?}");
             }
@@ -686,7 +702,7 @@ mod tests {
         fn prop_cl100k_fast_matches_regex(text in ".*") {
             let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(CL100K_PATTERN, &text);
+            let reference = regex_collect_matches(CL100K_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
@@ -695,7 +711,7 @@ mod tests {
         fn prop_cl100k_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
             let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(CL100K_PATTERN, &text);
+            let reference = regex_collect_matches(CL100K_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
@@ -703,7 +719,7 @@ mod tests {
         fn prop_o200k_fast_matches_regex(text in ".*") {
             let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(O200K_PATTERN, &text);
+            let reference = regex_collect_matches(O200K_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
@@ -711,7 +727,7 @@ mod tests {
         fn prop_o200k_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
             let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(O200K_PATTERN, &text);
+            let reference = regex_collect_matches(O200K_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
@@ -719,7 +735,7 @@ mod tests {
         fn prop_qwen2_fast_matches_regex(text in ".*") {
             let pt = RegexPreTokenizer::new(QWEN2_PATTERN, FastPath::Qwen2);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(QWEN2_PATTERN, &text);
+            let reference = regex_collect_matches(QWEN2_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
@@ -727,7 +743,7 @@ mod tests {
         fn prop_qwen2_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
             let pt = RegexPreTokenizer::new(QWEN2_PATTERN, FastPath::Qwen2);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(QWEN2_PATTERN, &text);
+            let reference = regex_collect_matches(QWEN2_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
@@ -735,7 +751,7 @@ mod tests {
         fn prop_deepseek_fast_matches_regex(text in ".*") {
             let pt = RegexPreTokenizer::new(DEEPSEEK_V3_PATTERN, FastPath::Deepseek);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(DEEPSEEK_V3_PATTERN, &text);
+            let reference = regex_collect_matches(DEEPSEEK_V3_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
@@ -743,7 +759,7 @@ mod tests {
         fn prop_deepseek_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
             let pt = RegexPreTokenizer::new(DEEPSEEK_V3_PATTERN, FastPath::Deepseek);
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(DEEPSEEK_V3_PATTERN, &text);
+            let reference = regex_collect_matches(DEEPSEEK_V3_PATTERN, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
     }
