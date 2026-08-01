@@ -20,7 +20,7 @@ base64 = "^0.22"
 rayon = { version = "^1", optional = true }
 regex = "^1"
 rustc-hash = "^2"
-ruzstd = "^0.8"
+ruzstd = "^0.9"
 
 [dev-dependencies]
 criterion = { version = "^0.8", features = ["html_reports"] }
