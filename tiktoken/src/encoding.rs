@@ -11,7 +11,7 @@ use base64::Engine;
 use rustc_hash::FxHashMap;
 
 use crate::bpe::CoreBpe;
-use crate::pretokenize::FastPath;
+use crate::pretokenize::{FastPath, WhitespaceRules};
 
 // embedded encoding data files — zstd-compressed, decompressed on first use via OnceLock in lib.rs
 const CL100K_BASE_DATA: &[u8] = include_bytes!("encodings/cl100k_base.tiktoken.zst");
@@ -68,8 +68,21 @@ pub(crate) const DEEPSEEK_V3_PATTERN: &str = concat!(
 // qwen2 pattern: similar to cl100k but \p{N} matches single digits (not 1-3)
 pub(crate) const QWEN2_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
 
-// mistral v3 (tekken) pattern: same as cl100k
-const MISTRAL_V3_PATTERN: &str = CL100K_PATTERN;
+// mistral v3 (tekken) pattern. Case-splitting like o200k, but with three
+// deliberate differences that a cl100k/o200k stand-in gets wrong:
+//   - no contraction rule at all (no `(?i:'s|'t|…)` alternative or suffix)
+//   - `\p{N}` matches a single digit, not `\p{N}{1,3}`
+//   - the punctuation rule's trailing class is `[\r\n/]*`, admitting `/`
+// Source: the `Split` pre-tokenizer regex in Tekken's tokenizer.json
+// (e.g. mistralai/Mistral-Nemo-Base-2407).
+pub(crate) const MISTRAL_V3_PATTERN: &str = concat!(
+    r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+",
+    r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*",
+    r"|\p{N}",
+    r"| ?[^\s\p{L}\p{N}]+[\r\n/]*",
+    r"|\s*[\r\n]+",
+    r"|\s+",
+);
 
 /// Parse a zstd-compressed `.tiktoken` file into a rank map.
 ///
@@ -129,7 +142,13 @@ pub fn cl100k_base() -> CoreBpe {
         ("<|fim_suffix|>", 100260),
         ("<|endofprompt|>", 100276),
     ]);
-    CoreBpe::new(encoder, special, CL100K_PATTERN, FastPath::Cl100k)
+    CoreBpe::new(
+        encoder,
+        special,
+        CL100K_PATTERN,
+        FastPath::Cl100k,
+        WhitespaceRules::NewlineFirst,
+    )
 }
 
 /// Construct the p50k_base encoding (text-davinci-002/003, code-davinci, code-cushman).
@@ -137,7 +156,13 @@ pub fn cl100k_base() -> CoreBpe {
 pub fn p50k_base() -> CoreBpe {
     let encoder = parse_tiktoken_data(P50K_BASE_DATA);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
-    CoreBpe::new(encoder, special, P50K_PATTERN, FastPath::None)
+    CoreBpe::new(
+        encoder,
+        special,
+        P50K_PATTERN,
+        FastPath::None,
+        WhitespaceRules::Generic,
+    )
 }
 
 /// Construct the p50k_edit encoding (text-davinci-edit, code-davinci-edit).
@@ -150,7 +175,13 @@ pub fn p50k_edit() -> CoreBpe {
         ("<|fim_middle|>", 50282),
         ("<|fim_suffix|>", 50283),
     ]);
-    CoreBpe::new(encoder, special, P50K_PATTERN, FastPath::None)
+    CoreBpe::new(
+        encoder,
+        special,
+        P50K_PATTERN,
+        FastPath::None,
+        WhitespaceRules::Generic,
+    )
 }
 
 /// Construct the o200k_base encoding (GPT-4o, o1, o3, o4-mini).
@@ -158,7 +189,13 @@ pub fn p50k_edit() -> CoreBpe {
 pub fn o200k_base() -> CoreBpe {
     let encoder = parse_tiktoken_data(O200K_BASE_DATA);
     let special = special_tokens(&[("<|endoftext|>", 199999), ("<|endofprompt|>", 200018)]);
-    CoreBpe::new(encoder, special, O200K_PATTERN, FastPath::O200k)
+    CoreBpe::new(
+        encoder,
+        special,
+        O200K_PATTERN,
+        FastPath::O200k,
+        WhitespaceRules::NewlineFirst,
+    )
 }
 
 /// Construct the o200k_harmony encoding (gpt-oss family / harmony chat format).
@@ -194,7 +231,13 @@ pub fn o200k_harmony() -> CoreBpe {
     for id in 200013..=201087_u32 {
         special.insert(format!("<|reserved_{id}|>").into_bytes(), id);
     }
-    CoreBpe::new(encoder, special, O200K_PATTERN, FastPath::O200k)
+    CoreBpe::new(
+        encoder,
+        special,
+        O200K_PATTERN,
+        FastPath::O200k,
+        WhitespaceRules::NewlineFirst,
+    )
 }
 
 /// Construct the r50k_base encoding (GPT-3 era: davinci, curie, babbage, ada).
@@ -203,7 +246,13 @@ pub fn o200k_harmony() -> CoreBpe {
 pub fn r50k_base() -> CoreBpe {
     let encoder = parse_tiktoken_data(R50K_BASE_DATA);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
-    CoreBpe::new(encoder, special, P50K_PATTERN, FastPath::None)
+    CoreBpe::new(
+        encoder,
+        special,
+        P50K_PATTERN,
+        FastPath::None,
+        WhitespaceRules::Generic,
+    )
 }
 
 /// Construct the `gpt2` encoding (GPT-2 BPE).
@@ -230,24 +279,61 @@ pub fn llama3() -> CoreBpe {
         ("<|eot_id|>", 128009),
         ("<|python_tag|>", 128010),
     ]);
-    CoreBpe::new(encoder, special, LLAMA3_PATTERN, FastPath::Cl100k)
+    CoreBpe::new(
+        encoder,
+        special,
+        LLAMA3_PATTERN,
+        FastPath::Cl100k,
+        WhitespaceRules::NewlineFirst,
+    )
 }
 
 /// Construct the deepseek_v3 encoding (DeepSeek V3, R1).
-/// Vocabulary size: 128,000 regular tokens + 804 special tokens.
+///
+/// Vocabulary size: 128,000 regular tokens + 818 added tokens — 3 sentence
+/// markers, 800 placeholders (`<｜place▁holder▁no▁0｜>`..=`no▁799｜>`, ids
+/// 128000..=128799), and 15 named tokens (ids 128800..=128814).
+///
+/// Note the named tokens mostly use fullwidth pipes (`｜`, U+FF5C), not ASCII
+/// `|`; `<|EOT|>` is the one exception and really is ASCII.
 pub fn deepseek_v3() -> CoreBpe {
     let encoder = parse_tiktoken_data(DEEPSEEK_V3_DATA);
-    let special = special_tokens(&[
+    let mut special = special_tokens(&[
         ("<｜begin▁of▁sentence｜>", 0),
         ("<｜end▁of▁sentence｜>", 1),
         ("<｜▁pad▁｜>", 2),
+        ("<｜fim▁hole｜>", 128800),
+        ("<｜fim▁begin｜>", 128801),
+        ("<｜fim▁end｜>", 128802),
+        ("<｜User｜>", 128803),
+        ("<｜Assistant｜>", 128804),
         ("<|EOT|>", 128805),
+        ("<｜tool▁calls▁begin｜>", 128806),
+        ("<｜tool▁calls▁end｜>", 128807),
+        ("<｜tool▁call▁begin｜>", 128808),
+        ("<｜tool▁call▁end｜>", 128809),
+        ("<｜tool▁outputs▁begin｜>", 128810),
+        ("<｜tool▁outputs▁end｜>", 128811),
+        ("<｜tool▁output▁begin｜>", 128812),
+        ("<｜tool▁output▁end｜>", 128813),
+        ("<｜tool▁sep｜>", 128814),
     ]);
-    CoreBpe::new(encoder, special, DEEPSEEK_V3_PATTERN, FastPath::Deepseek)
+    for id in 128000..=128799_u32 {
+        let n = id - 128000;
+        special.insert(format!("<｜place▁holder▁no▁{n}｜>").into_bytes(), id);
+    }
+    CoreBpe::new(
+        encoder,
+        special,
+        DEEPSEEK_V3_PATTERN,
+        FastPath::Deepseek,
+        WhitespaceRules::NewlineFirstSplitOnNumCjk,
+    )
 }
 
 /// Construct the qwen2 encoding (Qwen 2.5 / 3).
-/// Vocabulary size: 151,643 regular tokens + 14 special tokens.
+/// Vocabulary size: 151,643 regular tokens + 22 added tokens (ids
+/// 151643..=151664, covering the chat, vision, tool-call and FIM markers).
 pub fn qwen2() -> CoreBpe {
     let encoder = parse_tiktoken_data(QWEN2_DATA);
     let special = special_tokens(&[
@@ -265,8 +351,22 @@ pub fn qwen2() -> CoreBpe {
         ("<|vision_pad|>", 151654),
         ("<|image_pad|>", 151655),
         ("<|video_pad|>", 151656),
+        ("<tool_call>", 151657),
+        ("</tool_call>", 151658),
+        ("<|fim_prefix|>", 151659),
+        ("<|fim_middle|>", 151660),
+        ("<|fim_suffix|>", 151661),
+        ("<|fim_pad|>", 151662),
+        ("<|repo_name|>", 151663),
+        ("<|file_sep|>", 151664),
     ]);
-    CoreBpe::new(encoder, special, QWEN2_PATTERN, FastPath::Qwen2)
+    CoreBpe::new(
+        encoder,
+        special,
+        QWEN2_PATTERN,
+        FastPath::Qwen2,
+        WhitespaceRules::NewlineFirst,
+    )
 }
 
 /// Construct the mistral_v3 encoding (Mistral, Mixtral with Tekken tokenizer).
@@ -291,7 +391,13 @@ pub fn mistral_v3() -> CoreBpe {
         ("[MIDDLE]", 15),
         ("[SUFFIX]", 16),
     ]);
-    CoreBpe::new(encoder, special, MISTRAL_V3_PATTERN, FastPath::Cl100k)
+    CoreBpe::new(
+        encoder,
+        special,
+        MISTRAL_V3_PATTERN,
+        FastPath::Tekken,
+        WhitespaceRules::NewlineFirst,
+    )
 }
 
 /// Expose cl100k rank map for internal tests (e.g. Vocab equivalence)

@@ -23,7 +23,7 @@ pub trait PreTokenizer: Send + Sync {
 pub(crate) enum FastPath {
     /// No fast path: always use the regex (for patterns without a scanner).
     None,
-    /// cl100k_base / llama3 / mistral_v3 pattern.
+    /// cl100k_base / llama3 pattern.
     Cl100k,
     /// o200k_base / o200k_harmony pattern.
     O200k,
@@ -32,6 +32,44 @@ pub(crate) enum FastPath {
     Qwen2,
     /// deepseek_v3 pattern (digits, CJK, punct+letters, letters, punct runs).
     Deepseek,
+    /// mistral_v3 (Tekken) pattern: o200k-style case splitting, but with no
+    /// contraction rule, single-digit `\p{N}`, and a `[\r\n/]*` punctuation tail.
+    Tekken,
+}
+
+/// Which whitespace rules a pattern uses, deciding whether the `\s+(?!\S)`
+/// lookahead emulation may trim a match. Like [`FastPath`], this is chosen by
+/// the caller in `encoding.rs`, which owns the pattern definitions.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WhitespaceRules {
+    /// The pattern's only whitespace handling is the generic `\s+(?!\S)|\s+`
+    /// (p50k_base / r50k_base). Every all-whitespace match carries the
+    /// lookahead, so all of them are subject to the trim.
+    Generic,
+    /// The pattern has a dedicated `\s*[\r\n]+` branch ordered *before* the
+    /// generic `\s+(?!\S)|\s+` (cl100k, o200k, qwen2, deepseek_v3).
+    ///
+    /// Under leftmost-first alternation an all-whitespace run that contains a
+    /// newline is always claimed by that branch, which has no lookahead — so a
+    /// match ending in `\r`/`\n` must never be trimmed. Trimming it would split
+    /// canonical multi-newline tokens (`"\n\n"`, `"\r\n"`) into single ones.
+    NewlineFirst,
+    /// deepseek_v3: as [`Self::NewlineFirst`], but the pattern is the last stage
+    /// of a sequential HuggingFace `Split` pipeline whose earlier stages isolate
+    /// `\p{N}{1,3}` runs and CJK/kana runs. This crate folds those stages into
+    /// one alternation, so the lookahead — which upstream only ever sees a
+    /// single stage-boundary-delimited slice — would otherwise peek past a
+    /// boundary. A digit or CJK/kana char after a whitespace run starts a new
+    /// upstream slice and so acts as end-of-input: no trim.
+    NewlineFirstSplitOnNumCjk,
+}
+
+/// Whether `c` would have been isolated by an earlier stage of the deepseek_v3
+/// split pipeline: `\p{N}{1,3}` (stage 1) or `[一-龥\u{3040}-\u{309F}\u{30A0}-\u{30FF}]+`
+/// (stage 2). Kept in sync with `DEEPSEEK_V3_PATTERN`'s first two alternatives.
+#[inline]
+fn is_deepseek_split_boundary(c: char) -> bool {
+    c.is_numeric() || matches!(c, '一'..='龥' | '\u{3040}'..='\u{309F}' | '\u{30A0}'..='\u{30FF}')
 }
 
 /// Regex-based pre-tokenizer wrapping the existing regex + whitespace adjustment logic.
@@ -39,13 +77,16 @@ pub struct RegexPreTokenizer {
     regex: Regex,
     /// Which ASCII fast-path scanner (if any) to try before the regex.
     fast: FastPath,
+    /// Which whitespace rules the pattern uses (gates the lookahead trim).
+    ws: WhitespaceRules,
 }
 
 impl RegexPreTokenizer {
-    pub(crate) fn new(pattern: &str, fast: FastPath) -> Self {
+    pub(crate) fn new(pattern: &str, fast: FastPath, ws: WhitespaceRules) -> Self {
         Self {
             regex: Regex::new(pattern).expect("invalid regex pattern"),
             fast,
+            ws,
         }
     }
 }
@@ -57,7 +98,8 @@ impl PreTokenizer for RegexPreTokenizer {
         let fast = match self.fast {
             FastPath::Cl100k => cl100k_ascii_next(bytes, pos, 3),
             FastPath::Qwen2 => cl100k_ascii_next(bytes, pos, 1),
-            FastPath::O200k => o200k_ascii_next(bytes, pos),
+            FastPath::O200k => o200k_like_ascii_next(bytes, pos, true, 3, false),
+            FastPath::Tekken => o200k_like_ascii_next(bytes, pos, false, 1, true),
             FastPath::Deepseek => deepseek_ascii_next(bytes, pos),
             FastPath::None => None,
         };
@@ -66,16 +108,17 @@ impl PreTokenizer for RegexPreTokenizer {
         }
         let mat = self.regex.find_at(text, pos)?;
         let start = mat.start();
-        let end = adjust_whitespace_end(bytes, start, mat.end());
+        let end = adjust_whitespace_end(bytes, start, mat.end(), self.ws);
         Some((start, end))
     }
 }
 
-/// Consume a run of `\r`/`\n` starting at `k`, returning the new offset.
-/// Implements the trailing `[\r\n]*` shared by several pattern rules.
+/// Consume the trailing line-tail class of the punctuation rule starting at `k`,
+/// returning the new offset. Most patterns spell it `[\r\n]*`; Mistral's Tekken
+/// pattern spells it `[\r\n/]*`, so `slash` admits `/` as well.
 #[inline]
-fn take_crlf(b: &[u8], mut k: usize) -> usize {
-    while k < b.len() && (b[k] == b'\r' || b[k] == b'\n') {
+fn take_line_tail(b: &[u8], mut k: usize, slash: bool) -> usize {
+    while k < b.len() && (b[k] == b'\r' || b[k] == b'\n' || (slash && b[k] == b'/')) {
         k += 1;
     }
     k
@@ -90,7 +133,12 @@ fn take_crlf(b: &[u8], mut k: usize) -> usize {
 /// start is whitespace, or a non-ASCII byte could extend the run under Unicode
 /// semantics). Caller guarantees `i < n` and `b[i] < 0x80`.
 #[inline]
-fn ascii_num_punct(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, usize)> {
+fn ascii_num_punct(
+    b: &[u8],
+    i: usize,
+    max_digits: usize,
+    slash_tail: bool,
+) -> Option<(usize, usize)> {
     let n = b.len();
     let c0 = b[i];
 
@@ -143,7 +191,7 @@ fn ascii_num_punct(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, usiz
         if k < n && b[k] >= 0x80 {
             return None;
         }
-        k = take_crlf(b, k);
+        k = take_line_tail(b, k, slash_tail);
         return Some((i, k));
     }
 
@@ -211,18 +259,29 @@ fn cl100k_ascii_next(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, us
     }
 
     // Rules 3 & 4: digits, punctuation. Rules 5/6 (whitespace) → defer.
-    ascii_num_punct(b, i, max_digits)
+    ascii_num_punct(b, i, max_digits, false)
 }
 
-/// ASCII fast-path pre-tokenizer for the o200k pattern.
+/// ASCII fast-path pre-tokenizer for the case-splitting patterns: o200k and
+/// Mistral's Tekken.
 ///
-/// The letter rules differ from cl100k: o200k splits on case
-/// (`[\p{Lu}…]*[\p{Ll}…]+` then `[\p{Lu}…]+[\p{Ll}…]*`, CamelCase-aware) and
-/// attaches an optional contraction suffix to the word. Within ASCII the upper
-/// class is `[A-Z]` and the lower class is `[a-z]` (Lt/Lm/Lo/M are empty in
-/// ASCII). Digit/punct/whitespace rules are identical to cl100k.
+/// The letter rules differ from cl100k: both split on case
+/// (`[\p{Lu}…]*[\p{Ll}…]+` then `[\p{Lu}…]+[\p{Ll}…]*`, CamelCase-aware).
+/// Within ASCII the upper class is `[A-Z]` and the lower class is `[a-z]`
+/// (Lt/Lm/Lo/M are empty in ASCII).
+///
+/// The two differ in three places, all passed in by the caller:
+/// o200k attaches an optional contraction suffix to the word and uses
+/// `\p{N}{1,3}` + `[\r\n]*`; Tekken has no contraction rule and uses `\p{N}`
+/// + `[\r\n/]*`.
 #[inline]
-fn o200k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
+fn o200k_like_ascii_next(
+    b: &[u8],
+    i: usize,
+    contractions: bool,
+    max_digits: usize,
+    slash_tail: bool,
+) -> Option<(usize, usize)> {
     let n = b.len();
     if i >= n {
         return None;
@@ -241,11 +300,11 @@ fn o200k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
         // next byte is an ASCII letter; otherwise it's a digit/punct/ws piece.
         match b.get(i + 1) {
             Some(&c1) if c1 < 0x80 && c1.is_ascii_alphabetic() => i + 1,
-            _ => return ascii_num_punct(b, i, 3),
+            _ => return ascii_num_punct(b, i, max_digits, slash_tail),
         }
     } else {
         // digit, or \r\n
-        return ascii_num_punct(b, i, 3);
+        return ascii_num_punct(b, i, max_digits, slash_tail);
     };
 
     // Scan the uppercase run from `p`.
@@ -288,8 +347,10 @@ fn o200k_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
     };
 
     // Optional contraction suffix attached to the word: (?i:'s|'t|…)?
+    // Tekken has no contraction rule at all, so it never extends the word here.
     let mut end = letters_end;
-    if end < n
+    if contractions
+        && end < n
         && b[end] == b'\''
         && let Some(len) = match_contraction(b, end)
     {
@@ -355,7 +416,7 @@ fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
         if k < n && b[k] >= 0x80 {
             return None; // a Unicode \p{P}/\p{S} could extend the run
         }
-        k = take_crlf(b, k);
+        k = take_line_tail(b, k, false);
         return Some((i, k));
     }
 
@@ -393,7 +454,7 @@ fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
                 if k < n && b[k] >= 0x80 {
                     return None;
                 }
-                k = take_crlf(b, k);
+                k = take_line_tail(b, k, false);
                 return Some((i, k));
             }
             // space followed by digit/space/eof → whitespace rules → defer
@@ -422,15 +483,41 @@ fn match_contraction(b: &[u8], i: usize) -> Option<usize> {
 
 /// Emulates `\s+(?!\S)|\s+` from original tiktoken patterns.
 /// Pure byte-level fast path for ASCII whitespace, char-level fallback for Unicode.
+///
+/// `ws` gates the emulation: only the generic whitespace branch carries the
+/// lookahead. For newline-branch patterns a match ending in `\r`/`\n` came from
+/// a rule that has none (`\s*[\r\n]+`, or the `[\r\n]*` tail of the punctuation
+/// rule) and is returned untouched. For
+/// [`WhitespaceRules::NewlineFirstSplitOnNumCjk`] a following digit or CJK char
+/// is an upstream split boundary and counts as end-of-input.
 #[inline]
-fn adjust_whitespace_end(bytes: &[u8], start: usize, end: usize) -> usize {
+fn adjust_whitespace_end(bytes: &[u8], start: usize, end: usize, ws: WhitespaceRules) -> usize {
     if end - start <= 1 || end >= bytes.len() {
+        return end;
+    }
+
+    // Newline-branch patterns: a match ending in \r/\n never carries the
+    // lookahead, so it keeps its full extent (canonical "\n\n" / "\r\n" tokens).
+    if ws != WhitespaceRules::Generic && matches!(bytes[end - 1], b'\r' | b'\n') {
         return end;
     }
 
     // fast reject: if first byte is printable ASCII (0x21..0x7E), not whitespace
     let first = bytes[start];
     if first > 0x20 && first < 0x7F {
+        return end;
+    }
+
+    // deepseek_v3: an upstream split boundary right after the run terminates the
+    // slice the lookahead would have seen, so the run keeps its full extent.
+    if ws == WhitespaceRules::NewlineFirstSplitOnNumCjk
+        && let Some(next) = bytes[end..].iter().next()
+        && (next.is_ascii_digit() || *next >= 0x80)
+        && let Some(c) = std::str::from_utf8(&bytes[end..])
+            .ok()
+            .and_then(|s| s.chars().next())
+        && is_deepseek_split_boundary(c)
+    {
         return end;
     }
 
@@ -490,13 +577,61 @@ mod tests {
     // (rather than copying) guarantees the fast-path equivalence proptests below
     // validate against exactly the patterns used in production.
     use crate::encoding::{
-        CL100K_PATTERN, DEEPSEEK_V3_PATTERN, O200K_PATTERN, P50K_PATTERN, QWEN2_PATTERN,
+        CL100K_PATTERN, DEEPSEEK_V3_PATTERN, MISTRAL_V3_PATTERN, O200K_PATTERN, P50K_PATTERN,
+        QWEN2_PATTERN,
     };
 
-    // verify RegexPreTokenizer matches the v2 behavior by comparing
-    // piece-by-piece with v2's regex.find_at + adjust_whitespace_end
-    fn v2_collect_matches(pattern: &str, text: &str) -> Vec<(usize, usize)> {
-        let regex = Regex::new(pattern).unwrap();
+    /// A production pattern bundled with the [`FastPath`] and
+    /// [`WhitespaceRules`] `encoding.rs` pairs it with. Keeping the three
+    /// together stops tests from drifting to a combination that never ships.
+    #[derive(Clone, Copy)]
+    struct Spec {
+        pattern: &'static str,
+        fast: FastPath,
+        ws: WhitespaceRules,
+    }
+
+    const CL100K: Spec = Spec {
+        pattern: CL100K_PATTERN,
+        fast: FastPath::Cl100k,
+        ws: WhitespaceRules::NewlineFirst,
+    };
+    const O200K: Spec = Spec {
+        pattern: O200K_PATTERN,
+        fast: FastPath::O200k,
+        ws: WhitespaceRules::NewlineFirst,
+    };
+    const QWEN2: Spec = Spec {
+        pattern: QWEN2_PATTERN,
+        fast: FastPath::Qwen2,
+        ws: WhitespaceRules::NewlineFirst,
+    };
+    const DEEPSEEK: Spec = Spec {
+        pattern: DEEPSEEK_V3_PATTERN,
+        fast: FastPath::Deepseek,
+        ws: WhitespaceRules::NewlineFirst,
+    };
+    const MISTRAL: Spec = Spec {
+        pattern: MISTRAL_V3_PATTERN,
+        fast: FastPath::Tekken,
+        ws: WhitespaceRules::NewlineFirst,
+    };
+    const P50K: Spec = Spec {
+        pattern: P50K_PATTERN,
+        fast: FastPath::None,
+        ws: WhitespaceRules::Generic,
+    };
+
+    impl Spec {
+        fn tokenizer(self) -> RegexPreTokenizer {
+            RegexPreTokenizer::new(self.pattern, self.fast, self.ws)
+        }
+    }
+
+    // Reference implementation: pure regex + whitespace adjustment, with no
+    // ASCII fast path. The fast paths must be byte-for-byte equivalent to it.
+    fn reference_matches(spec: Spec, text: &str) -> Vec<(usize, usize)> {
+        let regex = Regex::new(spec.pattern).unwrap();
         let bytes = text.as_bytes();
         let mut result = vec![];
         let mut pos = 0;
@@ -506,131 +641,111 @@ mod tests {
                 None => break,
             };
             let start = mat.start();
-            let end = adjust_whitespace_end(bytes, start, mat.end());
+            let end = adjust_whitespace_end(bytes, start, mat.end(), spec.ws);
             result.push((start, end));
             pos = end;
         }
         result
     }
 
+    fn assert_fast_matches_reference(spec: Spec, text: &str) {
+        let pt = spec.tokenizer();
+        assert_eq!(
+            reference_matches(spec, text),
+            collect_matches(&pt, text),
+            "fast/regex mismatch for {text:?}"
+        );
+    }
+
     #[test]
     fn test_cl100k_english() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
-        let v2 = v2_collect_matches(CL100K_PATTERN, "Hello, world!");
-        let v3 = collect_matches(&pt, "Hello, world!");
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(CL100K, "Hello, world!");
     }
 
     #[test]
     fn test_cl100k_cjk() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
-        let text = "你好世界";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
-        let v3 = collect_matches(&pt, text);
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(CL100K, "你好世界");
     }
 
     #[test]
     fn test_cl100k_contractions() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
-        let text = "I'm don't they're we've she'll it'd";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
-        let v3 = collect_matches(&pt, text);
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(CL100K, "I'm don't they're we've she'll it'd");
     }
 
     #[test]
     fn test_o200k_english() {
-        let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
-        let text = "Hello, world! CamelCase mixedScript123";
-        let v2 = v2_collect_matches(O200K_PATTERN, text);
-        let v3 = collect_matches(&pt, text);
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(O200K, "Hello, world! CamelCase mixedScript123");
     }
 
     #[test]
     fn test_p50k_english() {
-        let pt = RegexPreTokenizer::new(P50K_PATTERN, FastPath::None);
-        let text = "Hello world, I'm testing!";
-        let v2 = v2_collect_matches(P50K_PATTERN, text);
-        let v3 = collect_matches(&pt, text);
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(P50K, "Hello world, I'm testing!");
     }
 
     #[test]
     fn test_empty_input() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
+        let pt = CL100K.tokenizer();
         assert_eq!(collect_matches(&pt, ""), vec![]);
     }
 
     #[test]
     fn test_only_whitespace() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
-        let text = "   \n  \t  ";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
-        let v3 = collect_matches(&pt, text);
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(CL100K, "   \n  \t  ");
     }
 
     #[test]
     fn test_emoji() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
-        let text = "🎉🚀💡";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
-        let v3 = collect_matches(&pt, text);
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(CL100K, "🎉🚀💡");
     }
 
     #[test]
     fn test_mixed_script() {
-        let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
-        let text = "Hello 你好 World 🌍";
-        let v2 = v2_collect_matches(CL100K_PATTERN, text);
-        let v3 = collect_matches(&pt, text);
-        assert_eq!(v2, v3);
+        assert_fast_matches_reference(CL100K, "Hello 你好 World 🌍");
     }
 
     // whitespace adjustment tests (migrated from v2 bpe.rs)
 
+    use WhitespaceRules::{Generic, NewlineFirst};
+
     #[test]
     fn test_adjust_whitespace_single_byte() {
-        assert_eq!(adjust_whitespace_end(b"a b", 0, 1), 1);
+        assert_eq!(adjust_whitespace_end(b"a b", 0, 1, Generic), 1);
     }
 
     #[test]
     fn test_adjust_whitespace_at_end_of_input() {
-        assert_eq!(adjust_whitespace_end(b"  ", 0, 2), 2);
+        assert_eq!(adjust_whitespace_end(b"  ", 0, 2, Generic), 2);
     }
 
     #[test]
     fn test_adjust_whitespace_non_ws_piece() {
-        assert_eq!(adjust_whitespace_end(b"hello world", 0, 5), 5);
+        assert_eq!(adjust_whitespace_end(b"hello world", 0, 5, Generic), 5);
     }
 
     #[test]
     fn test_adjust_whitespace_trim_before_nonws() {
         let bytes = b"  x";
-        assert_eq!(adjust_whitespace_end(bytes, 0, 2), 1);
+        assert_eq!(adjust_whitespace_end(bytes, 0, 2, Generic), 1);
     }
 
     #[test]
     fn test_adjust_whitespace_no_trim_before_ws() {
         let bytes = b"   ";
-        assert_eq!(adjust_whitespace_end(bytes, 0, 2), 2);
+        assert_eq!(adjust_whitespace_end(bytes, 0, 2, Generic), 2);
     }
 
     #[test]
     fn test_adjust_whitespace_unicode_slow_path() {
         let input = "\u{3000}\u{3000}x";
         let bytes = input.as_bytes();
-        assert_eq!(adjust_whitespace_end(bytes, 0, 6), 3);
+        assert_eq!(adjust_whitespace_end(bytes, 0, 6, Generic), 3);
     }
 
     #[test]
     fn test_adjust_whitespace_unicode_followed_by_unicode_ws() {
         let input = "\u{3000}\u{3000}\u{3000}";
         let bytes = input.as_bytes();
-        assert_eq!(adjust_whitespace_end(bytes, 0, 6), 6);
+        assert_eq!(adjust_whitespace_end(bytes, 0, 6, Generic), 6);
     }
 
     #[test]
@@ -641,12 +756,45 @@ mod tests {
         let bytes = input.as_bytes();
         // piece is bytes[0..3] (the ideographic space), next char is 'x' (non-ws)
         // without the protection, this would trim to bytes[0..0] which is empty
-        assert_eq!(adjust_whitespace_end(bytes, 0, 3), 3);
+        assert_eq!(adjust_whitespace_end(bytes, 0, 3, Generic), 3);
     }
 
-    // comprehensive comparison: run many inputs through all patterns
+    // Newline-branch gating (issue #5): a match ending in \r/\n comes from
+    // `\s*[\r\n]+`, which carries no lookahead, so it must keep its full extent.
+
     #[test]
-    fn test_all_patterns_match_v2() {
+    fn test_adjust_whitespace_newline_branch_keeps_double_newline() {
+        let bytes = b"\n\nx";
+        assert_eq!(adjust_whitespace_end(bytes, 0, 2, NewlineFirst), 2);
+        // the generic-only patterns (p50k/r50k) still trim — canonical behavior
+        assert_eq!(adjust_whitespace_end(bytes, 0, 2, Generic), 1);
+    }
+
+    #[test]
+    fn test_adjust_whitespace_newline_branch_keeps_crlf() {
+        let bytes = b"\r\n@";
+        assert_eq!(adjust_whitespace_end(bytes, 0, 2, NewlineFirst), 2);
+        assert_eq!(adjust_whitespace_end(bytes, 0, 2, Generic), 1);
+    }
+
+    #[test]
+    fn test_adjust_whitespace_newline_branch_still_trims_spaces() {
+        // no newline at the end → generic `\s+` branch → lookahead applies
+        let bytes = b"  x";
+        assert_eq!(adjust_whitespace_end(bytes, 0, 2, NewlineFirst), 1);
+    }
+
+    #[test]
+    fn test_adjust_whitespace_newline_branch_trims_trailing_spaces_after_newline() {
+        // "\n  " + "x": the `\s*[\r\n]+` branch stops after "\n", so the piece
+        // under adjustment here is the following "  " run, which does trim.
+        let bytes = b"\n  x";
+        assert_eq!(adjust_whitespace_end(bytes, 1, 3, NewlineFirst), 2);
+    }
+
+    // comprehensive comparison: fast path vs pure-regex reference, all patterns
+    #[test]
+    fn test_all_patterns_match_reference() {
         let texts = vec![
             "Hello, world!",
             "你好世界",
@@ -660,18 +808,15 @@ mod tests {
             "",
             "a",
             "hello world! 你好 🚀 test 123",
+            "word\n\nnext",
+            "\r\n@rem",
+            "a\n\n\nb",
+            "a \n\n b",
         ];
 
-        for &(pattern, fast) in &[
-            (CL100K_PATTERN, FastPath::Cl100k),
-            (O200K_PATTERN, FastPath::O200k),
-            (P50K_PATTERN, FastPath::None),
-        ] {
-            let pt = RegexPreTokenizer::new(pattern, fast);
+        for spec in [CL100K, O200K, QWEN2, DEEPSEEK, MISTRAL, P50K] {
             for text in &texts {
-                let v2 = v2_collect_matches(pattern, text);
-                let v3 = collect_matches(&pt, text);
-                assert_eq!(v2, v3, "mismatch for pattern / text: {text:?}");
+                assert_fast_matches_reference(spec, text);
             }
         }
     }
@@ -684,66 +829,116 @@ mod tests {
 
         #[test]
         fn prop_cl100k_fast_matches_regex(text in ".*") {
-            let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
+            let pt = CL100K.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(CL100K_PATTERN, &text);
+            let reference = reference_matches(CL100K, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
         // ASCII-heavy generator to stress the fast path specifically.
         #[test]
         fn prop_cl100k_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
-            let pt = RegexPreTokenizer::new(CL100K_PATTERN, FastPath::Cl100k);
+            let pt = CL100K.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(CL100K_PATTERN, &text);
+            let reference = reference_matches(CL100K, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        // Newline-dense generator: the alphabet the issue #5 regression lives in.
+        #[test]
+        fn prop_cl100k_fast_matches_regex_newlines(text in "[\r\n \tabc.!]*") {
+            let pt = CL100K.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(CL100K, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
         #[test]
         fn prop_o200k_fast_matches_regex(text in ".*") {
-            let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
+            let pt = O200K.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(O200K_PATTERN, &text);
+            let reference = reference_matches(O200K, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
         #[test]
         fn prop_o200k_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
-            let pt = RegexPreTokenizer::new(O200K_PATTERN, FastPath::O200k);
+            let pt = O200K.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(O200K_PATTERN, &text);
+            let reference = reference_matches(O200K, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_o200k_fast_matches_regex_newlines(text in "[\r\n \tabc.!]*") {
+            let pt = O200K.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(O200K, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
         #[test]
         fn prop_qwen2_fast_matches_regex(text in ".*") {
-            let pt = RegexPreTokenizer::new(QWEN2_PATTERN, FastPath::Qwen2);
+            let pt = QWEN2.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(QWEN2_PATTERN, &text);
+            let reference = reference_matches(QWEN2, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
         #[test]
         fn prop_qwen2_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
-            let pt = RegexPreTokenizer::new(QWEN2_PATTERN, FastPath::Qwen2);
+            let pt = QWEN2.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(QWEN2_PATTERN, &text);
+            let reference = reference_matches(QWEN2, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
         #[test]
         fn prop_deepseek_fast_matches_regex(text in ".*") {
-            let pt = RegexPreTokenizer::new(DEEPSEEK_V3_PATTERN, FastPath::Deepseek);
+            let pt = DEEPSEEK.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(DEEPSEEK_V3_PATTERN, &text);
+            let reference = reference_matches(DEEPSEEK, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
         #[test]
         fn prop_deepseek_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
-            let pt = RegexPreTokenizer::new(DEEPSEEK_V3_PATTERN, FastPath::Deepseek);
+            let pt = DEEPSEEK.tokenizer();
             let fast = collect_matches(&pt, &text);
-            let reference = v2_collect_matches(DEEPSEEK_V3_PATTERN, &text);
+            let reference = reference_matches(DEEPSEEK, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_mistral_fast_matches_regex(text in ".*") {
+            let pt = MISTRAL.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(MISTRAL, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_mistral_fast_matches_regex_ascii(text in "[ -~ \t\r\n]*") {
+            let pt = MISTRAL.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(MISTRAL, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        // Slash-dense generator: the `[\r\n/]*` punctuation tail unique to Tekken.
+        #[test]
+        fn prop_mistral_fast_matches_regex_slashes(text in "[/\r\n .!abcAB0]*") {
+            let pt = MISTRAL.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(MISTRAL, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_p50k_fast_matches_regex(text in "[ -~ \t\r\n]*") {
+            let pt = P50K.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(P50K, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
     }
