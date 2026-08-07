@@ -96,10 +96,10 @@ impl PreTokenizer for RegexPreTokenizer {
     fn next_match(&self, text: &str, pos: usize) -> Option<(usize, usize)> {
         let bytes = text.as_bytes();
         let fast = match self.fast {
-            FastPath::Cl100k => cl100k_ascii_next(bytes, pos, 3),
-            FastPath::Qwen2 => cl100k_ascii_next(bytes, pos, 1),
-            FastPath::O200k => o200k_like_ascii_next(bytes, pos, true, 3, false),
-            FastPath::Tekken => o200k_like_ascii_next(bytes, pos, false, 1, true),
+            FastPath::Cl100k => cl100k_ascii_next::<3>(bytes, pos),
+            FastPath::Qwen2 => cl100k_ascii_next::<1>(bytes, pos),
+            FastPath::O200k => o200k_like_ascii_next::<true, 3, false>(bytes, pos),
+            FastPath::Tekken => o200k_like_ascii_next::<false, 1, true>(bytes, pos),
             FastPath::Deepseek => deepseek_ascii_next(bytes, pos),
             FastPath::None => None,
         };
@@ -115,45 +115,45 @@ impl PreTokenizer for RegexPreTokenizer {
 
 /// Consume the trailing line-tail class of the punctuation rule starting at `k`,
 /// returning the new offset. Most patterns spell it `[\r\n]*`; Mistral's Tekken
-/// pattern spells it `[\r\n/]*`, so `slash` admits `/` as well.
+/// pattern spells it `[\r\n/]*`, so `SLASH` admits `/` as well.
 #[inline]
-fn take_line_tail(b: &[u8], mut k: usize, slash: bool) -> usize {
-    while k < b.len() && (b[k] == b'\r' || b[k] == b'\n' || (slash && b[k] == b'/')) {
+fn take_line_tail<const SLASH: bool>(b: &[u8], mut k: usize) -> usize {
+    while k < b.len() && (b[k] == b'\r' || b[k] == b'\n' || (SLASH && b[k] == b'/')) {
         k += 1;
     }
     k
 }
 
-/// Shared ASCII handler for the digit and punctuation rules. The punctuation
-/// rule (` ?[^\s\p{L}\p{N}]+[\r\n]*`) is identical across patterns; the digit
-/// rule's repeat cap varies: `\p{N}{1,3}` for cl100k/o200k (`max_digits = 3`),
-/// `\p{N}` for qwen2 (`max_digits = 1`).
+/// Shared ASCII handler for the digit and punctuation rules, parameterized at
+/// compile time so every [`FastPath`] keeps fully specialized codegen: the
+/// digit rule's repeat cap is `MAX_DIGITS` (`\p{N}{1,3}` → 3 for cl100k/o200k,
+/// `\p{N}` → 1 for qwen2/Tekken), and the punctuation rule
+/// (` ?[^\s\p{L}\p{N}]+[\r\n]*`) admits `/` in its trailing class when
+/// `SLASH_TAIL` is set (Tekken's `[\r\n/]*`).
 ///
 /// Returns `Some((i, end))` on a match, or `None` to defer to the regex (the
 /// start is whitespace, or a non-ASCII byte could extend the run under Unicode
 /// semantics). Caller guarantees `i < n` and `b[i] < 0x80`.
-#[inline]
-fn ascii_num_punct(
+#[inline(always)]
+fn ascii_num_punct<const MAX_DIGITS: usize, const SLASH_TAIL: bool>(
     b: &[u8],
     i: usize,
-    max_digits: usize,
-    slash_tail: bool,
 ) -> Option<(usize, usize)> {
     let n = b.len();
     let c0 = b[i];
 
-    // Rule: \p{N}{1,max_digits}
+    // Rule: \p{N}{1,MAX_DIGITS}
     if c0.is_ascii_digit() {
         let mut j = i;
         let mut k = 0;
-        while j < n && k < max_digits && b[j] < 0x80 && b[j].is_ascii_digit() {
+        while j < n && k < MAX_DIGITS && b[j] < 0x80 && b[j].is_ascii_digit() {
             j += 1;
             k += 1;
         }
         // Fewer than max digits and a non-ASCII byte next: it may be a Unicode
         // \p{N} (superscripts, other-number) the regex would fold in — defer.
         // At the cap the regex stops regardless, so it's safe to return.
-        if k < max_digits && j < n && b[j] >= 0x80 {
+        if k < MAX_DIGITS && j < n && b[j] >= 0x80 {
             return None;
         }
         return Some((i, j));
@@ -191,7 +191,7 @@ fn ascii_num_punct(
         if k < n && b[k] >= 0x80 {
             return None;
         }
-        k = take_line_tail(b, k, slash_tail);
+        k = take_line_tail::<SLASH_TAIL>(b, k);
         return Some((i, k));
     }
 
@@ -200,14 +200,14 @@ fn ascii_num_punct(
 }
 
 /// ASCII fast-path pre-tokenizer for the cl100k pattern (and qwen2, which is
-/// identical except `max_digits = 1` instead of 3).
+/// identical except `MAX_DIGITS = 1` instead of 3).
 ///
 /// Returns `Some((pos, end))` for a piece it can resolve entirely within ASCII,
 /// or `None` to defer to the regex (non-ASCII byte at a decision point, or a
 /// whitespace-run start whose `\s*[\r\n]+|\s+` + lookahead semantics we don't
 /// replicate here). Alternatives are tried in the regex's leftmost-first order.
-#[inline]
-fn cl100k_ascii_next(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, usize)> {
+#[inline(always)]
+fn cl100k_ascii_next<const MAX_DIGITS: usize>(b: &[u8], i: usize) -> Option<(usize, usize)> {
     let n = b.len();
     if i >= n {
         return None;
@@ -259,7 +259,7 @@ fn cl100k_ascii_next(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, us
     }
 
     // Rules 3 & 4: digits, punctuation. Rules 5/6 (whitespace) → defer.
-    ascii_num_punct(b, i, max_digits, false)
+    ascii_num_punct::<MAX_DIGITS, false>(b, i)
 }
 
 /// ASCII fast-path pre-tokenizer for the case-splitting patterns: o200k and
@@ -274,13 +274,14 @@ fn cl100k_ascii_next(b: &[u8], i: usize, max_digits: usize) -> Option<(usize, us
 /// o200k attaches an optional contraction suffix to the word and uses
 /// `\p{N}{1,3}` + `[\r\n]*`; Tekken has no contraction rule and uses `\p{N}`
 /// + `[\r\n/]*`.
-#[inline]
-fn o200k_like_ascii_next(
+#[inline(always)]
+fn o200k_like_ascii_next<
+    const CONTRACTIONS: bool,
+    const MAX_DIGITS: usize,
+    const SLASH_TAIL: bool,
+>(
     b: &[u8],
     i: usize,
-    contractions: bool,
-    max_digits: usize,
-    slash_tail: bool,
 ) -> Option<(usize, usize)> {
     let n = b.len();
     if i >= n {
@@ -300,11 +301,11 @@ fn o200k_like_ascii_next(
         // next byte is an ASCII letter; otherwise it's a digit/punct/ws piece.
         match b.get(i + 1) {
             Some(&c1) if c1 < 0x80 && c1.is_ascii_alphabetic() => i + 1,
-            _ => return ascii_num_punct(b, i, max_digits, slash_tail),
+            _ => return ascii_num_punct::<MAX_DIGITS, SLASH_TAIL>(b, i),
         }
     } else {
         // digit, or \r\n
-        return ascii_num_punct(b, i, max_digits, slash_tail);
+        return ascii_num_punct::<MAX_DIGITS, SLASH_TAIL>(b, i);
     };
 
     // Scan the uppercase run from `p`.
@@ -349,7 +350,7 @@ fn o200k_like_ascii_next(
     // Optional contraction suffix attached to the word: (?i:'s|'t|…)?
     // Tekken has no contraction rule at all, so it never extends the word here.
     let mut end = letters_end;
-    if contractions
+    if CONTRACTIONS
         && end < n
         && b[end] == b'\''
         && let Some(len) = match_contraction(b, end)
@@ -416,7 +417,7 @@ fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
         if k < n && b[k] >= 0x80 {
             return None; // a Unicode \p{P}/\p{S} could extend the run
         }
-        k = take_line_tail(b, k, false);
+        k = take_line_tail::<false>(b, k);
         return Some((i, k));
     }
 
@@ -454,7 +455,7 @@ fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
                 if k < n && b[k] >= 0x80 {
                     return None;
                 }
-                k = take_line_tail(b, k, false);
+                k = take_line_tail::<false>(b, k);
                 return Some((i, k));
             }
             // space followed by digit/space/eof → whitespace rules → defer
