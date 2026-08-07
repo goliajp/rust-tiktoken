@@ -5,6 +5,41 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-08-08
+
+Inherits the `tiktoken` 3.6.0 fixes — see the
+[crate changelog](../tiktoken/CHANGELOG.md) for full detail.
+
+### Fixed
+- `cl100k_base` and `o200k_base` no longer split canonical newline tokens
+  ([#5](https://github.com/goliajp/rust-tiktoken/issues/5)). `encode("word\n\nnext")`
+  now returns the canonical `[1178, 271, 3684]` rather than
+  `[1178, 198, 198, 3684]`. Verified byte-identical to `openai/tiktoken` 0.13.0
+  over a 10,491-case corpus. **Token ids change for newline-containing text** —
+  recompute any cached counts or stored id sequences.
+- `mistral_v3` now uses Tekken's own pre-tokenizer pattern instead of the
+  cl100k stand-in it shared before; `deepseek_v3` no longer splits whitespace
+  runs that precede a digit or CJK character. Both changed token ids for the
+  affected text.
+- `qwen2` and `deepseek_v3` gained the added tokens they were missing —
+  `qwen2`'s `<tool_call>` / `<|fim_*|>` / `<|repo_name|>` / `<|file_sep|>` and
+  `deepseek_v3`'s `<｜User｜>` / `<｜Assistant｜>` / tool markers / 800
+  placeholders. `encodeWithSpecialTokens` could not produce these ids before.
+- `encodingForModel` resolves the legacy `davinci-codex`, `*-edit-001`, and
+  first-generation `text-search-*` / `text-similarity-*` / `code-search-*` model
+  ids to the same encodings as upstream.
+
+### Internal
+- Repaired the native-target test suite, which was silently broken and not in
+  CI: `list_encodings_count` still asserted 9 encodings (stale since 3.3.0 made
+  it 11) and four error-path tests panic on non-wasm targets because
+  `JsValue` construction aborts there — those are now gated to `wasm32`.
+
+### Added
+- Pricing data covers **94 models** across 7 providers (was 68), including the
+  OpenAI GPT-5.6 family, Anthropic's Claude 5 generation, `gemini-3.6-flash`,
+  `deepseek-v4-*`, `qwen3.8-max`, and Mistral's Devstral 2 / Ministral 3 SKUs.
+
 ## [3.5.1] - 2026-06-07
 
 ### Changed

@@ -15,7 +15,7 @@
 - **マルチプロバイダ**: 5 社 11 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
 - **高速**: 手書き ASCII 高速パス（正規表現をバイパス）、Arena ベースの語彙、ハイブリッド BPE マージ
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
-- **料金見積もり**: 7 プロバイダ 68 モデルのコスト推定
+- **料金見積もり**: 7 プロバイダ 94 モデルのコスト推定
 - **コンパクト**: ruzstd 圧縮語彙データをコンパイル時に埋め込み
 - **ゼロアロケーションカウント**: `count()` パスはトークンベクタを割り当てません
 
@@ -91,7 +91,7 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 | エンコーディング | プロバイダ | 対応モデル |
 |---|---|---|
-| `o200k_base` | OpenAI | GPT-4o, GPT-4.1, GPT-4.5, GPT-5, o1, o3, o4-mini |
+| `o200k_base` | OpenAI | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
 | `o200k_harmony` | OpenAI | gpt-oss（harmony チャットフォーマット） |
 | `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
 | `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
@@ -159,7 +159,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 68 モデルに対応。
+OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 94 モデルに対応。
 
 ## WebAssembly
 
