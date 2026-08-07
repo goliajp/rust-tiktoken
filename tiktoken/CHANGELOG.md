@@ -1,5 +1,98 @@
 # Changelog
 
+## [3.6.0] - 2026-08-08
+
+### Fixed
+- **`cl100k_base` and `o200k_base` split canonical newline tokens**
+  ([#5](https://github.com/goliajp/rust-tiktoken/issues/5)). The DFA-compatible
+  pre-tokenizer applied its `\s+(?!\S)` lookahead emulation to every match,
+  including matches produced by the patterns' dedicated `\s*[\r\n]+` branch.
+  That branch carries no lookahead, so trimming it split `"\n\n"` and `"\r\n"`
+  into separate single-newline pieces whenever non-whitespace followed —
+  changing token ids and overcounting affected text. `encode("word\n\nnext")`
+  returned `[1178, 198, 198, 3684]` instead of the canonical `[1178, 271, 3684]`.
+
+  The emulation is now pattern-aware: encodings whose pattern has a newline
+  branch ahead of the generic whitespace rules (`cl100k_base`, `o200k_base`,
+  `o200k_harmony`, `llama3`, `mistral_v3`, `qwen2`, `deepseek_v3`) never trim a
+  match ending in `\r`/`\n`, while `p50k_base` / `p50k_edit` / `r50k_base` keep
+  the unconditional trim their patterns require.
+
+  Verified against canonical `openai/tiktoken` 0.13.0 over a 10,491-case
+  adversarial corpus: **2,504 divergences before, 0 after**, across all six
+  OpenAI encodings (62,946 comparisons).
+
+  **This changes token ids for affected text.** Any cached token counts or
+  stored token id sequences for newline-containing text should be recomputed.
+
+- **`mistral_v3` used the cl100k pattern instead of Tekken's.** The encoding was
+  defined as `MISTRAL_V3_PATTERN = CL100K_PATTERN`, but Tekken's pre-tokenizer
+  differs in three ways: it splits on case like o200k, it has no contraction
+  rule at all, its number rule is `\p{N}` rather than `\p{N}{1,3}`, and its
+  punctuation rule's trailing class is `[\r\n/]*` — admitting `/`. The first two
+  differences happen to be masked by the Tekken vocabulary, but the `/` tail is
+  not: any punctuation run followed by a newline and then a slash tokenized
+  differently from the reference. `mistral_v3` now has its own pattern and a
+  dedicated ASCII fast path.
+
+- **`deepseek_v3` split whitespace runs before digits and CJK.** Upstream runs
+  three sequential `Split` stages; this crate folds them into one alternation,
+  which let the `\s+(?!\S)` lookahead peek past a stage boundary. A whitespace
+  run followed by a digit or CJK character was trimmed when upstream would keep
+  it whole (`"  1"` → two single-space tokens instead of one `"  "` token).
+
+- **`model_to_encoding` resolved several legacy model ids incorrectly.** A flat
+  prefix scan let a short prefix capture a more specific id: `davinci-codex`
+  returned `r50k_base` (canonical: `p50k_base`) and `code-davinci-edit-001`
+  returned `p50k_base` (canonical: `p50k_edit`). Ten first-generation search /
+  similarity embedding models (`text-search-*`, `text-similarity-*`,
+  `code-search-*`) returned `None`. Lookup is now exact-match-first, then
+  prefix, mirroring upstream's registry structure — all 62 canonical entries now
+  agree.
+
+### Added
+- **Missing added tokens.** `qwen2` gained the 8 ids upstream defines above
+  `<|video_pad|>` (`<tool_call>`, `</tool_call>`, the four `<|fim_*|>` markers,
+  `<|repo_name|>`, `<|file_sep|>` — ids 151657..=151664). `deepseek_v3` gained
+  the 14 named tokens at 128800..=128814 — including `<｜User｜>` and
+  `<｜Assistant｜>`, the primary chat-template markers — plus the 800
+  `<｜place▁holder▁no▁N｜>` entries at 128000..=128799. Its doc comment claimed
+  804 special tokens while the code registered 4;
+  `encode_with_special_tokens` could not produce any of the missing ids.
+- `gpt2` oracle fixture and test — the encoding was in the registry but had no
+  fixture coverage.
+- Pricing: 26 models across the 2026-08 landscape — OpenAI GPT-5.6
+  (`sol` / `terra` / `luna`), the `-pro` SKUs and 5.1 / 5.2 point releases;
+  Anthropic's Claude 5 generation (`fable-5`, `mythos-5`, `opus-5`, `sonnet-5`);
+  `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-flash-lite`;
+  `deepseek-v4-pro` / `-flash`; `qwen3.8-max` / `qwen3.5-plus`; Mistral's
+  Devstral 2 and Ministral 3 SKUs. The table now covers **94 models**.
+
+### Changed
+- Pricing corrections: Claude 4.6+ context windows are 1M (those models carry
+  the full window at standard rates); `mistral-small` updated to the Small 4
+  rates ($0.15/$0.60). `deepseek-v3` / `deepseek-r1` and `gemini-2.0-flash` are
+  marked DEPRECATED — they are off their vendors' current price cards.
+- Oracle fixtures are now generated from the reference implementations, not from
+  this crate's own output — `tests/fixtures/generate_openai_fixtures.py` for the
+  OpenAI encodings (canonical `openai/tiktoken`) and
+  `tests/fixtures/generate_hf_fixtures.py` for the HuggingFace-sourced ones. The
+  previous snapshots were self-generated, so they could only prove the crate
+  still agreed with itself, which is how issue #5 survived a green test suite.
+  Corpora grew from ~90 to 2,374 cases (OpenAI) and from 41 to 2,815 cases (HF),
+  with systematic whitespace-run × follower matrices covering the newline,
+  digit, CJK and slash axes where these patterns disagree.
+
+### Internal
+- Removed `tests/generate_oracle.rs` (the self-generating oracle it replaced).
+- Added `tests/canonical_parity.rs`, an `--ignored` full-corpus differential
+  against the reference implementations, plus `tests/canonical_corpus.py` and
+  `tests/hf_corpus.py` to generate its input. The 3.6.0 fixes were verified with
+  it over 104,907 comparisons across all 10 encodings, 0 divergences.
+- Added fast-path/regex equivalence proptests for the new Tekken scanner
+  (including a slash-dense generator), newline-dense generators for the `cl100k`
+  / `o200k` fast paths, and a `p50k` equivalence proptest.
+
 ## [3.5.1] - 2026-06-07
 
 ### Changed

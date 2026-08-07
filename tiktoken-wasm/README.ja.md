@@ -130,14 +130,16 @@ module.exports = {
 エンコーディング名でトークナイザを取得。サポート:
 
 - `cl100k_base` — GPT-4、GPT-3.5-turbo
-- `o200k_base` — GPT-4o、GPT-4.1、o1、o3
+- `o200k_base` — GPT-4o、GPT-4.1、GPT-5–5.6、o1、o3、o4-mini
+- `o200k_harmony` — gpt-oss（harmony チャット形式）
 - `p50k_base` — text-davinci-002/003
 - `p50k_edit` — text-davinci-edit
 - `r50k_base` — GPT-3（davinci、curie 等）
+- `gpt2` — GPT-2（`r50k_base` のエイリアス）
 - `llama3` — Meta Llama 3/4
 - `deepseek_v3` — DeepSeek V3/R1
 - `qwen2` — Qwen 2/2.5/3
-- `mistral_v3` — Mistral/Codestral/Pixtral
+- `mistral_v3` — Mistral/Codestral/Pixtral（Tekken）
 
 ### `encodingForModel(model: string): Encoding`
 
@@ -163,7 +165,7 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-USD で API コストを見積もり。7 プロバイダ 68 モデル対応。
+USD で API コストを見積もり。7 プロバイダ 94 モデル対応。
 
 ### `getModelInfo(modelId): ModelInfo`
 
@@ -171,7 +173,7 @@ USD で API コストを見積もり。7 プロバイダ 68 モデル対応。
 
 ### `allModels(): ModelInfo[]`
 
-サポート 68 モデルすべてを価格情報付きで列挙。
+サポート 94 モデルすべてを価格情報付きで列挙。
 
 ### `modelsByProvider(provider): ModelInfo[]`
 

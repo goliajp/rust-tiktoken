@@ -128,14 +128,16 @@ List all available encoding names (11 encodings).
 
 Get a tokenizer by encoding name. Supported:
 - `cl100k_base` — GPT-4, GPT-3.5-turbo
-- `o200k_base` — GPT-4o, GPT-4.1, o1, o3
+- `o200k_base` — GPT-4o, GPT-4.1, GPT-5–5.6, o1, o3, o4-mini
+- `o200k_harmony` — gpt-oss (harmony chat format)
 - `p50k_base` — text-davinci-002/003
 - `p50k_edit` — text-davinci-edit
 - `r50k_base` — GPT-3 (davinci, curie, etc.)
+- `gpt2` — GPT-2 (alias for `r50k_base`)
 - `llama3` — Meta Llama 3/4
 - `deepseek_v3` — DeepSeek V3/R1
 - `qwen2` — Qwen 2/2.5/3
-- `mistral_v3` — Mistral/Codestral/Pixtral
+- `mistral_v3` — Mistral/Codestral/Pixtral (Tekken)
 
 ### `encodingForModel(model: string): Encoding`
 
@@ -161,7 +163,7 @@ Map a model name to its encoding name without loading the encoding.
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-Estimate API cost in USD. Supports 68 models across 7 providers.
+Estimate API cost in USD. Supports 94 models across 7 providers.
 
 ### `getModelInfo(modelId): ModelInfo`
 
@@ -169,7 +171,7 @@ Get model metadata with full TypeScript typing.
 
 ### `allModels(): ModelInfo[]`
 
-List all 68 supported models with pricing info.
+List all 94 supported models with pricing info.
 
 ### `modelsByProvider(provider): ModelInfo[]`
 
