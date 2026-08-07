@@ -1,9 +1,41 @@
 //! Per-model pricing data and cost estimation for OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 //!
-//! Prices are in USD per 1M tokens. Updated as of 2026-06.
+//! Prices are in USD per 1M tokens. Updated as of 2026-08.
 //! Pricing changes frequently — verify against official docs before production billing.
 //!
-//! # Caveats (2026-06 refresh)
+//! # What changed in the 2026-08 refresh
+//!
+//! - **OpenAI**: added the GPT-5.6 family (`gpt-5.6-sol` / `-terra` / `-luna`,
+//!   launched 2026-07-09, Terra and Luna repriced down on 2026-07-30), plus the
+//!   `-pro` SKUs and the 5.1 / 5.2 point releases that were previously missing.
+//! - **Anthropic**: added the Claude 5 generation (`claude-fable-5`,
+//!   `claude-mythos-5`, `claude-opus-5`, `claude-sonnet-5`). Corrected the
+//!   context window on Claude 4.6+ entries to 1M — those models carry the full
+//!   window at standard rates, so there is no long-context tier to encode.
+//! - **Google**: added `gemini-3.6-flash`, `gemini-3.5-flash-lite`, and
+//!   `gemini-2.5-flash-lite`.
+//! - **DeepSeek**: added `deepseek-v4-pro` / `deepseek-v4-flash`; `deepseek-v3`
+//!   and `deepseek-r1` are now off the price card and marked DEPRECATED.
+//! - **Alibaba**: added `qwen3.8-max` and `qwen3.5-plus`.
+//! - **Mistral**: added the Devstral 2 and Ministral 3 SKUs; corrected
+//!   `mistral-small` to the Small 4 rates ($0.15/$0.60).
+//! - **Meta**: unchanged. Meta has wound down its first-party Llama API, so
+//!   these entries remain third-party hoster rates (see the note below).
+//!
+//! # Known gaps
+//!
+//! - `claude-sonnet-5` holds **introductory** pricing ($2/$10), which expires
+//!   2026-08-31; standard pricing ($3/$15) takes effect 2026-09-01.
+//! - DeepSeek announced on 2026-08-06 that it will raise prices "significantly"
+//!   but has not published rates or an effective date.
+//! - OpenAI's pricing page does not publish context windows for the `-pro`,
+//!   `gpt-5.1`, and `gpt-5.2` SKUs; those entries mirror their family's window.
+//! - Specialized OpenAI SKUs (`gpt-5.3-codex`, `gpt-5.5-cyber`, `*-chat-latest`,
+//!   realtime / audio / image / video models) are not modelled here.
+//! - Anthropic **Fast mode** ($10/$50 for Opus 5 / Opus 4.8) and the 1.1×
+//!   `inference_geo: "us"` data-residency multiplier are not modelled.
+//!
+//! # Caveats
 //!
 //! - **Anthropic `cached_input`** uses the cache-READ price (≈ input × 10%). Older Claude 3.x
 //!   entries store `input × 50%` (which corresponds to cache-write/2, not cache-read);
@@ -491,7 +523,7 @@ pub fn estimate_cost(model_id: &str, input_tokens: u64, output_tokens: u64) -> O
 ///
 /// ```
 /// let models = tiktoken::pricing::all_models();
-/// assert!(models.len() >= 57);
+/// assert!(models.len() >= 90);
 /// ```
 pub fn all_models() -> &'static [Model] {
     ALL_MODELS
@@ -550,6 +582,50 @@ const fn model(
 // Batch / Flex / Priority rates from the aggregate /api/docs/pricing toggle.
 // Long-context (>272K input) policy: Standard/Batch/Flex inputs multiply by 2×
 // and outputs by 1.5× for gpt-5.4 and gpt-5.5 — encoded via `with_high_tier`.
+
+// GPT-5.6 family (2026-07-09). The generation number is the family; Sol / Terra
+// / Luna are durable capability tiers replacing the base / mini / nano names.
+// Terra and Luna were repriced downward on 2026-07-30 (-20% / -80%); Sol held at
+// its launch rate. Long-context (>272K input) rates are per the docs pricing page.
+
+/// gpt-5.6-sol — frontier tier: complex reasoning, long-horizon agentic work.
+const OPENAI_GPT56_SOL: Model = model(
+    "gpt-5.6-sol",
+    Provider::OpenAI,
+    5.00,
+    30.00,
+    Some(0.50),
+    1_050_000,
+    128_000,
+)
+.with_batch_cached(2.50, 0.25, 15.00)
+.with_high_tier(10.00, 45.00, None, 272_000);
+
+/// gpt-5.6-terra — balanced tier: everyday coding, reasoning, agentic tasks.
+const OPENAI_GPT56_TERRA: Model = model(
+    "gpt-5.6-terra",
+    Provider::OpenAI,
+    2.00,
+    12.00,
+    Some(0.20),
+    1_050_000,
+    128_000,
+)
+.with_batch_cached(1.00, 0.10, 6.00)
+.with_high_tier(4.00, 18.00, None, 272_000);
+
+/// gpt-5.6-luna — high-volume tier: extraction, classification, reformatting.
+const OPENAI_GPT56_LUNA: Model = model(
+    "gpt-5.6-luna",
+    Provider::OpenAI,
+    0.20,
+    1.20,
+    Some(0.02),
+    1_050_000,
+    128_000,
+)
+.with_batch_cached(0.10, 0.01, 0.60)
+.with_high_tier(0.40, 1.80, None, 272_000);
 
 /// gpt-5.5 — frontier 2026 model. Has Priority tier (rare among GPT-5.x SKUs).
 const OPENAI_GPT55: Model = model(
@@ -625,6 +701,95 @@ const OPENAI_GPT5_NANO: Model = model(
     400_000,
     128_000,
 );
+
+// Reasoning-heavy "pro" SKUs and the intermediate 5.1 / 5.2 point releases.
+// The docs pricing page lists rates but not context windows for these; each
+// mirrors the window published for its family's base SKU (gpt-5 = 400K,
+// gpt-5.4 / 5.5 = 1.05M). Verify before using the window for capacity planning.
+
+/// gpt-5.5-pro — extended-reasoning SKU. No cached-input rate published.
+const OPENAI_GPT55_PRO: Model = model(
+    "gpt-5.5-pro",
+    Provider::OpenAI,
+    30.00,
+    180.00,
+    None,
+    1_050_000,
+    128_000,
+)
+.with_batch(15.00, 90.00);
+
+/// gpt-5.4-pro — extended-reasoning SKU. No cached-input rate published.
+const OPENAI_GPT54_PRO: Model = model(
+    "gpt-5.4-pro",
+    Provider::OpenAI,
+    30.00,
+    180.00,
+    None,
+    1_050_000,
+    128_000,
+)
+.with_batch(15.00, 90.00);
+
+/// gpt-5.4-nano — smallest 5.4 SKU.
+const OPENAI_GPT54_NANO: Model = model(
+    "gpt-5.4-nano",
+    Provider::OpenAI,
+    0.20,
+    1.25,
+    Some(0.02),
+    400_000,
+    128_000,
+)
+.with_batch_cached(0.10, 0.01, 0.625);
+
+/// gpt-5.2 — 2025-12 point release.
+const OPENAI_GPT52: Model = model(
+    "gpt-5.2",
+    Provider::OpenAI,
+    1.75,
+    14.00,
+    Some(0.175),
+    400_000,
+    128_000,
+)
+.with_batch_cached(0.875, 0.0875, 7.00);
+
+/// gpt-5.2-pro — extended-reasoning SKU. No cached-input rate published.
+const OPENAI_GPT52_PRO: Model = model(
+    "gpt-5.2-pro",
+    Provider::OpenAI,
+    21.00,
+    168.00,
+    None,
+    400_000,
+    128_000,
+)
+.with_batch(10.50, 84.00);
+
+/// gpt-5.1 — 2025-11 point release; same rates as gpt-5.
+const OPENAI_GPT51: Model = model(
+    "gpt-5.1",
+    Provider::OpenAI,
+    1.25,
+    10.00,
+    Some(0.125),
+    400_000,
+    128_000,
+)
+.with_batch_cached(0.625, 0.0625, 5.00);
+
+/// gpt-5-pro — extended-reasoning SKU. No cached-input rate published.
+const OPENAI_GPT5_PRO: Model = model(
+    "gpt-5-pro",
+    Provider::OpenAI,
+    15.00,
+    120.00,
+    None,
+    400_000,
+    128_000,
+)
+.with_batch(7.50, 60.00);
 
 const OPENAI_GPT41: Model = model(
     "gpt-4.1",
@@ -863,13 +1028,94 @@ const OPENAI_EMBED_ADA_002: Model = model(
 // Opus 4.8 / 4.7 share Opus 4.x list pricing ($5/$25, cache-read $0.50, batch
 // 2.50/12.50). Note: Opus 4.7+ use a new tokenizer (may emit up to ~35% more
 // tokens for the same text) — this affects token counts, not the per-token rate.
+// Claude 5 generation (2026). Claude 4.6 and later carry the full 1M-token
+// context window at standard rates — there is no long-context tier to encode.
+//
+// `cached_input` is the cache-READ price (0.1× base input). Cache WRITES are
+// 1.25× base (5-minute TTL) or 2× base (1-hour TTL) and are not modelled here.
+//
+// Tokenizer note: Claude 4.7 and later use a newer tokenizer that produces
+// roughly 30% more tokens for the same text than Claude 4.6 and earlier. This
+// crate ships no Anthropic tokenizer, so token counts for cost estimation must
+// come from Anthropic's count-tokens endpoint, not from a tiktoken encoding.
+
+/// claude-fable-5 — frontier tier.
+const CLAUDE_FABLE_5: Model = model(
+    "claude-fable-5",
+    Provider::Anthropic,
+    10.00,
+    50.00,
+    Some(1.00),
+    1_000_000,
+    128_000,
+)
+.with_batch(5.00, 25.00)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
+
+/// claude-mythos-5 — frontier tier, limited availability. Same rates as Fable 5.
+const CLAUDE_MYTHOS_5: Model = model(
+    "claude-mythos-5",
+    Provider::Anthropic,
+    10.00,
+    50.00,
+    Some(1.00),
+    1_000_000,
+    128_000,
+)
+.with_batch(5.00, 25.00)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
+
+/// claude-opus-5 — flagship. Fast mode (research preview) bills $10/$50 across
+/// the full context window; that premium tier is not modelled here.
+const CLAUDE_OPUS_5: Model = model(
+    "claude-opus-5",
+    Provider::Anthropic,
+    5.00,
+    25.00,
+    Some(0.50),
+    1_000_000,
+    128_000,
+)
+.with_batch(2.50, 12.50)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
+
+/// claude-sonnet-5 — balanced tier.
+///
+/// Carries introductory pricing of $2/$10 through 2026-08-31; standard pricing
+/// of $3/$15 takes effect 2026-09-01 (cache read $0.20 → $0.30, batch $1/$5 →
+/// $1.50/$7.50). The entry below holds the introductory rates — update it when
+/// the standard rates take effect.
+const CLAUDE_SONNET_5: Model = model(
+    "claude-sonnet-5",
+    Provider::Anthropic,
+    2.00,
+    10.00,
+    Some(0.20),
+    1_000_000,
+    128_000,
+)
+.with_batch(1.00, 5.00)
+.with_vision(VisionPricing::AnthropicDivisor {
+    divisor: 750,
+    cap_tokens: 1568,
+});
+
 const CLAUDE_OPUS_48: Model = model(
     "claude-opus-4.8",
     Provider::Anthropic,
     5.00,
     25.00,
     Some(0.50),
-    200_000,
+    1_000_000,
     128_000,
 )
 .with_batch(2.50, 12.50)
@@ -884,7 +1130,7 @@ const CLAUDE_OPUS_47: Model = model(
     5.00,
     25.00,
     Some(0.50),
-    200_000,
+    1_000_000,
     128_000,
 )
 .with_batch(2.50, 12.50)
@@ -899,7 +1145,7 @@ const CLAUDE_OPUS_46: Model = model(
     5.00,
     25.00,
     Some(0.50),
-    200_000,
+    1_000_000,
     128_000,
 )
 .with_batch(2.50, 12.50)
@@ -914,7 +1160,7 @@ const CLAUDE_SONNET_46: Model = model(
     3.00,
     15.00,
     Some(0.30),
-    200_000,
+    1_000_000,
     64_000,
 )
 .with_batch(1.50, 7.50)
@@ -1054,6 +1300,59 @@ const GEMINI_31_PRO: Model = model(
     65_536,
 )
 .with_high_tier(4.00, 18.00, Some(0.40), 200_000)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
+
+/// gemini-3.6-flash — current Flash generation (2026).
+const GEMINI_36_FLASH: Model = model(
+    "gemini-3.6-flash",
+    Provider::Google,
+    1.50,
+    7.50,
+    Some(0.15),
+    1_048_576,
+    65_536,
+)
+.with_batch(0.75, 3.75)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
+
+/// gemini-3.5-flash-lite — budget tier of the 3.5 generation.
+const GEMINI_35_FLASH_LITE: Model = model(
+    "gemini-3.5-flash-lite",
+    Provider::Google,
+    0.30,
+    2.50,
+    Some(0.03),
+    1_048_576,
+    65_536,
+)
+.with_batch(0.15, 1.25)
+.with_vision(VisionPricing::GeminiTileBased {
+    flat_threshold_px: 384,
+    flat_tokens: 258,
+    tile_tokens: 258,
+});
+
+/// gemini-2.5-flash-lite — cheapest generally available Gemini SKU.
+/// Text/image/video input is $0.10/M; audio input is $0.30/M.
+const GEMINI_25_FLASH_LITE: Model = model(
+    "gemini-2.5-flash-lite",
+    Provider::Google,
+    0.10,
+    0.40,
+    Some(0.01),
+    1_048_576,
+    65_536,
+)
+.with_batch(0.05, 0.20)
+.with_audio_input(0.30)
 .with_vision(VisionPricing::GeminiTileBased {
     flat_threshold_px: 384,
     flat_tokens: 258,
@@ -1249,7 +1548,34 @@ const META_LLAMA_4_MAVERICK: Model = model(
 
 // ── DeepSeek ─────────────────────────────────────────────
 
-/// DEPRECATED — alias `deepseek-chat` deprecates 2026-07-24; replaced by `deepseek-v4-flash`.
+// DeepSeek announced on 2026-08-06 that it plans to raise API pricing
+// "significantly" in the near future; no new rates or effective date have been
+// published, so the rates below remain the active card.
+
+/// deepseek-v4-pro — current flagship.
+const DEEPSEEK_V4_PRO: Model = model(
+    "deepseek-v4-pro",
+    Provider::DeepSeek,
+    0.435,
+    0.87,
+    None,
+    1_000_000,
+    8_192,
+);
+
+/// deepseek-v4-flash — current high-volume SKU.
+const DEEPSEEK_V4_FLASH: Model = model(
+    "deepseek-v4-flash",
+    Provider::DeepSeek,
+    0.14,
+    0.28,
+    None,
+    1_000_000,
+    8_192,
+);
+
+/// DEPRECATED — alias `deepseek-chat` deprecated 2026-07-24; superseded by
+/// `deepseek-v4-flash` and no longer on the official price card.
 const DEEPSEEK_V3: Model = model(
     "deepseek-v3",
     Provider::DeepSeek,
@@ -1273,6 +1599,29 @@ const DEEPSEEK_R1: Model = model(
 
 // ── Alibaba (Qwen) ──────────────────────────────────────
 // USD prices from Alibaba Cloud Model Studio (International).
+
+/// qwen3.8-max — current flagship (2026-08). Flat rate across the full 1M
+/// context, with no long-prompt surcharge; `cached` is the implicit cache read.
+const QWEN_3_8_MAX: Model = model(
+    "qwen3.8-max",
+    Provider::Alibaba,
+    2.00,
+    6.00,
+    Some(0.25),
+    1_000_000,
+    32_768,
+);
+
+/// qwen3.5-plus — current mid-tier.
+const QWEN_3_5_PLUS: Model = model(
+    "qwen3.5-plus",
+    Provider::Alibaba,
+    0.40,
+    2.40,
+    None,
+    1_000_000,
+    32_768,
+);
 
 const QWEN_2_5_72B: Model = model(
     "qwen2.5-72b",
@@ -1357,11 +1706,67 @@ const MISTRAL_LARGE: Model = model(
     4_096,
 );
 
+/// mistral-small — `mistral-small-latest` (Small 4) is $0.15/$0.60 as of 2026-08.
 const MISTRAL_SMALL: Model = model(
     "mistral-small",
     Provider::Mistral,
+    0.15,
+    0.60,
+    None,
+    128_000,
+    4_096,
+);
+
+/// devstral-medium-latest (Devstral 2) — coding-agent SKU.
+const DEVSTRAL_MEDIUM: Model = model(
+    "devstral-medium",
+    Provider::Mistral,
+    0.40,
+    2.00,
+    None,
+    256_000,
+    4_096,
+);
+
+/// devstral-small-latest (Devstral Small 2) — budget coding-agent SKU.
+const DEVSTRAL_SMALL: Model = model(
+    "devstral-small",
+    Provider::Mistral,
     0.10,
     0.30,
+    None,
+    256_000,
+    4_096,
+);
+
+/// ministral-3b-latest (Ministral 3 · 3B) — cheapest hosted Mistral SKU.
+const MINISTRAL_3B: Model = model(
+    "ministral-3b",
+    Provider::Mistral,
+    0.10,
+    0.10,
+    None,
+    128_000,
+    4_096,
+);
+
+/// ministral-8b-latest (Ministral 3 · 8B).
+const MINISTRAL_8B: Model = model(
+    "ministral-8b",
+    Provider::Mistral,
+    0.15,
+    0.15,
+    None,
+    128_000,
+    4_096,
+);
+
+/// ministral-14b-latest (Ministral 3 · 14B).
+const MINISTRAL_14B: Model = model(
+    "ministral-14b",
+    Provider::Mistral,
+    0.20,
+    0.20,
     None,
     128_000,
     4_096,
@@ -1422,12 +1827,22 @@ const MIXTRAL_8X7B: Model = model(
 
 static ALL_MODELS: &[Model] = &[
     // OpenAI
+    OPENAI_GPT56_SOL,
+    OPENAI_GPT56_TERRA,
+    OPENAI_GPT56_LUNA,
     OPENAI_GPT55,
+    OPENAI_GPT55_PRO,
     OPENAI_GPT54,
     OPENAI_GPT54_MINI,
+    OPENAI_GPT54_NANO,
+    OPENAI_GPT54_PRO,
+    OPENAI_GPT52,
+    OPENAI_GPT52_PRO,
+    OPENAI_GPT51,
     OPENAI_GPT5,
     OPENAI_GPT5_MINI,
     OPENAI_GPT5_NANO,
+    OPENAI_GPT5_PRO,
     OPENAI_GPT41,
     OPENAI_GPT41_MINI,
     OPENAI_GPT41_NANO,
@@ -1447,6 +1862,10 @@ static ALL_MODELS: &[Model] = &[
     OPENAI_EMBED_3_LARGE,
     OPENAI_EMBED_ADA_002,
     // Anthropic
+    CLAUDE_FABLE_5,
+    CLAUDE_MYTHOS_5,
+    CLAUDE_OPUS_5,
+    CLAUDE_SONNET_5,
     CLAUDE_OPUS_48,
     CLAUDE_OPUS_47,
     CLAUDE_OPUS_46,
@@ -1462,10 +1881,13 @@ static ALL_MODELS: &[Model] = &[
     CLAUDE_HAIKU_3,
     // Google
     GEMINI_31_PRO,
+    GEMINI_36_FLASH,
     GEMINI_35_FLASH,
+    GEMINI_35_FLASH_LITE,
     GEMINI_31_FLASH_LITE,
     GEMINI_25_PRO,
     GEMINI_25_FLASH,
+    GEMINI_25_FLASH_LITE,
     GEMINI_20_FLASH,
     GEMINI_15_PRO,
     GEMINI_15_FLASH,
@@ -1478,9 +1900,13 @@ static ALL_MODELS: &[Model] = &[
     META_LLAMA_3_1_8B,
     META_LLAMA_3_3_70B,
     // DeepSeek
+    DEEPSEEK_V4_PRO,
+    DEEPSEEK_V4_FLASH,
     DEEPSEEK_V3,
     DEEPSEEK_R1,
     // Alibaba
+    QWEN_3_8_MAX,
+    QWEN_3_5_PLUS,
     QWEN_3_MAX,
     QWEN_3_PLUS,
     QWEN_3_CODER,
@@ -1494,6 +1920,11 @@ static ALL_MODELS: &[Model] = &[
     MISTRAL_SMALL,
     MISTRAL_NEMO,
     CODESTRAL,
+    DEVSTRAL_MEDIUM,
+    DEVSTRAL_SMALL,
+    MINISTRAL_3B,
+    MINISTRAL_8B,
+    MINISTRAL_14B,
     PIXTRAL_LARGE,
     MIXTRAL_8X7B,
 ];
