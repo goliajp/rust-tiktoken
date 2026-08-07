@@ -116,107 +116,148 @@ pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
 /// or `None` for unknown models. Supports OpenAI, Meta, DeepSeek, Qwen, and Mistral models.
 pub fn model_to_encoding(model: &str) -> Option<&'static str> {
     // Strip the `ft:` prefix used for fine-tuned model IDs
-    // (e.g. `ft:gpt-4o:my-org::abc123` → `gpt-4o:my-org::abc123`).
+    // (e.g. `ft:gpt-4o:my-org::abc123` → `gpt-4o:my-org::abc123`). Upstream
+    // enumerates a fixed set of `ft:` prefixes; stripping generalizes to any
+    // fine-tunable base model, so this is a superset of upstream behavior.
     let model = model.strip_prefix("ft:").unwrap_or(model);
 
-    // order matters: more specific prefixes must come before less specific ones.
-    // e.g. "gpt-4o" must be checked before "gpt-4" since starts_with("gpt-4")
-    // would also match "gpt-4o".
-
-    // o200k_harmony — OpenAI open-source gpt-oss family (harmony chat format).
-    // Must precede the o200k_base block to avoid being shadowed by an unrelated
-    // prefix match.
-    if model.starts_with("gpt-oss") {
-        return Some("o200k_harmony");
-    }
-
-    // o200k_base models (newest first)
-    if model.starts_with("o4-mini")
-        || model.starts_with("o3")
-        || model.starts_with("o1")
-        || model.starts_with("gpt-5")
-        || model.starts_with("gpt-4.5")
-        || model.starts_with("gpt-4.1")
-        || model.starts_with("gpt-4o")
-        || model.starts_with("chatgpt-4o")
-    {
-        return Some("o200k_base");
-    }
-
-    // cl100k_base models
-    // davinci-002 / babbage-002 must be checked here (before the r50k_base block)
-    // since they use the cl100k tokenizer despite sharing a name root with the
-    // r50k davinci/babbage models.
-    if model.starts_with("gpt-4")
-        || model.starts_with("gpt-3.5")
-        || model.starts_with("gpt-35-turbo")
-        || model.starts_with("davinci-002")
-        || model.starts_with("babbage-002")
-        || model.starts_with("text-embedding-ada")
-        || model.starts_with("text-embedding-3")
-    {
-        return Some("cl100k_base");
-    }
-
-    // p50k_base models
-    if model.starts_with("text-davinci-003")
-        || model.starts_with("text-davinci-002")
-        || model.starts_with("code-davinci")
-        || model.starts_with("code-cushman")
-    {
-        return Some("p50k_base");
-    }
-
-    // r50k_base models (gpt2 / gpt-2 share the same encoding)
-    if model.starts_with("text-davinci-001")
-        || model.starts_with("text-curie")
-        || model.starts_with("text-babbage")
-        || model.starts_with("text-ada")
-        || model.starts_with("davinci")
-        || model.starts_with("curie")
-        || model.starts_with("babbage")
-        || model.starts_with("ada")
-        || model.starts_with("gpt-2")
-        || model.starts_with("gpt2")
-    {
-        return Some("r50k_base");
-    }
-
-    // llama models (llama3 encoding covers all llama 3.x and 4.x)
-    if model.starts_with("llama-")
-        || model.starts_with("llama3")
-        || model.starts_with("llama4")
-        || model.starts_with("Llama-")
-        || model.starts_with("Meta-Llama-")
-    {
-        return Some("llama3");
-    }
-
-    // deepseek models
-    if model.starts_with("deepseek") || model.starts_with("DeepSeek") {
-        return Some("deepseek_v3");
-    }
-
-    // qwen models
-    if model.starts_with("qwen") || model.starts_with("Qwen") {
-        return Some("qwen2");
-    }
-
-    // mistral / mixtral / codestral / pixtral models
-    if model.starts_with("mistral")
-        || model.starts_with("Mistral")
-        || model.starts_with("mixtral")
-        || model.starts_with("Mixtral")
-        || model.starts_with("codestral")
-        || model.starts_with("Codestral")
-        || model.starts_with("pixtral")
-        || model.starts_with("Pixtral")
-    {
-        return Some("mistral_v3");
-    }
-
-    None
+    // Exact matches win over prefixes — several legacy ids would otherwise be
+    // captured by a shorter prefix and resolve to the wrong encoding
+    // (`davinci-codex` is p50k_base, not the r50k_base that `davinci` implies;
+    // `code-davinci-edit-001` is p50k_edit, not the p50k_base of `code-davinci`).
+    EXACT_MODEL_ENCODINGS
+        .iter()
+        .find(|&&(m, _)| m == model)
+        .map(|&(_, enc)| enc)
+        .or_else(|| {
+            MODEL_PREFIX_ENCODINGS
+                .iter()
+                .find(|&&(p, _)| model.starts_with(p))
+                .map(|&(_, enc)| enc)
+        })
 }
+
+/// Exact model id → encoding. Mirrors upstream `MODEL_TO_ENCODING`, which the
+/// `model_map` test pins against the reference registry.
+///
+/// `gpt-2` / `gpt2` map to `r50k_base`, the name this crate caches them under;
+/// upstream calls the identical encoding `gpt2` (see [`get_encoding`]).
+const EXACT_MODEL_ENCODINGS: &[(&str, &str)] = &[
+    // chat / reasoning
+    ("gpt-5", "o200k_base"),
+    ("gpt-4.1", "o200k_base"),
+    ("gpt-4o", "o200k_base"),
+    ("gpt-4", "cl100k_base"),
+    ("gpt-3.5", "cl100k_base"),
+    ("gpt-3.5-turbo", "cl100k_base"),
+    ("gpt-35-turbo", "cl100k_base"),
+    ("o1", "o200k_base"),
+    ("o3", "o200k_base"),
+    ("o4-mini", "o200k_base"),
+    // base / legacy completion
+    ("davinci-002", "cl100k_base"),
+    ("babbage-002", "cl100k_base"),
+    ("davinci", "r50k_base"),
+    ("curie", "r50k_base"),
+    ("babbage", "r50k_base"),
+    ("ada", "r50k_base"),
+    ("gpt-2", "r50k_base"),
+    ("gpt2", "r50k_base"),
+    // codex era — these predate the `code-*` prefixes and disagree with them
+    ("davinci-codex", "p50k_base"),
+    ("cushman-codex", "p50k_base"),
+    ("code-davinci-001", "p50k_base"),
+    ("code-davinci-002", "p50k_base"),
+    ("code-cushman-001", "p50k_base"),
+    ("code-cushman-002", "p50k_base"),
+    // edit models (FIM special tokens)
+    ("text-davinci-edit-001", "p50k_edit"),
+    ("code-davinci-edit-001", "p50k_edit"),
+    // instruct-era completion
+    ("text-davinci-003", "p50k_base"),
+    ("text-davinci-002", "p50k_base"),
+    ("text-davinci-001", "r50k_base"),
+    ("text-curie-001", "r50k_base"),
+    ("text-babbage-001", "r50k_base"),
+    ("text-ada-001", "r50k_base"),
+    // embeddings
+    ("text-embedding-3-small", "cl100k_base"),
+    ("text-embedding-3-large", "cl100k_base"),
+    ("text-embedding-ada-002", "cl100k_base"),
+    // first-generation search / similarity embeddings
+    ("text-search-davinci-doc-001", "r50k_base"),
+    ("text-search-curie-doc-001", "r50k_base"),
+    ("text-search-babbage-doc-001", "r50k_base"),
+    ("text-search-ada-doc-001", "r50k_base"),
+    ("text-similarity-davinci-001", "r50k_base"),
+    ("text-similarity-curie-001", "r50k_base"),
+    ("text-similarity-babbage-001", "r50k_base"),
+    ("text-similarity-ada-001", "r50k_base"),
+    ("code-search-babbage-code-001", "r50k_base"),
+    ("code-search-ada-code-001", "r50k_base"),
+];
+
+/// Model id prefix → encoding, scanned in order: more specific prefixes first,
+/// since `starts_with("gpt-4")` would otherwise swallow `gpt-4o` and `gpt-4.1`.
+///
+/// Upstream pins dated suffixes (`gpt-5-`, `gpt-4.1-`); this table uses the
+/// undated stem (`gpt-5`) so point releases resolve without a code change —
+/// `gpt-5.6-sol` and `gpt-5.4-mini` both reach `o200k_base` here.
+const MODEL_PREFIX_ENCODINGS: &[(&str, &str)] = &[
+    // OpenAI — o200k_harmony must precede o200k_base so `gpt-oss` is not
+    // shadowed, and the o200k block must precede the cl100k `gpt-4` entry.
+    ("gpt-oss", "o200k_harmony"),
+    ("o4-mini", "o200k_base"),
+    ("o3", "o200k_base"),
+    ("o1", "o200k_base"),
+    ("chatgpt-4o", "o200k_base"),
+    ("gpt-5", "o200k_base"),
+    ("gpt-4.5", "o200k_base"),
+    ("gpt-4.1", "o200k_base"),
+    ("gpt-4o", "o200k_base"),
+    ("gpt-4", "cl100k_base"),
+    ("gpt-3.5", "cl100k_base"),
+    ("gpt-35-turbo", "cl100k_base"),
+    ("davinci-002", "cl100k_base"),
+    ("babbage-002", "cl100k_base"),
+    ("text-embedding-3", "cl100k_base"),
+    ("text-embedding-ada", "cl100k_base"),
+    ("text-davinci-003", "p50k_base"),
+    ("text-davinci-002", "p50k_base"),
+    ("code-davinci", "p50k_base"),
+    ("code-cushman", "p50k_base"),
+    ("text-davinci-001", "r50k_base"),
+    ("text-curie", "r50k_base"),
+    ("text-babbage", "r50k_base"),
+    ("text-ada", "r50k_base"),
+    ("davinci", "r50k_base"),
+    ("curie", "r50k_base"),
+    ("babbage", "r50k_base"),
+    ("ada", "r50k_base"),
+    ("gpt-2", "r50k_base"),
+    ("gpt2", "r50k_base"),
+    // Meta — the llama3 encoding covers Llama 3.x and 4.x
+    ("llama-", "llama3"),
+    ("llama3", "llama3"),
+    ("llama4", "llama3"),
+    ("Llama-", "llama3"),
+    ("Meta-Llama-", "llama3"),
+    // DeepSeek
+    ("deepseek", "deepseek_v3"),
+    ("DeepSeek", "deepseek_v3"),
+    // Alibaba
+    ("qwen", "qwen2"),
+    ("Qwen", "qwen2"),
+    // Mistral
+    ("mistral", "mistral_v3"),
+    ("Mistral", "mistral_v3"),
+    ("mixtral", "mistral_v3"),
+    ("Mixtral", "mistral_v3"),
+    ("codestral", "mistral_v3"),
+    ("Codestral", "mistral_v3"),
+    ("pixtral", "mistral_v3"),
+    ("Pixtral", "mistral_v3"),
+];
 
 #[cfg(test)]
 mod tests {
@@ -344,6 +385,68 @@ mod tests {
     fn test_encoding_for_gpt5_family() {
         for m in ["gpt-5", "gpt-5-turbo", "gpt-4.5", "gpt-4.5-preview"] {
             assert_eq!(model_to_encoding(m), Some("o200k_base"), "{m}");
+        }
+    }
+
+    #[test]
+    fn test_encoding_for_gpt5_point_releases() {
+        // The 2026 GPT-5.x point releases and the Sol/Terra/Luna tier names must
+        // resolve without a per-SKU entry.
+        for m in [
+            "gpt-5.1",
+            "gpt-5.2",
+            "gpt-5.2-pro",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.4-nano",
+            "gpt-5.4-pro",
+            "gpt-5.5",
+            "gpt-5.5-pro",
+            "gpt-5.5-cyber",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.3-codex",
+            "gpt-5.3-chat-latest",
+        ] {
+            assert_eq!(model_to_encoding(m), Some("o200k_base"), "{m}");
+        }
+    }
+
+    #[test]
+    fn test_encoding_for_legacy_exact_ids() {
+        // Regression: a bare prefix scan routed these to the wrong encoding —
+        // `davinci-codex` matched `davinci` (r50k_base) and `code-davinci-edit-001`
+        // matched `code-davinci` (p50k_base). Exact ids must win over prefixes.
+        assert_eq!(model_to_encoding("davinci-codex"), Some("p50k_base"));
+        assert_eq!(model_to_encoding("cushman-codex"), Some("p50k_base"));
+        assert_eq!(
+            model_to_encoding("text-davinci-edit-001"),
+            Some("p50k_edit")
+        );
+        assert_eq!(
+            model_to_encoding("code-davinci-edit-001"),
+            Some("p50k_edit")
+        );
+    }
+
+    #[test]
+    fn test_encoding_for_first_gen_embedding_models() {
+        // Regression: these returned None — no prefix in the old scan covered the
+        // `text-search-*` / `text-similarity-*` / `code-search-*` families.
+        for m in [
+            "text-search-davinci-doc-001",
+            "text-search-curie-doc-001",
+            "text-search-babbage-doc-001",
+            "text-search-ada-doc-001",
+            "text-similarity-davinci-001",
+            "text-similarity-curie-001",
+            "text-similarity-babbage-001",
+            "text-similarity-ada-001",
+            "code-search-babbage-code-001",
+            "code-search-ada-code-001",
+        ] {
+            assert_eq!(model_to_encoding(m), Some("r50k_base"), "{m}");
         }
     }
 
