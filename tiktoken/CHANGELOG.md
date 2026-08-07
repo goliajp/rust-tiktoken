@@ -83,6 +83,15 @@
   with systematic whitespace-run × follower matrices covering the newline,
   digit, CJK and slash axes where these patterns disagree.
 
+### Performance
+- ASCII fast paths are **5–26% faster than 3.5.1** (same machine, same
+  toolchain, criterion n=100): cl100k encode 13 B 45.7→37.9 ns, 45 KB
+  77.8→67.3 µs; o200k 900 B 2.06→1.52 µs, 45 KB 92.9→79.2 µs. The scanners'
+  per-pattern variations (digit cap, contraction rule, punctuation tail) are
+  const-generic parameters with `#[inline(always)]`, so each `FastPath` gets
+  fully specialized, inlined codegen. Unicode/CJK inputs are unchanged (regex
+  path).
+
 ### Internal
 - Removed `tests/generate_oracle.rs` (the self-generating oracle it replaced).
 - Added `tests/canonical_parity.rs`, an `--ignored` full-corpus differential
