@@ -2,6 +2,7 @@ use regex::Regex;
 use rustc_hash::FxHashMap;
 
 use crate::merge;
+use crate::piece_cache;
 use crate::pretokenize::{FastPath, PreTokenizer, RegexPreTokenizer, WhitespaceRules};
 use crate::vocab::Vocab;
 
@@ -28,6 +29,8 @@ use crate::vocab::Vocab;
 /// ```
 pub struct CoreBpe {
     vocab: Vocab,
+    /// Identity for the thread-local piece cache — a nonce, never an address.
+    cache_id: u64,
     special_encoder: FxHashMap<Vec<u8>, u32>,
     special_decoder: FxHashMap<u32, Vec<u8>>,
     pre_tokenizer: RegexPreTokenizer,
@@ -69,6 +72,7 @@ impl CoreBpe {
 
         Self {
             vocab,
+            cache_id: piece_cache::new_cache_id(),
             special_encoder,
             special_decoder,
             pre_tokenizer,
@@ -210,6 +214,10 @@ impl CoreBpe {
             let piece = &text.as_bytes()[start..end];
             if self.vocab.contains_key(piece) {
                 count += 1;
+            } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
+                count += piece_cache::count_piece(self.cache_id, piece, |buf| {
+                    merge::bpe_encode_buf(piece, &self.vocab, buf)
+                });
             } else {
                 count += merge::bpe_count(piece, &self.vocab);
             }
@@ -351,6 +359,10 @@ impl CoreBpe {
             let piece = &bytes[start..end];
             if let Some(token) = self.vocab.get(piece) {
                 result.push(token);
+            } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
+                piece_cache::encode_piece(self.cache_id, piece, result, |buf| {
+                    merge::bpe_encode_buf(piece, &self.vocab, buf)
+                });
             } else {
                 merge::bpe_encode(piece, &self.vocab, result);
             }

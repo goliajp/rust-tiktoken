@@ -27,6 +27,7 @@
 mod bpe;
 pub mod encoding;
 mod merge;
+mod piece_cache;
 mod pretokenize;
 pub mod pricing;
 mod vocab;
