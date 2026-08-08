@@ -1,3 +1,4 @@
+import { ArrowDown, ArrowUpRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Code, CodeBlock } from './components/CodeBlock'
@@ -132,16 +133,18 @@ export function App() {
           <div className="actions">
             <a className="btn primary" href="#playground">
               {t('front.cta.try')}
+              <ArrowDown size={15} strokeWidth={2.25} />
             </a>
-            <a className="btn" href={GITHUB} target="_blank" rel="noreferrer">
-              GitHub
-            </a>
-            <a className="btn" href={CRATES} target="_blank" rel="noreferrer">
-              crates.io
-            </a>
-            <a className="btn" href={NPM} target="_blank" rel="noreferrer">
-              npm
-            </a>
+            {[
+              ['GitHub', GITHUB],
+              ['crates.io', CRATES],
+              ['npm', NPM],
+            ].map(([label, href]) => (
+              <a key={label} className="btn" href={href} target="_blank" rel="noreferrer">
+                {label}
+                <ArrowUpRight size={14} strokeWidth={2} className="ext" />
+              </a>
+            ))}
           </div>
         </section>
 
@@ -223,18 +226,17 @@ export function App() {
             <div>{t('foot.license')}</div>
           </div>
           <div className="links">
-            <a href={GITHUB} target="_blank" rel="noreferrer">
-              GitHub
-            </a>
-            <a href={CRATES} target="_blank" rel="noreferrer">
-              crates.io
-            </a>
-            <a href={NPM} target="_blank" rel="noreferrer">
-              npm
-            </a>
-            <a href={DOCSRS} target="_blank" rel="noreferrer">
-              docs.rs
-            </a>
+            {[
+              ['GitHub', GITHUB],
+              ['crates.io', CRATES],
+              ['npm', NPM],
+              ['docs.rs', DOCSRS],
+            ].map(([label, href]) => (
+              <a key={label} href={href} target="_blank" rel="noreferrer">
+                {label}
+                <ArrowUpRight size={12} strokeWidth={2} className="ext" />
+              </a>
+            ))}
           </div>
         </footer>
       </div>

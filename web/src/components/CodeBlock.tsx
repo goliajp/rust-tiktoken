@@ -1,3 +1,4 @@
+import { Check, Copy } from 'lucide-react'
 import { Fragment, useState, type ReactNode } from 'react'
 
 /**
@@ -131,6 +132,7 @@ export function CodeBlock({
         <span>{label}</span>
         <button
           className="cb-copy"
+          aria-label={copied ? 'copied' : 'copy'}
           onClick={() => {
             navigator.clipboard.writeText(copy).then(() => {
               setCopied(true)
@@ -138,7 +140,8 @@ export function CodeBlock({
             })
           }}
         >
-          {copied ? '✓ copied' : 'copy'}
+          {copied ? <Check size={14} strokeWidth={2.25} /> : <Copy size={14} strokeWidth={2} />}
+          {copied ? 'copied' : 'copy'}
         </button>
       </div>
       <pre>{children}</pre>

@@ -23,6 +23,10 @@ switch persisted to `localStorage`.
   encodings run in-browser, nothing the visitor types is uploaded.
 - **i18n** — a flat trilingual dictionary in `src/i18n.ts` with a React
   context. No library: three locales, one page.
+- **lucide-react** — icons only where they do work: labelling an action,
+  carrying a state, or marking a link as leaving the page. Each sits beside
+  its own text, so nothing depends on decoding a glyph. Tree-shaken — the set
+  in use costs ~1.5 kB gzipped.
 
 ```
 src/
