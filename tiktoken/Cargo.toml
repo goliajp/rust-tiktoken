@@ -14,7 +14,7 @@ categories = ["text-processing", "algorithms"]
 # excluded from the published package: they are several MB of reference data
 # only used to validate this crate against upstream tokenizers, and crates.io
 # enforces a 10 MB package cap that the embedded vocabularies already approach.
-exclude = ["tests/", "examples/react-app/"]
+exclude = ["tests/", "examples/react-app/", "PERF-*.md"]
 
 [features]
 default = []

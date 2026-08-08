@@ -1,5 +1,61 @@
 # Changelog
 
+## [3.8.0] - 2026-08-09
+
+### Fixed
+- **o200k punctuation rule was missing the `/` in its `[\r\n/]*` tail.**
+  Upstream o200k_base admits slashes after the newline tail of the punctuation
+  rule, and the vocabulary leans on it — `".\n/"` is a single token (118550).
+  This crate had cl100k's plain `[\r\n]*` tail, so such inputs split into two
+  pieces and produced different ids. The fixture corpus never contained a
+  slash after a newline, which is how a green suite proved nothing about this
+  rule; the generators now include slash-after-newline shapes (2,374 → 2,728
+  cases per OpenAI encoding, all fixtures regenerated from Python tiktoken,
+  red-then-green verified). Kimi — which rode on the o200k fast path but whose
+  upstream pattern has no slash — got its own scanner variant, now pinned by
+  its own property tests.
+
+### Changed — performance
+A three-round, decomposition-driven attack on the Unicode path. Native
+`encode` is now **5–49x faster than tiktoken-rs 0.9** (was 15–40x on ASCII
+but ~2x on CJK); in the browser the wasm build is **2–4x faster than
+gpt-tokenizer 3.4 on every corpus, CJK prose included** (it was 2–3x slower
+there before). Apple M4 Mac mini, token outputs asserted identical before
+timing; corpora and harnesses ship in-repo (`bench-compare/`, `web/bench/`).
+
+- **Vocabulary lookup, layered by key size** — the BPE merge is lookup-bound
+  (~2.4 probes per emitted token on CJK, 77% misses, 96.7% of keys ≤ 8 bytes).
+  2-byte keys (the adjacent-pair scan, 59% of probes) now hit a direct-indexed
+  65,536-entry table; 3–8-byte keys live in 16-byte slots with the key bytes
+  inlined, so a probe is one memory access and one `u64` compare; longer keys
+  keep the arena but gain an 8-bit tag that rejects mismatched slots without
+  loading bytes.
+- **CJK fast-path scanners** — Han, kana, hangul, fullwidth forms and CJK
+  punctuation now resolve without the regex engine, including o200k's
+  case-split rules with exact backtracking emulation for caseless letters and
+  kimi's dedicated `[\p{Han}]+` branch. A certainty classifier drives the
+  scanners; every claim it makes is pinned char-by-char against the regex
+  crate's own Unicode tables, and anything unknown defers to the regex. All
+  CJK handling lives out-of-line behind the existing non-ASCII branches, so
+  the ASCII hot paths keep their shape.
+- **Whole-piece memoisation** — a thread-local, direct-mapped, byte-keyed
+  cache (4,096 slots, pieces ≤ 96 bytes) turns repeated pieces — chat
+  templates, function words, CJK particles — into one hash and one compare.
+  Keyed by a per-instance nonce, so encodings never share entries.
+- **`bpe_count` no longer allocates** — the small-merge scratch is a
+  caller-provided stack array.
+
+### Verification
+- 44,518 differential fixture cases across 16 encodings (encode + count per
+  case), regenerated from the reference implementations: 0 divergences.
+- Canonical full-corpus parity vs Python tiktoken 0.12: 66,546 cases across
+  the 6 OpenAI encodings (now including slash-after-newline shapes): 0
+  mismatches.
+- 23 property tests × 20,000 random inputs per run hold every fast-path
+  scanner to the regex's exact segmentation, including six new CJK-dense
+  generators and slash-dense generators for o200k and kimi.
+
+
 ## [3.7.1] - 2026-08-08
 
 ### Changed
