@@ -8,7 +8,7 @@
 // no hedging, no filler connectives. Those read as translationese in Chinese
 // and Japanese and as padding in English.
 
-import { createContext, Fragment, useContext, type ReactNode } from 'react'
+import { createContext, useContext } from 'react'
 
 export type Lang = 'en' | 'zh' | 'ja'
 
@@ -212,108 +212,47 @@ export const LangContext = createContext<Lang>('en')
 
 export function useT() {
   const lang = useContext(LangContext)
-  return (key: string) => t(lang, key)
+  return (key: string) => phrase(t(lang, key), lang)
 }
-
-/**
- * Chinese and Japanese are written without spaces, so a browser is free to
- * break between any two characters — which is how "各厂商发 / 布的" happens.
- * `word-break: auto-phrase` fixes this, but Chrome's model only covers
- * Japanese, so Chinese still breaks mid-word.
- *
- * `Intl.Segmenter` is the same segmentation the platform uses elsewhere and
- * ships with the browser. Splitting on its word boundaries and emitting a
- * `<wbr>` between segments gives the line-breaker exactly the phrase
- * boundaries it lacks; `.phrase { word-break: keep-all }` then stops it
- * breaking anywhere else.
- */
-const segmenters = new Map<string, Intl.Segmenter>()
-function segmenter(locale: string): Intl.Segmenter | null {
-  if (typeof Intl === 'undefined' || !('Segmenter' in Intl)) return null
-  let s = segmenters.get(locale)
-  if (!s) {
-    s = new Intl.Segmenter(locale, { granularity: 'word' })
-    segmenters.set(locale, s)
-  }
-  return s
-}
-
-/**
- * Kinsoku, applied to our own break opportunities.
- *
- * `<wbr>` is an *explicit* break opportunity: the browser honours it even
- * where `line-break: strict` would forbid a break. Since the segmenter treats
- * 、 and 。 as segments of their own, a naive `<wbr>` between every pair puts
- * one right before a comma — and a line then legitimately starts with 、.
- * So a boundary is only offered when both sides allow it.
- */
-const NO_LINE_START =
-  '。、，．：；！？）］｝」』〕〉》〙〗»›・…‥ー〜～ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〻%‰℃°'
-const NO_LINE_END = '（［｛「『〔〈《〘〖«‹＄￥£€#'
 
 const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f]/
 const LATIN = /[0-9A-Za-z]/
 
-function breakable(before: string, after: string): boolean {
-  const prev = before.at(-1)
-  const next = after[0]
-  if (!prev || !next) return false
-  if (NO_LINE_START.includes(next)) return false
-  if (NO_LINE_END.includes(prev)) return false
-  return true
-}
-
 /**
- * A space with CJK on one side and Latin on the other is typographic, not
- * lexical — it is the gap Chinese and Japanese put around embedded Latin
- * (盘古之白), and the two sides usually form one term. Breaking there splits
- * "ASCII 路径" and "特殊 token 表" across lines.
+ * Chinese and Japanese line-breaking is the browser's job, and it does it
+ * correctly: CJK folds at any character boundary — that is how CJK is
+ * typeset, in books and on paper — and `line-break: strict` in the stylesheet
+ * enforces kinsoku, so a line never begins with 、 or ends with 「.
+ *
+ * The one thing the browser gets wrong is the space around embedded Latin
+ * (盘古之白). That space is typographic, not lexical: "ASCII 路径" and
+ * "特殊 token 表" are single terms, and a fold there reads as a mistake. Make
+ * exactly that space non-breaking and leave everything else alone.
  *
  * A space between two Latin words ("Apple M4 Mac mini") is a real separator
- * and stays breakable, so glued runs remain short.
+ * and stays breakable.
+ *
+ * This is a string transform on purpose. An earlier version segmented the
+ * text and emitted `<wbr>` between phrases, which shredded a sentence into
+ * dozens of nodes, split "UTF-8", and — because `<wbr>` overrides
+ * `line-break: strict` — put commas at the start of lines.
  */
-function isTypographicSpace(prev: string, space: string, next: string): boolean {
-  if (space !== ' ') return false
-  const a = prev.at(-1)
-  const b = next[0]
-  if (!a || !b) return false
-  return (CJK.test(a) && LATIN.test(b)) || (LATIN.test(a) && CJK.test(b))
-}
-
-export function phrase(text: string, lang: Lang): ReactNode {
+export function phrase(text: string, lang: Lang): string {
   if (lang === 'en') return text
-  const seg = segmenter(lang === 'zh' ? 'zh-Hans' : 'ja')
-  if (!seg) return text
-  const parts = [...seg.segment(text)].map((s) => s.segment)
-
-  // Glue Latin↔CJK across the typographic space: the space becomes
-  // non-breaking and no break is offered on either side of it.
-  const out: { text: string; breakAfter: boolean }[] = []
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]
-    const prev = parts[i - 1]
-    const next = parts[i + 1]
-    if (prev !== undefined && next !== undefined && isTypographicSpace(prev, part, next)) {
-      out[out.length - 1].breakAfter = false
-      out.push({ text: '\u00a0', breakAfter: false })
-      continue
-    }
-    out.push({ text: part, breakAfter: next !== undefined && breakable(part, next) })
-  }
-
-  return (
-    <span className="phrase">
-      {out.map((p, i) => (
-        <Fragment key={i}>
-          {p.text}
-          {p.breakAfter && <wbr />}
-        </Fragment>
-      ))}
-    </span>
-  )
+  return text.replace(/ /g, (_m, i: number) => {
+    const a = text[i - 1]
+    const b = text[i + 1]
+    // A space at the edge of a fragment — the heading is assembled from three
+    // dictionary entries around an <em>. Chinese and Japanese do not separate
+    // words with spaces, so a space there exists only to set off the Latin on
+    // the other side of the seam.
+    if (!a || !b) return '\u00a0'
+    const mixed = (CJK.test(a) && LATIN.test(b)) || (LATIN.test(a) && CJK.test(b))
+    return mixed ? '\u00a0' : ' '
+  })
 }
 
-/** Dictionary lookup that returns phrase-aware nodes rather than a string. */
+/** Dictionary lookup, with the CJK/Latin spacing fix applied. */
 export function T({ k }: { k: string }) {
   const lang = useContext(LangContext)
   return <>{phrase(t(lang, k), lang)}</>

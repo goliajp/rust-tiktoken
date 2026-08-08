@@ -69,25 +69,16 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   /* Kinsoku: CJK must not start a line with closing punctuation (。、」）)
-     or end one with an opener. Without this the browser breaks anywhere,
-     which is what put a 。 at the head of a line. */
+     or end one with an opener. The browser enforces this natively and
+     correctly — nothing in JS needs to help it. */
   line-break: strict;
   overflow-wrap: break-word;
-  /* Kinsoku only governs punctuation. Chinese and Japanese have no spaces, so
-     the browser's default is still free to break inside a word — 各厂商发 /
-     布的, 各ベンダー / 公開の. auto-phrase breaks at phrase boundaries
-     instead, using the browser's own segmentation. Unsupported engines fall
-     back to `normal`, i.e. today's behaviour. */
+  /* Japanese only: a browser-native refinement that prefers phrase boundaries
+     over the default per-character fold. Engines without it fall back to
+     `normal`, which is also correct CJK typesetting. */
   word-break: auto-phrase;
 }
 
-/* Emitted by <T>: the segments carry <wbr> between them, so the only breaks
-   allowed are the phrase boundaries Intl.Segmenter found. overflow-wrap
-   stays as the escape hatch for a segment too long for the column. */
-.phrase {
-  word-break: keep-all;
-  overflow-wrap: break-word;
-}
 
 /* Headings balance across their lines; running text avoids a one-word last
    line. Both degrade to normal wrapping where unsupported. */
