@@ -23,7 +23,7 @@ The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatibl
 
 - **Hand-written pre-tokenizer for ASCII and CJK** — letters, digits, punctuation, contractions, Han/kana/hangul runs and fullwidth forms all resolve without the regex engine, which remains the arbiter (property-tested equivalence) and the fallback for rare shapes.
 - **17 encodings · 107 models · 10 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek V3/V4, Qwen, Mistral, Kimi K2/K3, GLM-4/5, MiniMax M2; plus USD cost estimation (Anthropic & Google included for pricing).
-- **Lean & portable** — arena-based vocabulary, hybrid linear/heap BPE merge, optional rayon parallelism, allocation-free `count()`, pure Rust with zero C dependencies, a tiny wasm build, and zstd-compressed vocab embedded at compile time.
+- **Lean & portable** — key-size-layered vocabulary with whole-piece memoisation, hybrid linear/heap BPE merge, optional rayon parallelism, allocation-free `count()`, pure Rust with zero C dependencies, a self-contained wasm build, and zstd-compressed vocab embedded at compile time.
 
 Full API, supported-model tables, and benchmarks live in the per-crate READMEs: **[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**.
 

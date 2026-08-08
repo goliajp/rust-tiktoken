@@ -295,6 +295,52 @@ for (const [width, height, label] of [
   await page.close()
 }
 
+// SEO completeness: the metadata block is as much a deliverable as the page.
+// Assert the pieces that silently break — a canonical that drifts from the
+// deployed origin, an og:image URL that 404s, JSON-LD that no longer parses.
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+  await page.goto(URL_, { waitUntil: 'networkidle', timeout: 120_000 })
+  const meta = await page.evaluate(() => {
+    const attr = (sel, a) => document.querySelector(sel)?.getAttribute(a) ?? null
+    let ld = null
+    try {
+      ld = JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent ?? 'null')
+    } catch {
+      ld = { parseError: true }
+    }
+    return {
+      title: document.title,
+      description: attr('meta[name="description"]', 'content'),
+      canonical: attr('link[rel="canonical"]', 'href'),
+      ogImage: attr('meta[property="og:image"]', 'content'),
+      ogType: attr('meta[property="og:type"]', 'content'),
+      twitterCard: attr('meta[name="twitter:card"]', 'content'),
+      ld,
+    }
+  })
+  if (!meta.title || meta.title.length < 20) failures.push('title missing or too short')
+  if (!meta.description || meta.description.length < 80) failures.push('meta description missing or thin')
+  if (meta.canonical !== 'https://tiktoken.golia.jp/') failures.push(`canonical is ${meta.canonical}`)
+  if (meta.ogType !== 'website') failures.push('og:type missing')
+  if (meta.twitterCard !== 'summary_large_image') failures.push('twitter:card missing')
+  if (meta.ld?.parseError || meta.ld?.['@type'] !== 'SoftwareApplication')
+    failures.push('JSON-LD missing or unparseable')
+  // og:image must actually resolve (same origin as the page under test)
+  const imgPath = new globalThis.URL(meta.ogImage).pathname
+  const imgStatus = await page.evaluate(async (path) => (await fetch(path)).status, imgPath)
+  if (imgStatus !== 200) failures.push(`og:image ${imgPath} returned ${imgStatus}`)
+  for (const f of ['/robots.txt', '/sitemap.xml']) {
+    const st = await page.evaluate(async (path) => (await fetch(path)).status, f)
+    if (st !== 200) failures.push(`${f} returned ${st}`)
+  }
+  console.log(
+    `seo title=${meta.title.length}ch desc=${meta.description?.length}ch canonical=ok ` +
+      `og-image=${imgStatus} ld=${meta.ld?.['@type']}`,
+  )
+  await page.close()
+}
+
 // the page is a light design: a dark UA preference must not invert it
 {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })

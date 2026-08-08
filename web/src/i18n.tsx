@@ -47,7 +47,7 @@ const dict: Dict = {
   'front.title.c': { en: ' BPE tokenizer', zh: ' BPE 分词器', ja: ' BPE トークナイザー' },
   'front.abstract': {
     en: 'Token counts drive billing, context limits and truncation, so a tokenizer has to be fast and exact at once. This one beats the fastest JavaScript tokenizers by 2–4× in the browser and tiktoken-rs by 5–49× natively, and each of its 17 encodings is checked byte-for-byte against the vendor’s own tokenizer — 44,518 differential cases, zero divergence. The playground below runs the published WebAssembly package itself, so both claims can be verified on this page.',
-    zh: 'token 数直接决定计费、上下文上限和截断位置，分词器必须又快又准。本实现在浏览器里快于最快的 JavaScript 分词器 2–4 倍，原生快于 tiktoken-rs 5–49 倍；17 套编码逐一与厂商自己的分词器逐字节比对，44,518 组差分对照零分歧。下方试用区运行的就是发布的 WebAssembly 包本体，这两件事都可以当场验证。',
+    zh: 'token 数直接决定计费、上下文上限和截断位置，分词器必须又快又准。浏览器里，它比最快的 JavaScript 分词器快 2–4 倍；原生比 tiktoken-rs 快 5–49 倍。17 套编码逐一与厂商自己的分词器逐字节比对，44,518 组差分对照零分歧。下方试用区运行的就是发布的 WebAssembly 包本体 —— 这两件事都可以当场验证。',
     ja: 'トークン数は課金・コンテキスト上限・打ち切り位置を直接決めるため、トークナイザーには速さと正確さの両方が要ります。本実装はブラウザ内で最速の JavaScript トークナイザーの 2〜4 倍、ネイティブでは tiktoken-rs の 5〜49 倍高速。17 のエンコーディングはすべてベンダー自身のトークナイザーとバイト単位で照合済みで、44,518 件の差分照合に相違はありません。下のプレイグラウンドは公開中の WebAssembly パッケージそのもの——どちらの主張もこのページで確かめられます。',
   },
   'front.fig.comparisons': {
@@ -114,7 +114,7 @@ const dict: Dict = {
   'pg.caption.label': { en: 'Figure 1.', zh: '图 1.', ja: '図 1.' },
   'pg.caption': {
     en: 'Each shaded run is one token; hover it to read its id. A token whose bytes are not valid UTF-8 on their own — half an emoji, say — shows as a replacement character, but its id is exact.',
-    zh: '每个底色片段是一个 token，悬停可看它的 id。若某个 token 的字节单独不构成合法 UTF-8（例如半个 emoji），会显示为替换字符，但 id 是准确的。',
+    zh: '每个底色片段是一个 token，悬停查看 id。若某个 token 的字节单独不构成合法 UTF-8（例如半个 emoji），会显示为替换字符，但 id 是准确的。',
     ja: '網掛けされた各区間が 1 トークンで、ホバーすると id が出ます。単体では正しい UTF-8 にならないトークン（絵文字の半分など）は置換文字で表示されますが、id は正確です。',
   },
 
@@ -169,12 +169,12 @@ const dict: Dict = {
   'perf.caption.browser': {
     en: 'gpt-tokenizer is the fastest JavaScript tokenizer; js-tiktoken the most downloaded. The adversarial corpus never repeats a piece, which disables every implementation’s memoisation — it is the floor, and the lead holds there too.',
     zh: 'gpt-tokenizer 是浏览器里最快的 JavaScript 分词器，js-tiktoken 是下载量最大的。对抗语料不含任何重复片段，各实现的缓存全部失效 —— 那一行是下界，领先在下界处依然成立。',
-    ja: 'gpt-tokenizer は最速の JavaScript トークナイザー、js-tiktoken は最もダウンロードされているものです。敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にします——その行が下限であり、下限でも優位は変わりません。',
+    ja: 'gpt-tokenizer は最速の JavaScript トークナイザー、js-tiktoken はダウンロード数首位のものです。敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にします——その行が下限であり、下限でも優位は変わりません。',
   },
   'perf.caption': {
-    en: 'Rust rivals, same corpora, encode(). The old weakness is gone: CJK used to fall to the regex engine at ≈2×; the scanners and the layered vocabulary now put it at 5–18×.',
-    zh: 'Rust 同行对比，同一批语料，encode()。旧短板已经不在：CJK 过去落回正则引擎、只快约 2 倍；现在由扫描器和分层词表接住，快 5–18 倍。',
-    ja: 'Rust 実装との比較、同一コーパス、encode()。かつての弱点は解消済みです：以前の CJK は正規表現エンジン頼みで約 2 倍止まりでしたが、現在はスキャナと階層化した語彙で 5〜18 倍です。',
+    en: 'Rust rivals, same corpora, encode(). The scanners and the layered vocabulary keep CJK off the regex engine, so it holds 5–17× alongside ASCII’s 29–49×.',
+    zh: 'Rust 同行对比，同一批语料，encode()。扫描器和分层词表让 CJK 不进正则引擎 —— CJK 快 5–17 倍，ASCII 快 29–49 倍。',
+    ja: 'Rust 実装との比較、同一コーパス、encode()。スキャナと階層化した語彙が CJK を正規表現エンジンに通さないため、CJK で 5〜17 倍、ASCII で 29〜49 倍を保ちます。',
   },
 
   // install

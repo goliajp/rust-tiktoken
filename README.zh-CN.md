@@ -21,9 +21,9 @@
 
 ## 亮点
 
-- **ASCII 快路径（预分词）** —— 常见的 ASCII 片段（字母、数字、标点、缩写）不经过正则引擎直接解析；cl100k / o200k / qwen2 / deepseek 的 ASCII 文本 `encode` / `count` **快 2.3〜5.5 倍**。Unicode/CJK 自动回退到正则。
+- **手写预分词器，覆盖 ASCII 与 CJK** —— 字母、数字、标点、缩写、汉字/假名/谚文与全角形式都不经过正则引擎直接解析；正则仍是判准（属性测试钉死等价），也是罕见形状的兜底。
 - **17 套编码 · 107 个模型 · 10 家厂商** —— OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen、Mistral、Kimi K2/K3、GLM-4/5、MiniMax M2；并提供美元成本估算（价格含 Anthropic、Google）。
-- **轻量可移植** —— Arena 词表存储、线性/堆混合 BPE 合并、可选 rayon 并行、零分配 `count()`、零 C 依赖的纯 Rust、极小的 wasm 体积、zstd 压缩词表编译期内嵌。
+- **轻量可移植** —— 按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、可选 rayon 并行、零分配 `count()`、零 C 依赖的纯 Rust、自足的 wasm 构建、zstd 压缩词表编译期内嵌。
 
 完整 API、支持模型表、基准测试见各 crate 的 README：**[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。
 

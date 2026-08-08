@@ -21,9 +21,9 @@
 
 ## 特長
 
-- **ASCII 高速パス（事前トークン化）** — よくある ASCII の断片（英字・数字・記号・短縮形）を正規表現エンジンを使わずに解決。cl100k / o200k / qwen2 / deepseek の ASCII テキストで `encode` / `count` が **2.3〜5.5 倍高速**。Unicode/CJK は自動的に正規表現へフォールバック。
+- **手書きの事前トークナイザーが ASCII と CJK を処理** — 英字・数字・記号・短縮形に加え、漢字・かな・ハングル・全角形も正規表現エンジンを使わずに解決。正解はあくまで正規表現側（プロパティテストで等価を担保）で、稀な形状のフォールバックも正規表現が受け持ちます。
 - **17 エンコーディング・107 モデル・10 プロバイダ** — OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen、Mistral、Kimi K2/K3、GLM-4/5、MiniMax M2。さらに USD のコスト見積もり（料金は Anthropic・Google も含む）。
-- **軽量・移植性** — Arena ベースの語彙、線形/ヒープのハイブリッド BPE マージ、オプションの rayon 並列、ゼロアロケーションの `count()`、C 依存ゼロの純 Rust、小さな wasm ビルド、zstd 圧縮語彙をコンパイル時に埋め込み。
+- **軽量・移植性** — キー長で階層化した語彙と断片のメモ化、線形/ヒープのハイブリッド BPE マージ、オプションの rayon 並列、ゼロアロケーションの `count()`、C 依存ゼロの純 Rust、自己完結の wasm ビルド、zstd 圧縮語彙をコンパイル時に埋め込み。
 
 API・対応モデル表・ベンチマークは各 crate の README を参照：**[`tiktoken/`](tiktoken/README.md)** ·  **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。
 
