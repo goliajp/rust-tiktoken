@@ -132,15 +132,15 @@ const dict: Dict = {
   },
   'feat.fast.h': { en: 'Hand-written scanners, ASCII and CJK', zh: '手写扫描：ASCII 与 CJK', ja: '手書きスキャナ：ASCII と CJK' },
   'feat.fast.p': {
-    en: 'Common pieces — ASCII and Han, kana, hangul alike — are cut by hand-written scanners that never enter the regex engine. The vocabulary serves each key size its own structure, and repeated pieces are memoised whole. The regex stays the arbiter: property tests hold the scanners to its exact output on hundreds of thousands of random inputs per run.',
-    zh: '常见片段 —— ASCII 和汉字、假名、谚文一样 —— 由手写扫描器直接切分，不进正则引擎。词表按 key 长度分层存取，重复出现的片段整片记忆。正则仍是判准：属性测试以每轮数十万条随机输入，要求扫描器给出与正则完全相同的切分。',
-    ja: '一般的な断片は ASCII も漢字・かな・ハングルも、手書きスキャナが直接切り出し、正規表現エンジンを通しません。語彙はキー長ごとに最適な構造で引き、繰り返し現れる断片は丸ごとメモ化します。正解はあくまで正規表現側にあり、毎回数十万件のランダム入力で両者の一致をプロパティテストが担保します。',
+    en: 'ASCII and CJK pieces alike are cut by hand-written scanners that never enter the regex engine; the vocabulary serves each key size its own structure, and repeated pieces are memoised whole. The regex stays the arbiter — property tests hold the scanners to its exact output.',
+    zh: 'ASCII 与汉字、假名、谚文的常见片段都由手写扫描器直接切分，不进正则引擎；词表按 key 长度分层，重复片段整片记忆。正则仍是判准 —— 属性测试以每轮数十万条随机输入，要求两者切分完全一致。',
+    ja: 'ASCII も漢字・かな・ハングルも、一般的な断片は手書きスキャナが直接切り出し、正規表現エンジンを通しません。語彙はキー長ごとに最適な構造で引き、繰り返す断片は丸ごとメモ化。正解は正規表現側にあり、毎回数十万件のランダム入力で一致を担保します。',
   },
-  'feat.everywhere.h': { en: 'One implementation, two artefacts', zh: '同一实现，两种产物', ja: '一つの実装、二つの成果物' },
+  'feat.everywhere.h': { en: 'Pure Rust, embeds anywhere', zh: '纯 Rust，随处可嵌', ja: '純 Rust、どこへでも' },
   'feat.everywhere.p': {
-    en: 'Pure Rust, no C dependencies, vocabularies embedded at compile time. Published as a crate and as a WebAssembly package — the playground above is that package, unmodified.',
-    zh: '纯 Rust，无 C 依赖，词表在编译期内嵌。以 crate 和 WebAssembly 包两种形态发布 —— 上方试用区用的就是该包本身，未作改动。',
-    ja: '純 Rust、C 依存なし、語彙はコンパイル時に埋め込みます。クレートと WebAssembly パッケージの二形態で公開しており、上のプレイグラウンドはそのパッケージそのものです。',
+    en: 'No C dependencies, no runtime, no external data files — vocabularies compile into one self-contained artifact that drops into servers, IoT and edge devices, and browsers alike, as a crate or a WebAssembly package. The playground above is that package, unmodified.',
+    zh: '零 C 依赖、无运行时、无外部数据文件 —— 词表在编译期内嵌成单一自足产物，服务器、IoT 与边缘设备、浏览器都能直接嵌入，以 crate 和 WebAssembly 包发布。上方试用区就是该包本身，未作改动。',
+    ja: 'C 依存なし・ランタイム不要・外部データなし。語彙を埋め込んだ自己完結の単一成果物は、サーバーでも IoT・エッジ機器でもブラウザでも、クレートか WebAssembly パッケージでそのまま動きます。上のプレイグラウンドはそのパッケージ本体です。',
   },
 
   // encodings
