@@ -8,12 +8,12 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
-最速の Rust BPE トークナイザ — ASCII テキストで tiktoken-rs より 15〜40 倍高速（CJK/Unicode では約 2 倍）。手書きの ASCII 高速パスによる。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral。
+最速の Rust BPE トークナイザ — ネイティブで tiktoken-rs の 5〜49 倍（日本語・中国語の文章で 15〜17 倍）、ブラウザ内（wasm）で gpt-tokenizer の 2〜4 倍。手書きスキャナが ASCII と CJK の両方を扱い、語彙はキー長で階層化、繰り返し断片は丸ごとメモ化。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
 
 ## 特徴
 
 - **マルチプロバイダ**: 5 社 17 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
-- **高速**: 手書き ASCII 高速パス（正規表現をバイパス）、Arena ベースの語彙、ハイブリッド BPE マージ
+- **高速**: 手書きスキャナが ASCII と CJK を処理（正規表現をバイパス）、キー長で階層化した語彙、断片の丸ごとメモ化、ハイブリッド BPE マージ
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
 - **料金見積もり**: 10 プロバイダ 107 モデルのコスト推定
 - **コンパクト**: ruzstd 圧縮語彙データをコンパイル時に埋め込み
@@ -21,41 +21,63 @@
 
 ## パフォーマンス
 
-Apple M4 Mac mini、シングルスレッドで測定。3 実装のトークン出力が完全一致することを検証済み。
+計測前に各実装のトークン出力が完全に一致することを確認し、各数値は 1 パス、
+ウォームアップ後 9 回の中央値です。コーパスはすべてのハーネスでバイト単位に
+同一（`bench-compare/`・`benches/bench_python.py`・`web/bench/`）。
 
-#### cl100k_base encode
+#### ネイティブ — Apple M4 Mac mini・シングルスレッド・`encode`
 
-| 入力 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
+`cargo run --release -p bench-compare`
+
+| コーパス | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| 短文 (13 B) | 1,700 ns | 1,248 ns | **43 ns** | **29x** | **40x** |
-| 中文 (900 B) | 32.2 us | 53.8 us | **1.5 us** | **35x** | **21x** |
-| 長文 (45 KB) | 1,500 us | 2,611 us | **74 us** | **35x** | **20x** |
-| Unicode (4.5 KB) | 141 us | 164 us | **91 us** | **1.8x** | **1.6x** |
-| コード (3.9 KB) | 247 us | 264 us | **17 us** | **16x** | **15x** |
+| 短文 (13 B) | 1.6 µs | 1,081 ns | **33 ns** | **33x** | **48x** |
+| 中程度 (900 B) | 31.9 µs | 52.2 µs | **1.1 µs** | **47x** | **29x** |
+| 英語の文章 (45 KB) | 1,500 µs | 2,498 µs | **51.5 µs** | **49x** | **29x** |
+| 中国語の文章 (4.3 KB) | 119.8 µs | 134.7 µs | **8.1 µs** | **17x** | **15x** |
+| 日本語の文章 (4.6 KB) | 131.0 µs | 144.6 µs | **8.6 µs** | **17x** | **15x** |
+| CJK 混在 ×50 (4.5 KB) | 138.9 µs | 160.3 µs | **15.2 µs** | **11x** | **9.2x** |
+| 敵対的 CJK・繰り返しなし (3.9 KB) | 131.7 µs | 141.2 µs | **25.9 µs** | **5.5x** | **5.1x** |
+| コード (3.9 KB) | 263.7 µs | 317.7 µs | **11.1 µs** | **29x** | **24x** |
 
-#### o200k_base encode
+o200k_base も同じ比率です（tiktoken-rs の 5〜48 倍）。`count()` は id ベクタを
+一切確保しないため、`encode` よりさらに 5〜15% 高速です。
 
-| 入力 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
-|---|---|---|---|---|---|
-| 短文 (13 B) | 1,600 ns | 1,051 ns | **40 ns** | **26x** | **40x** |
-| 中文 (900 B) | 58.3 us | 56.2 us | **1.5 us** | **37x** | **39x** |
-| 長文 (45 KB) | 2,900 us | 2,799 us | **73 us** | **38x** | **40x** |
-| Unicode (4.5 KB) | 204 us | 187 us | **95 us** | **2.0x** | **2.2x** |
-| コード (3.9 KB) | 332 us | 253 us | **16 us** | **16x** | **21x** |
+#### ブラウザ内 — Mac Studio (M4 Max)・Chromium
+
+`web/` で `npm run bench` — 本クレートの wasm ビルドを、主要な 2 つの
+JavaScript トークナイザーと比較。
+
+| コーパス | gpt-tokenizer 3.4 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+|---|---|---|---|
+| 中国語の文章 (4.3 KB) | 36.8 µs | 8,029 µs | **13.4 µs** |
+| 日本語の文章 (4.6 KB) | 27.4 µs | 15,862 µs | **13.5 µs** |
+| CJK 混在 ×50 (4.5 KB) | 41.2 µs | 4,665 µs | **24.2 µs** |
+| 敵対的 CJK・繰り返しなし (3.9 KB) | 49.6 µs | 3,832 µs | **40.3 µs** |
+| 英語の文章 (45 KB) | 478 µs | 7,010 µs | **112.5 µs** |
+| コード (3.9 KB) | 76.0 µs | 916 µs | **19.5 µs** |
+
+敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にします —
+それが下限であり、下限でも優位は変わりません。
 
 <details>
-<summary>なぜ速いのか？</summary>
+<summary>なぜ速いのか</summary>
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| 語彙ストレージ | Arena ベース（単一アロケーション、キャッシュフレンドリー） | `HashMap<Vec<u8>>`（20 万回アロケーション） | PyO3 背後の Rust `HashMap` |
-| 事前トークン化（ASCII） | 手書き ASCII 高速パス、正規表現をスキップ | 常に正規表現を実行 | 常に正規表現を実行 |
-| 正規表現エンジン（フォールバック） | `regex`（DFA、線形時間） | `fancy-regex`（バックトラッキング） | `regex`（PyO3 + FFI オーバーヘッド経由） |
-| ハッシュマップ | カスタムオープンアドレス + `FxHash` | `rustc-hash` v1 | 標準 `HashMap` |
-| BPE マージ | ハイブリッド: スタック線形スキャン（短い断片）+ ヒープ（長い断片） | O(n*m) 線形スキャン | O(n*m) 線形スキャン |
-| ゼロアロケーション `count()` | あり | なし | なし |
+| 前処理分割 | 手書きスキャナが ASCII と CJK（漢字/かな/ハングル・全角形）の両方を処理；正規表現は判定基準と稀な形状のフォールバック | 常に正規表現 | 常に正規表現 |
+| 正規表現エンジン（フォールバック） | `regex`（DFA・線形時間） | `fancy-regex`（バックトラック） | `regex`＋PyO3/FFI オーバーヘッド |
+| 語彙引き | キー長で階層化：1〜2 バイトは直接表、3〜8 バイトはインラインスロットの開放アドレス法、それ以上はタグ付き arena スロット | `HashMap<Vec<u8>>`（20 万回のアロケーション） | PyO3 背後の Rust `HashMap` |
+| 繰り返し断片 | スレッドローカルの直接マップ・メモ化（バイトキー） | なし | なし |
+| BPE マージ | ハイブリッド：スタック線形走査（短い断片）＋ヒープ（長い断片） | O(n*m) 線形走査 | O(n*m) 線形走査 |
+| アロケーションなしの `count()` | あり | なし | なし |
 
-ベンチマークソース：[`benches/`](benches/)。`cargo bench` で再現可能。
+スキャナはプロパティテスト（毎回数十万件のランダム入力）で正規表現の語義に
+固定され、各エンコーディングは 44,518 件の差分フィクスチャでベンダー自身の
+トークナイザーに固定されています。
+
+ベンチマークのソース：[`benches/`](benches/)・[`../bench-compare/`](../bench-compare/)。
+`cargo bench` / `cargo run -p bench-compare` で再現できます。
 
 </details>
 

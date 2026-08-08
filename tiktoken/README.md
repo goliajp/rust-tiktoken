@@ -8,12 +8,12 @@
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-The fastest Rust BPE tokenizer — 15–40x faster than tiktoken-rs on ASCII text (≈2x on CJK/Unicode), thanks to a hand-written ASCII fast-path. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, and Mistral.
+The fastest Rust BPE tokenizer — 5–49x faster than tiktoken-rs natively (15–17x on Chinese and Japanese prose) and 2–4x faster than gpt-tokenizer in the browser via wasm. Hand-written scanners cover ASCII and CJK alike, the vocabulary is layered by key size, and repeated pieces are memoised whole. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax.
 
 ## Features
 
 - **Multi-provider**: 17 encodings across 8 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, MiniMax)
-- **Fast**: hand-written ASCII fast-path pre-tokenizer (bypasses the regex), arena-based vocabulary, hybrid BPE merge
+- **Fast**: hand-written pre-tokenizer for ASCII and CJK (bypasses the regex), key-size-layered vocabulary, whole-piece memoisation, hybrid BPE merge
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
 - **Pricing**: cost estimation for 107 models across 10 providers
 - **Compact**: ruzstd-compressed vocabulary data embedded at compile time
