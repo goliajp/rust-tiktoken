@@ -21,6 +21,7 @@ Two known, intentional divergences are excluded from the emitted corpus:
     equivalent). Texts containing an added token are therefore skipped.
 """
 
+import base64
 import json
 import pathlib
 import sys
@@ -35,14 +36,54 @@ REFERENCES = {
     "llama3": ("unsloth/llama-3-8b", 128_000),
     "qwen2": ("Qwen/Qwen2.5-7B", 151_643),
     "deepseek_v3": ("deepseek-ai/DeepSeek-V3", 128_000),
+    "deepseek_v4": ("deepseek-ai/DeepSeek-V4-Flash", 128_000),
     "mistral_v3": ("mistralai/Mistral-Nemo-Base-2407", 131_072),
+    "glm4": ("zai-org/GLM-4.5", 151_329),
+    "glm5": ("zai-org/GLM-5.2", 154_820),
+    "minimax_m2": ("MiniMaxAI/MiniMax-M2", 200_000),
 }
+
+
+def kimi_cases(texts):
+    """Kimi reference: Moonshot ships a native tiktoken vocab, not an HF
+    tokenizer.json — build the reference Encoding exactly as their
+    tokenization_kimi.py does. Serves kimi_k2 and kimi_k3 (shared vocab)."""
+    import tiktoken as pytiktoken
+    from huggingface_hub import hf_hub_download
+
+    pat = "|".join(
+        [
+            r"""[\p{Han}]+""",
+            r"""[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?""",
+            r"""[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?""",
+            r"""\p{N}{1,3}""",
+            r""" ?[^\s\p{L}\p{N}]+[\r\n]*""",
+            r"""\s*[\r\n]+""",
+            r"""\s+(?!\S)""",
+            r"""\s+""",
+        ]
+    )
+    path = hf_hub_download("moonshotai/Kimi-K3", "tiktoken.model")
+    ranks = {}
+    with open(path, "rb") as f:
+        for line in f:
+            tok, rank = line.split()
+            ranks[base64.b64decode(tok)] = int(rank)
+    if len(ranks) != 163_584:
+        raise SystemExit(f"kimi vocab {len(ranks)} != 163584 — reference drifted")
+    enc = pytiktoken.Encoding(name="kimi", pat_str=pat, mergeable_ranks=ranks, special_tokens={})
+    return [[t, enc.encode(t, disallowed_special=())] for t in texts]
 
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "hf.json"
     texts = corpus()
     data = {}
+
+    cases = kimi_cases(texts)
+    data["kimi_k2"] = cases
+    data["kimi_k3"] = cases
+    print(f"kimi_k2 / kimi_k3: {len(cases)} cases", file=sys.stderr)
 
     for name, (repo, want_vocab) in REFERENCES.items():
         tok = Tokenizer.from_pretrained(repo)

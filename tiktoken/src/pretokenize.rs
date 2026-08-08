@@ -35,6 +35,9 @@ pub(crate) enum FastPath {
     /// mistral_v3 (Tekken) pattern: o200k-style case splitting, but with no
     /// contraction rule, single-digit `\p{N}`, and a `[\r\n/]*` punctuation tail.
     Tekken,
+    /// minimax_m2 pattern: o200k's letter/digit rules (contractions included)
+    /// with Tekken's `[\r\n/]*` punctuation tail.
+    MiniMax,
 }
 
 /// Which whitespace rules a pattern uses, deciding whether the `\s+(?!\S)`
@@ -100,6 +103,7 @@ impl PreTokenizer for RegexPreTokenizer {
             FastPath::Qwen2 => cl100k_ascii_next::<1>(bytes, pos),
             FastPath::O200k => o200k_like_ascii_next::<true, 3, false>(bytes, pos),
             FastPath::Tekken => o200k_like_ascii_next::<false, 1, true>(bytes, pos),
+            FastPath::MiniMax => o200k_like_ascii_next::<true, 3, true>(bytes, pos),
             FastPath::Deepseek => deepseek_ascii_next(bytes, pos),
             FastPath::None => None,
         };
