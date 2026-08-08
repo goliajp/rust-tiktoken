@@ -187,19 +187,22 @@ for (const [width, height, label] of [
   else if (perfCols.drift > 1) failures.push(`perf table columns misaligned by ${perfCols.drift}px`)
   console.log(`perfTableColumnDrift=${perfCols.drift ?? 'n/a'}px`)
 
-  // The three method cards are one visual row; ragged paragraph heights read
-  // as a mistake. Copy in every language is written to land within one line
-  // of the others — this pins that, per language.
+  // The three method cards are one visual row, and the page must not reflow
+  // when the language switches: copy in every language is written to the same
+  // paragraph height across all cards AND all languages (one-line tolerance).
+  const allHeights = []
   for (const name of ['EN', '中文', '日本語']) {
     await page.getByRole('button', { name, exact: true }).click()
     await page.waitForTimeout(300)
     const heights = await page.evaluate(() =>
       [...document.querySelectorAll('.claim p')].map((el) => Math.round(el.getBoundingClientRect().height)),
     )
-    const spread = Math.max(...heights) - Math.min(...heights)
-    if (spread > 26) failures.push(`${name}: method-card paragraphs differ by ${spread}px (>1 line)`)
-    console.log(`cards[${name}] heights=${heights.join('/')} spread=${spread}px`)
+    allHeights.push(...heights)
+    console.log(`cards[${name}] heights=${heights.join('/')}`)
   }
+  const cardSpread = Math.max(...allHeights) - Math.min(...allHeights)
+  if (cardSpread > 26)
+    failures.push(`method-card paragraphs differ by ${cardSpread}px across languages (>1 line)`)
 
   console.log(
     `logo=${logoOk} wordmark=${wordmarkOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
