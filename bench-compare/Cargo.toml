@@ -11,7 +11,7 @@ publish = false
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-tiktoken = { path = "../tiktoken", version = "3.8.1" }
+tiktoken = { path = "../tiktoken", version = "3.8.2" }
 tiktoken-rs = "0.9"
 
 [[bin]]
