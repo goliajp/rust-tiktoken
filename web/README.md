@@ -9,12 +9,14 @@ switch persisted to `localStorage`.
 ## Stack
 
 - **Vite + React + TypeScript** — no CSS framework; the design system is
-  hand-written CSS in `src/styles.css`. The treatment is a research paper:
-  warm paper ground, ink black text, hairline rules, crimson used
-  structurally (section numbers, key figures, links) rather than
-  decoratively. Newsreader for headings, IBM Plex Sans for prose, IBM Plex
-  Mono for every number and identifier. Light only — `color-scheme` is
-  pinned so a dark-preference UA cannot invert it.
+  hand-written CSS in `src/styles.css`. Warm paper ground, ink black text,
+  hairline rules, crimson used structurally (section numbers, key figures,
+  links) rather than decoratively. All sans: Archivo — a tight grotesque —
+  for headings, IBM Plex Sans for prose, IBM Plex Mono for every number and
+  identifier. CJK falls back to the system UI faces (PingFang / Hiragino
+  Sans), never Mincho, so the page reads as modern in all three languages.
+  Light only — `color-scheme` is pinned so a dark-preference UA cannot
+  invert it.
 - **`@goliapkg/tiktoken-wasm`** — loaded lazily on first paint; all 17
   encodings run in-browser, nothing the visitor types is uploaded.
 - **i18n** — a flat trilingual dictionary in `src/i18n.ts` with a React
