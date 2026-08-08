@@ -94,6 +94,12 @@ for (const [width, height, label] of [
     .evaluate((i) => i.naturalWidth > 0)
   if (!logoOk) failures.push('the GOLIA mark did not load')
 
+  const wordmarkOk = await page
+    .locator('footer .org img')
+    .first()
+    .evaluate((i) => i.naturalWidth > 0)
+  if (!wordmarkOk) failures.push('the GOLIA wordmark did not load')
+
   await page.locator('.pg-head .linkbtn').first().click()
   await page.waitForTimeout(1200)
   const tokens = Number((await page.locator('.meter.lead .v').first().textContent())?.replace(/,/g, ''))
@@ -150,7 +156,7 @@ for (const [width, height, label] of [
   }
 
   console.log(
-    `logo=${logoOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
+    `logo=${logoOk} wordmark=${wordmarkOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
       `codeΔ=${align.codeTop}/${align.codeBottom}px sameType=${align.sameType}`,
   )
   await page.close()
