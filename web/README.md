@@ -51,42 +51,57 @@ first-interaction cost, not a first-paint cost.
 
 ## Deploy (tiktoken.golia.jp)
 
-Any static host works — `dist/` has no server-side requirements. Two things
-matter for the wasm payload:
-
-1. **MIME type**: `.wasm` must be served as `application/wasm`
-   (Cloudflare Pages / Netlify / Vercel all do this out of the box; for nginx
-   add `types { application/wasm wasm; }`).
-2. **Cache**: everything under `dist/assets/` is content-hashed — serve it with
-   `Cache-Control: public, max-age=31536000, immutable` so the 11 MB wasm is
-   fetched once per version. `index.html` should stay `no-cache`.
-
-Cloudflare Pages example:
+The site is live at **<https://tiktoken.golia.jp>**, served by Caddy on `t01`
+from `/apps/tiktoken/web`.
 
 ```bash
-cd web && npm install && npm run build
-# then point a Pages project at web/ with:
-#   build command: npm run build
-#   output directory: dist
-# and add tiktoken.golia.jp as the custom domain.
+web/deploy.sh            # build → rsync to t01 → verify the live origin
+web/deploy.sh --check    # build and print the wasm digest; upload nothing
 ```
 
-nginx example:
+The script verifies the deploy rather than assuming it: the origin must return
+200, the wasm must come back as `application/wasm`, and the served wasm's
+SHA-256 must equal the one just built. A truncated upload still answers 200, so
+the digest check is the one that actually matters.
 
-```nginx
-server {
-  server_name tiktoken.golia.jp;
-  root /srv/tiktoken-web/dist;
-  types { application/wasm wasm; }
-  location /assets/ {
-    add_header Cache-Control "public, max-age=31536000, immutable";
-  }
-  location / {
-    add_header Cache-Control "no-cache";
-    try_files $uri /index.html;
-  }
-}
+### What devops owns (do not re-create here)
+
+The box, TLS, the vhost and DNS belong to [`goliajp/devops`](https://github.com/goliajp/devops),
+where they are database rows reconciled onto the device — **not** files to edit
+by hand. They are already provisioned:
+
+| Resource | Where it lives | Value |
+|---|---|---|
+| DNS | `dns` store, zone `golia.jp` | `tiktoken` CNAME → `t01.golia.jp.` |
+| vhost | `caddy_sites` store, id `tiktoken` | domain `tiktoken.golia.jp`, root `/apps/tiktoken/web` |
+| TLS | Caddy ACME | automatic |
+
+`/etc/caddy/Caddyfile` on `t01` is generated from that store and carries a
+"do not edit manually" header; editing it in place is reverted by the next
+reconcile. To change the vhost, update the store and redeploy:
+
+```bash
+devops caddy list                     # confirm the tiktoken row
+devops caddy drift t01                # must be clean before deploying
+devops caddy deploy t01               # regenerate + push + validate + reload
 ```
+
+Note the `block` column holds the **body only** — the generator emits the
+`domain { … }` wrapper and the indentation itself. Including the domain line in
+the body produces `unrecognized directive: tiktoken.golia.jp` at Caddy's config
+validation step (which refuses the deploy and leaves the live config untouched).
+
+The vhost sets the two headers this site needs: hashed assets under `/assets/*`
+get `max-age=31536000, immutable` (the 11 MB wasm is fetched once per release),
+everything else gets `no-cache`. Caddy serves `.wasm` as `application/wasm`
+natively — no MIME configuration is required.
+
+### Hosting elsewhere
+
+`dist/` is plain static output with no server-side requirements. On any other
+host, reproduce just those two things: `application/wasm` for `.wasm`, and
+immutable caching for the content-hashed `/assets/*` while `index.html` stays
+uncached.
 
 ## Content maintenance
 
