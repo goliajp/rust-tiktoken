@@ -162,12 +162,23 @@ for (const [width, height, label] of [
   await page.close()
 }
 
-// CJK line-breaking, two rules the browser will not enforce on its own:
-//   - no line may begin with closing punctuation (kinsoku)
-//   - no line may break inside a word — Chinese and Japanese have no spaces,
-//     so the default breaks anywhere: 各厂商发 / 布的
+// CJK line-breaking. Folding between two Chinese or Japanese characters is
+// ordinary typesetting, not a defect — that is how CJK is set in books — so
+// there are only two rules worth asserting:
+//
+//   - kinsoku: no line begins with closing punctuation. `line-break: strict`
+//     does this natively; this checks it is actually in effect.
+//   - the space around embedded Latin is typographic, not lexical, so
+//     "ASCII 路径" and "特殊 token 表" must not fold. That one is ours.
+//
+// The second is checked structurally rather than by looking at rendered
+// lines: a plain space at a CJK↔Latin boundary is a break opportunity whether
+// or not this viewport happens to land on it. A rendered-line-only check
+// missed a reported defect across 126 width×locale combinations here, because
+// the reporter's Safari resolves different CJK fonts than headless does.
 {
   const FORBIDDEN = '。、，．：；！？」』）］｝〕〉》”’·・…—～'
+  const PROSE = '.abstract, .lede, .caption, .claim p, h1, h2, h3, .prose'
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   await page.goto(URL_, { waitUntil: 'networkidle', timeout: 120_000 })
   await page.waitForTimeout(1000)
@@ -178,26 +189,16 @@ for (const [width, height, label] of [
   ]) {
     await page.getByRole('button', { name, exact: true }).click()
     await page.waitForTimeout(500)
-    const bad = await page.evaluate(
-      ({ forbidden, locale }) => {
-        // Intl.Segmenter is the same segmentation the page itself uses to place
-        // its <wbr> hints, so "inside a word" means the same thing to both.
-        const seg = new Intl.Segmenter(locale, { granularity: 'word' })
-        const kinsoku = []
-        const midWord = []
-        for (const el of document.querySelectorAll(
-          '.abstract, .lede, .caption, .claim p, h1, h2, .prose',
-        )) {
+
+    const kinsoku = await page.evaluate(
+      ({ forbidden, prose }) => {
+        const bad = []
+        for (const el of document.querySelectorAll(prose)) {
           const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
           const nodes = []
           while (walker.nextNode()) nodes.push(walker.currentNode)
           for (const node of nodes) {
             const text = node.textContent
-            const inside = new Set()
-            for (const s of seg.segment(text)) {
-              if (!s.isWordLike) continue
-              for (let k = s.index + 1; k < s.index + s.segment.length; k++) inside.add(k)
-            }
             const range = document.createRange()
             let prevTop = null
             for (let i = 0; i < text.length; i++) {
@@ -205,72 +206,28 @@ for (const [width, height, label] of [
               range.setEnd(node, i + 1)
               const rect = range.getBoundingClientRect()
               if (!rect.width && !rect.height) continue
-              const broke = prevTop !== null && Math.abs(rect.top - prevTop) > 2
-              if (broke) {
-                const ctx = `…${text.slice(Math.max(0, i - 8), i)} ⏎ ${text.slice(i, i + 8)}…`
-                if (forbidden.includes(text[i])) kinsoku.push(`"${text[i]}" ${ctx}`)
-                else if (inside.has(i)) midWord.push(ctx)
-              }
+              if (prevTop !== null && Math.abs(rect.top - prevTop) > 2 && forbidden.includes(text[i]))
+                bad.push(`"${text[i]}" …${text.slice(Math.max(0, i - 8), i)} ⏎ ${text.slice(i, i + 8)}…`)
               prevTop = rect.top
             }
           }
         }
-        return { kinsoku, midWord }
+        return bad
       },
-      { forbidden: FORBIDDEN, locale: label === 'zh' ? 'zh-Hans' : 'ja' },
+      { forbidden: FORBIDDEN, prose: PROSE },
     )
-    if (bad.kinsoku.length)
-      failures.push(`${label}: ${bad.kinsoku.length} line(s) start with closing punctuation — ${bad.kinsoku[0]}`)
-    if (bad.midWord.length)
-      failures.push(`${label}: ${bad.midWord.length} mid-word line break(s) — ${bad.midWord[0]}`)
-    // Rendered-line checks only catch a bad break opportunity if some width
-    // happens to land on it — the reported 、-at-line-start was invisible
-    // across 126 width×locale combinations here, because the reporter's Safari
-    // has different font metrics. So also check the opportunities themselves,
-    // which is deterministic and font-independent: a <wbr> immediately before
-    // a character that cannot start a line is a defect whether or not this
-    // viewport reveals it.
-    const wbr = await page.evaluate(
-      ({ noStart, noEnd }) => {
-        const bad = []
-        let total = 0
-        const edgeText = (node, dir) => {
-          let n = dir > 0 ? node.nextSibling : node.previousSibling
-          while (n && n.nodeType !== 3) n = dir > 0 ? (n.firstChild ?? n.nextSibling) : (n.lastChild ?? n.previousSibling)
-          const t = n?.textContent
-          return dir > 0 ? t?.[0] : t?.at(-1)
-        }
-        for (const el of document.querySelectorAll('.phrase wbr')) {
-          total++
-          const after = edgeText(el, 1)
-          const before = edgeText(el, -1)
-          if (after && noStart.includes(after)) bad.push(`break offered before "${after}"`)
-          else if (before && noEnd.includes(before)) bad.push(`break offered after "${before}"`)
-        }
-        return { total, bad }
-      },
-      {
-        noStart: '。、，．：；！？）］｝」』〕〉》・…ー〜～々%‰℃',
-        noEnd: '（［｛「『〔〈《',
-      },
-    )
-    if (wbr.bad.length)
-      failures.push(`${label}: ${wbr.bad.length} kinsoku-violating break opportunities — ${wbr.bad[0]}`)
+    if (kinsoku.length)
+      failures.push(`${label}: ${kinsoku.length} line(s) start with closing punctuation — ${kinsoku[0]}`)
 
-    // The space around embedded Latin is typographic, not lexical: "ASCII 路径"
-    // and "特殊 token 表" are single terms and must not fold across lines. Those
-    // spaces are rendered U+00A0; a plain space left at a CJK↔Latin boundary is
-    // a break opportunity the renderer will take. Same reasoning as above —
-    // check the opportunity, not whether this viewport happens to reveal it.
-    const glue = await page.evaluate(() => {
+    const glue = await page.evaluate((prose) => {
       const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f]/
       const LATIN = /[0-9A-Za-z]/
       const bad = []
-      let total = 0
-      for (const el of document.querySelectorAll('.phrase')) {
+      let glued = 0
+      for (const el of document.querySelectorAll(prose)) {
         const text = el.textContent
         for (let i = 1; i < text.length - 1; i++) {
-          if (text[i] === '\u00a0') total++
+          if (text[i] === '\u00a0') glued++
           if (text[i] !== ' ') continue
           const a = text[i - 1]
           const b = text[i + 1]
@@ -278,14 +235,28 @@ for (const [width, height, label] of [
             bad.push(`breakable space in "${text.slice(Math.max(0, i - 6), i + 7)}"`)
         }
       }
-      return { total, bad }
-    })
+      return { glued, bad }
+    }, PROSE)
     if (glue.bad.length)
       failures.push(`${label}: ${glue.bad.length} splittable CJK↔Latin term(s) — ${glue.bad[0]}`)
 
+    // The markup should be plain text. The <wbr>-per-phrase experiment this
+    // replaced shredded each sentence into dozens of nodes and split "UTF-8".
+    const shredded = await page.evaluate((prose) => {
+      let worst = 0
+      for (const el of document.querySelectorAll(prose)) {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+        let n = 0
+        while (walker.nextNode()) n++
+        worst = Math.max(worst, n)
+      }
+      return { worst, wbr: document.querySelectorAll(`${prose.split(',').join(' wbr,')} wbr`).length }
+    }, PROSE)
+    if (shredded.wbr) failures.push(`${label}: ${shredded.wbr} <wbr> in prose — text should be plain`)
+
     console.log(
-      `${label} kinsoku=${bad.kinsoku.length} midWord=${bad.midWord.length} ` +
-        `badBreakOpportunities=${wbr.bad.length}/${wbr.total} splittableTerms=${glue.bad.length} glued=${glue.total}`,
+      `${label} kinsoku=${kinsoku.length} splittableTerms=${glue.bad.length} ` +
+        `glued=${glue.glued} maxTextNodes=${shredded.worst} wbr=${shredded.wbr}`,
     )
   }
   await page.close()
