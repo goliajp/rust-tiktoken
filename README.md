@@ -33,7 +33,7 @@ Full API, supported-model tables, and benchmarks live in the per-crate READMEs: 
 
 ```toml
 [dependencies]
-tiktoken = "3.5"
+tiktoken = "3.8"
 ```
 
 ```rust

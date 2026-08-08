@@ -197,15 +197,26 @@ Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"De
 
 ## Supported Models (pricing)
 
-| Provider | Models |
-|----------|--------|
-| OpenAI | gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini, o1, o1-mini, o1-pro, o3, o3-pro, o3-mini, o4-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo, text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002 |
-| Anthropic | claude-opus-4.6, claude-sonnet-4.6, claude-haiku-4.5, claude-opus-4.5, claude-sonnet-4.5, claude-opus-4, claude-sonnet-4, claude-3.5-haiku, claude-3.5-sonnet, claude-3-opus, claude-3-haiku |
-| Google | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash, text-embedding-004 |
-| Meta | llama-4-scout, llama-4-maverick, llama-3.1-405b, llama-3.1-70b, llama-3.1-8b, llama-3.3-70b |
-| DeepSeek | deepseek-v3, deepseek-r1 |
-| Alibaba | qwen3-max, qwen3-plus, qwen3-coder, qwen3-8b, qwen2.5-72b, qwen2.5-32b, qwen2.5-7b |
-| Mistral | mistral-large, mistral-medium, mistral-small, mistral-nemo, codestral, pixtral-large, mixtral-8x7b |
+`estimateCost` / `getModelInfo` / `allModels` cover **107 models across 10
+providers** (2026-08 pricing). Per provider, newest first:
+
+| Provider | Models | Latest entries |
+|----------|-------:|----------------|
+| OpenAI | 34 | gpt-5.6-sol/terra/luna, gpt-5.5(-pro), gpt-5.4(-mini/nano/pro), gpt-5.2(-pro), gpt-5.1, gpt-5(-mini/nano/pro), gpt-4.1, gpt-4o, o1/o3/o4-mini, … |
+| Anthropic | 17 | claude-fable-5, claude-mythos-5, claude-opus-5, claude-sonnet-5, claude-opus-4.8/4.7/4.6, claude-haiku-4.5, … |
+| Google | 12 | gemini-3.1-pro-preview, gemini-3.6/3.5-flash, gemini-2.5-pro/flash, … |
+| Mistral | 12 | mistral-large/medium/small, codestral, devstral, ministral, pixtral-large, … |
+| Alibaba | 9 | qwen3.8-max, qwen3.5-plus, qwen3-max/plus/coder, qwen2.5-72b, … |
+| Meta | 6 | llama-4-scout/maverick, llama-3.3-70b, llama-3.1-405b/70b/8b |
+| Zhipu | 5 | glm-5.2, glm-5, glm-4.7, glm-4.5(-air) |
+| DeepSeek | 4 | deepseek-v4-pro, deepseek-v4-flash, deepseek-v3, deepseek-r1 |
+| MiniMax | 4 | minimax-m2.7, minimax-m2.5, minimax-m2.1, minimax-m2 |
+| Moonshot | 4 | kimi-k3, kimi-k2.7-code, kimi-k2.6, kimi-k2.5 |
+
+The authoritative list is the code: call `allModels()` at runtime, or see
+[docs.rs](https://docs.rs/tiktoken/latest/tiktoken/pricing/index.html).
+Anthropic and Google models are pricing-only (no public tokenizer to match);
+the other eight providers tokenize too.
 
 ## Notes
 

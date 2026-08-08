@@ -33,7 +33,7 @@ API・対応モデル表・ベンチマークは各 crate の README を参照�
 
 ```toml
 [dependencies]
-tiktoken = "3.5"
+tiktoken = "3.8"
 ```
 
 ```rust
