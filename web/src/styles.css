@@ -1,6 +1,6 @@
 /* ── tiktoken.golia.jp — research-paper design system ───────────────────
    A Golia Lab project page, set like a journal article: warm paper ground,
-   ink black text, hairline rules, generous measure. Crimson is structural,
+   ink black text, hairline rules, generous measure. GOLIA blue is structural,
    not decorative — it marks section numbers, key figures and the one link
    state. The only other saturated colour on the page is the token palette
    in the playground, treated as a scientific figure legend. */
@@ -16,13 +16,16 @@
   --rule: #e4e0d8;
   --rule-strong: #cdc8bd;
 
-  /* crimson — structural accent */
-  --red: #a4243b;
-  --red-deep: #7d1a2c;
-  --red-wash: #faf0f1;
-
-  /* GOLIA brand blue — used only where the mark itself appears */
-  --golia: #1a7bff;
+  /* GOLIA blue, structural accent — the same scale golia.jp uses
+     (Tailwind blue-600 / -700, oklch(54.6% .245 262.881) and one step down,
+     resolved to sRGB here so the page needs no colour-space plumbing).
+     blue-600 measures 5.07:1 on this paper and 5.25:1 under white, both
+     clear of WCAG AA, so the brand value is used directly rather than
+     darkened. The logo's own #1576ff is left to the mark. */
+  --golia: #1576ff;
+  --accent: #155dfc;
+  --accent-deep: #1447e6;
+  --accent-wash: #eef3ff;
 
   /* token palette — muted categorical scale, black text legible on each */
   --t1: #dfe6f2;
@@ -68,19 +71,19 @@ body {
 }
 
 ::selection {
-  background: var(--red);
+  background: var(--accent);
   color: #fff;
 }
 
 a {
-  color: var(--red);
+  color: var(--accent);
   text-decoration: none;
-  border-bottom: 1px solid rgba(164, 36, 59, 0.28);
+  border-bottom: 1px solid rgba(21, 93, 252, 0.3);
   transition: border-color 130ms ease, color 130ms ease;
 }
 a:hover {
-  color: var(--red-deep);
-  border-bottom-color: var(--red-deep);
+  color: var(--accent-deep);
+  border-bottom-color: var(--accent-deep);
 }
 
 code,
@@ -126,7 +129,7 @@ section {
   font-family: var(--mono);
   font-size: 0.82rem;
   font-weight: 500;
-  color: var(--red);
+  color: var(--accent);
   letter-spacing: 0.04em;
   padding-top: 0.45rem;
 }
@@ -229,7 +232,7 @@ section {
   border-bottom: none;
 }
 .topnav a:hover {
-  color: var(--red);
+  color: var(--accent);
 }
 @media (max-width: 860px) {
   .topnav .navlink {
@@ -262,7 +265,7 @@ section {
   color: var(--ink);
 }
 .langswitch button.on {
-  background: var(--red);
+  background: var(--accent);
   color: #fff;
 }
 
@@ -286,7 +289,7 @@ section {
 .eyebrow .bar {
   width: 2rem;
   height: 2px;
-  background: var(--red);
+  background: var(--accent);
 }
 .frontmatter h1 {
   font-family: var(--display);
@@ -298,7 +301,7 @@ section {
 }
 .frontmatter h1 em {
   font-style: normal;
-  color: var(--red);
+  color: var(--accent);
 }
 .frontmatter .abstract {
   margin-top: 1.5rem;
@@ -375,14 +378,14 @@ section {
   background: var(--paper-raised);
 }
 .btn.primary {
-  background: var(--red);
-  border-color: var(--red);
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
   font-weight: 500;
 }
 .btn.primary:hover {
-  background: var(--red-deep);
-  border-color: var(--red-deep);
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
   color: #fff;
 }
 
@@ -424,16 +427,16 @@ section {
   appearance: none;
   background: none;
   border: none;
-  color: var(--red);
+  color: var(--accent);
   font-family: var(--sans);
   font-size: 0.8rem;
   cursor: pointer;
   padding: 0.2rem 0.3rem;
-  border-bottom: 1px solid rgba(164, 36, 59, 0.28);
+  border-bottom: 1px solid rgba(21, 93, 252, 0.3);
 }
 .linkbtn:hover {
-  color: var(--red-deep);
-  border-bottom-color: var(--red-deep);
+  color: var(--accent-deep);
+  border-bottom-color: var(--accent-deep);
 }
 select {
   appearance: none;
@@ -450,7 +453,7 @@ select {
   background-position: right 0.6rem center;
 }
 select:focus {
-  outline: 2px solid rgba(164, 36, 59, 0.35);
+  outline: 2px solid rgba(21, 93, 252, 0.4);
   outline-offset: -1px;
 }
 
@@ -483,7 +486,7 @@ select:focus {
   line-height: 1.25;
 }
 .meter.lead .v {
-  color: var(--red);
+  color: var(--accent);
 }
 .meter .k {
   font-size: 0.72rem;
@@ -564,7 +567,7 @@ textarea::placeholder {
   }
 }
 .tok:hover {
-  box-shadow: inset 0 -2px 0 var(--red);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .tok.c0 { background: var(--t1); }
 .tok.c1 { background: var(--t2); }
@@ -597,7 +600,7 @@ textarea::placeholder {
   color: var(--ink-soft);
 }
 .pg-hover .id {
-  color: var(--red);
+  color: var(--accent);
 }
 .pg-hover .lit {
   color: var(--ink);
@@ -666,7 +669,7 @@ textarea::placeholder {
   display: block;
   height: 100%;
   width: 35%;
-  background: var(--red);
+  background: var(--accent);
   animation: sweep 1.2s ease-in-out infinite;
 }
 @keyframes sweep {
@@ -721,7 +724,7 @@ textarea::placeholder {
 .claim .n {
   font-family: var(--mono);
   font-size: 0.74rem;
-  color: var(--red);
+  color: var(--accent);
   display: block;
   margin-bottom: 0.3rem;
 }
@@ -766,7 +769,7 @@ td code {
   font-size: 0.83rem;
 }
 td .hl {
-  color: var(--red);
+  color: var(--accent);
   font-weight: 600;
   font-family: var(--mono);
 }
@@ -808,8 +811,8 @@ tbody tr:hover td {
   white-space: nowrap;
 }
 .codeblock .cb-copy:hover {
-  color: var(--red);
-  background: var(--red-wash);
+  color: var(--accent);
+  background: var(--accent-wash);
 }
 .codeblock pre {
   padding: 0.9rem;
@@ -846,7 +849,7 @@ tbody tr:hover td {
   color: #3f6b9e;
 }
 .tk-keyword {
-  color: var(--red);
+  color: var(--accent);
   font-weight: 500;
 }
 .tk-macro {
@@ -948,7 +951,7 @@ footer a {
   border-bottom-color: var(--rule-strong);
 }
 footer a:hover {
-  color: var(--red);
+  color: var(--accent);
 }
 
 /* entrance */
