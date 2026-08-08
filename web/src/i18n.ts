@@ -1,9 +1,12 @@
 // Trilingual dictionary + a tiny hook. No i18n library: three locales, one
 // page, a flat key space — a Record and a context are the whole machinery.
 //
-// Register: this is a research-project page, so the copy states what was
-// measured and how, and avoids marketing superlatives that the repository
-// cannot back with a number.
+// Each locale is written, not translated. The register is a technical
+// project page: say what the thing does and what was measured, in the
+// shortest form that stays precise. No defending against claims nobody made
+// ("correctness by testing, not by assertion" — of course not by assertion),
+// no hedging, no filler connectives. Those read as translationese in Chinese
+// and Japanese and as padding in English.
 
 import { createContext, useContext } from 'react'
 
@@ -43,36 +46,40 @@ const dict: Dict = {
   'front.title.b': { en: 'high-performance', zh: '高性能', ja: '高性能' },
   'front.title.c': { en: ' BPE tokenizer.', zh: ' BPE 分词器', ja: ' BPE トークナイザー' },
   'front.abstract': {
-    en: 'Tokenization decides what a language model actually reads, and a tokenizer that is merely close is a silent source of error. This implementation reproduces 17 encodings from 8 vendors and is checked against each vendor’s own tokenizer over adversarial differential corpora — currently 167,849 comparisons with no divergence. It is also, as a consequence of how it is built, considerably faster than the alternatives.',
-    zh: '分词决定了语言模型真正读到的内容，而一个「差不多对」的分词器是一种静默的错误来源。本实现复刻了 8 家厂商的 17 套编码，并使用对抗性差分语料逐一对照各厂商自己的分词器 —— 目前 167,849 次对照，零分歧。同时，由于其实现方式，它也显著快于现有方案。',
-    ja: 'トークン化は言語モデルが実際に読む内容を決めます。「ほぼ正しい」トークナイザーは、静かな誤りの源です。本実装は 8 ベンダー 17 エンコーディングを再現し、敵対的差分コーパスで各ベンダー自身のトークナイザーと照合しています — 現在 167,849 回の比較で相違ゼロ。またその実装方式の帰結として、既存の選択肢より大幅に高速です。',
+    en: 'Token counts drive billing, context limits and truncation, so a tokenizer that is close but not exact costs real money and drops real text. This one covers 17 encodings from 8 vendors, each checked byte-for-byte against that vendor’s own tokenizer — 167,849 comparisons so far, no divergence. The ASCII path is hand-written, which is where the speed comes from.',
+    zh: 'token 数直接决定计费、上下文上限和截断位置，分词只要差一点，账单和内容就跟着错。本实现覆盖 8 家厂商的 17 套编码，每一套都与厂商自己的分词器逐字节比对，至今 167,849 次对照无一处不同。ASCII 路径为手写实现，速度即由此而来。',
+    ja: 'トークン数は課金・コンテキスト上限・打ち切り位置を直接左右します。分割が少しずれるだけで、請求も本文も狂います。本実装は 8 ベンダー 17 エンコーディングを収録し、いずれもベンダー自身のトークナイザーとバイト単位で照合済み。現時点で 167,849 件、相違はありません。速度は手書きの ASCII 経路によるものです。',
   },
   'front.fig.comparisons': {
-    en: 'differential comparisons, 0 divergences',
-    zh: '次差分对照，0 分歧',
-    ja: '回の差分照合、相違ゼロ',
+    en: 'comparisons against reference implementations',
+    zh: '次与参考实现逐字节对照',
+    ja: '件の参照実装との照合',
   },
   'front.fig.encodings': { en: 'encodings, 8 vendors', zh: '套编码，8 家厂商', ja: 'エンコーディング・8 ベンダー' },
-  'front.fig.short': { en: 'to encode a short string', zh: '短字符串编码耗时', ja: '短い文字列のエンコード' },
-  'front.fig.speed': { en: 'vs tiktoken-rs on ASCII', zh: 'ASCII 文本对比 tiktoken-rs', ja: 'ASCII で tiktoken-rs 比' },
+  'front.fig.short': { en: 'to encode a short string', zh: '编码一个短字符串', ja: '短い文字列のエンコード' },
+  'front.fig.speed': {
+    en: 'faster than tiktoken-rs on ASCII',
+    zh: 'ASCII 文本快于 tiktoken-rs',
+    ja: 'ASCII で tiktoken-rs より高速',
+  },
   'front.cta.try': { en: 'Run it in your browser', zh: '在浏览器中运行', ja: 'ブラウザで実行' },
 
   // playground
   'pg.heading': {
-    en: 'Run the tokenizer, here, on your own text',
-    zh: '就在此处，用你自己的文本运行分词器',
-    ja: 'このページで、自分のテキストを分かち書きする',
+    en: 'Tokenize your own text, right here',
+    zh: '在这里分词你自己的文本',
+    ja: 'ここで、自分のテキストを分割する',
   },
   'pg.blurb': {
-    en: 'The Rust crate compiled to WebAssembly and executed by this page. Every encoding listed below is available; nothing you type is sent anywhere.',
-    zh: '这是编译为 WebAssembly 并由本页面直接执行的 Rust crate。下表所有编码均可选用；你输入的内容不会发送到任何地方。',
-    ja: 'WebAssembly にコンパイルされた Rust クレートを、このページが直接実行しています。下表のすべてのエンコーディングが利用可能で、入力内容はどこにも送信されません。',
+    en: 'The Rust crate compiled to WebAssembly, running in this page. All 17 encodings are available, and nothing you type leaves the browser.',
+    zh: '这是编译为 WebAssembly 的 Rust crate，运行在本页面内。17 套编码全部可选，输入内容不会离开浏览器。',
+    ja: 'Rust クレートを WebAssembly にコンパイルし、このページ上で実行しています。17 エンコーディングすべてを選択でき、入力内容がブラウザの外に出ることはありません。',
   },
   'pg.cap': { en: 'Encoding', zh: '编码', ja: 'エンコーディング' },
   'pg.placeholder': {
     en: 'Type or paste text — English, 中文, 日本語, source code, emoji …',
     zh: '输入或粘贴文本 —— 中文、English、日本語、源代码、emoji ……',
-    ja: 'テキストを入力・貼り付け — 日本語、English、中文、ソースコード、絵文字 …',
+    ja: 'テキストを入力・貼り付け（日本語、English、中文、ソースコード、絵文字 …）',
   },
   'pg.example': { en: 'Load sample text', zh: '载入示例文本', ja: 'サンプルを読み込む' },
   'pg.tokens': { en: 'tokens', zh: 'token 数', ja: 'トークン数' },
@@ -81,63 +88,63 @@ const dict: Dict = {
   'pg.view.text': { en: 'Segments', zh: '分段', ja: '分割' },
   'pg.view.ids': { en: 'Token IDs', zh: 'Token ID', ja: 'トークン ID' },
   'pg.loading': {
-    en: 'Loading the WebAssembly module — it carries all 17 vocabularies, about 11 MB',
-    zh: '正在加载 WebAssembly 模块 —— 其中内嵌全部 17 套词表，约 11 MB',
-    ja: 'WebAssembly モジュールを読み込み中 — 17 の語彙をすべて内蔵、約 11 MB',
+    en: 'Loading the WebAssembly module — 17 vocabularies, about 11 MB',
+    zh: '正在加载 WebAssembly 模块 —— 内含 17 套词表，约 11 MB',
+    ja: 'WebAssembly モジュールを読み込み中。17 の語彙を内蔵、約 11 MB',
   },
   'pg.error': {
-    en: 'The WebAssembly module failed to load. A hard refresh usually resolves it.',
-    zh: 'WebAssembly 模块加载失败。通常强制刷新即可恢复。',
-    ja: 'WebAssembly モジュールの読み込みに失敗しました。強制リロードで解消することが多いです。',
+    en: 'The WebAssembly module failed to load. A hard refresh usually fixes it.',
+    zh: 'WebAssembly 模块加载失败，强制刷新通常即可恢复。',
+    ja: 'WebAssembly モジュールの読み込みに失敗しました。強制リロードで解消することがほとんどです。',
   },
   'pg.empty': {
     en: 'Tokens appear here as you type.',
-    zh: '输入后，token 会显示在这里。',
-    ja: '入力すると、ここにトークンが表示されます。',
+    zh: '输入后这里会显示分词结果。',
+    ja: '入力するとここに分割結果が出ます。',
   },
   'pg.foot': {
-    en: 'Executed locally in this browser',
-    zh: '在本浏览器内本地执行',
-    ja: 'このブラウザ内でローカル実行',
+    en: 'Runs entirely in this browser',
+    zh: '完全在本浏览器内运行',
+    ja: 'すべてこのブラウザ内で実行',
   },
   'pg.caption.label': { en: 'Figure 1.', zh: '图 1.', ja: '図 1.' },
   'pg.caption': {
-    en: 'Each shaded run is one token; hover a segment to read its id. A token whose bytes are not valid UTF-8 on their own — the halves of an emoji, for instance — displays as a replacement character, though its id is exact.',
-    zh: '每一个底色片段即一个 token，悬停可查看其 id。若某个 token 的字节本身不是合法 UTF-8（例如 emoji 被拆开的一半），则显示为替换字符，但其 id 是精确的。',
-    ja: '網掛けされた各区間が 1 トークンです。ホバーすると id を表示します。単独では正しい UTF-8 にならないトークン（絵文字の断片など）は置換文字として表示されますが、id は正確です。',
+    en: 'Each shaded run is one token; hover it to read its id. A token whose bytes are not valid UTF-8 on their own — half an emoji, say — shows as a replacement character, but its id is exact.',
+    zh: '每个底色片段是一个 token，悬停可看它的 id。若某个 token 的字节单独不构成合法 UTF-8（例如半个 emoji），会显示为替换字符，但 id 是准确的。',
+    ja: '網掛けされた各区間が 1 トークンで、ホバーすると id が出ます。単体では正しい UTF-8 にならないトークン（絵文字の半分など）は置換文字で表示されますが、id は正確です。',
   },
 
   // method
   'feat.heading': {
-    en: 'Correctness is established by differential testing, not by assertion',
-    zh: '正确性由差分测试确立，而非声称',
-    ja: '正しさは主張ではなく、差分テストによって確立する',
+    en: 'Seventeen encodings, each checked byte-for-byte against its reference',
+    zh: '17 套编码，每一套都与参考实现逐字节比对',
+    ja: '17 のエンコーディングを、すべて参照実装とバイト単位で照合',
   },
-  'feat.exact.h': { en: 'Checked against the reference', zh: '对照参考实现校验', ja: '参照実装との照合' },
+  'feat.exact.h': { en: 'Checked against the vendor', zh: '对照厂商实现', ja: 'ベンダー実装と照合' },
   'feat.exact.p': {
-    en: 'The OpenAI encodings are compared against Python tiktoken; the rest against each vendor’s own HuggingFace tokenizer, or in Kimi’s case the vocabulary Moonshot ships. Corpora deliberately target the axes where these patterns disagree — whitespace runs, newline boundaries, digits, CJK, slashes.',
-    zh: 'OpenAI 系编码对照 Python tiktoken；其余对照各厂商自己的 HuggingFace 分词器 —— Kimi 则对照 Moonshot 自身发布的词表。语料刻意针对这些 pattern 产生分歧的位置：空白串、换行边界、数字、CJK、斜杠。',
-    ja: 'OpenAI 系は Python tiktoken と、その他は各ベンダー自身の HuggingFace トークナイザー（Kimi は Moonshot 配布の語彙）と比較します。コーパスは、これらのパターンが食い違う軸 — 空白列・改行境界・数字・CJK・スラッシュ — を意図的に突きます。',
+    en: 'OpenAI encodings are compared against Python tiktoken, the rest against each vendor’s published HuggingFace tokenizer, and Kimi against the vocabulary Moonshot ships. The corpora target where these patterns actually disagree: whitespace runs, newline boundaries, digits, CJK, slashes.',
+    zh: 'OpenAI 系比对 Python tiktoken，其余比对各厂商发布的 HuggingFace 分词器，Kimi 比对 Moonshot 自带词表。语料专挑各家 pattern 真正会分歧的位置：连续空白、换行边界、数字、CJK、斜杠。',
+    ja: 'OpenAI 系は Python tiktoken、その他は各ベンダー公開の HuggingFace トークナイザー、Kimi は Moonshot 同梱の語彙と比較します。コーパスは、実際に食い違う箇所（連続する空白、改行境界、数字、CJK、スラッシュ）を狙って作っています。',
   },
-  'feat.fast.h': { en: 'A hand-written ASCII path', zh: '手写的 ASCII 路径', ja: '手書きの ASCII パス' },
+  'feat.fast.h': { en: 'A hand-written ASCII path', zh: '手写 ASCII 路径', ja: '手書きの ASCII 経路' },
   'feat.fast.p': {
-    en: 'Common ASCII pieces are resolved by a scanner that never enters the regex engine, and word-sized pieces merge on the stack without allocating. The regex remains the authority: property tests assert the two paths agree for arbitrary input.',
-    zh: '常见的 ASCII 片段由一个从不进入正则引擎的扫描器解析，词级片段在栈上合并、不做分配。正则仍是权威：属性测试断言两条路径对任意输入结果一致。',
-    ja: '一般的な ASCII 片は、正規表現エンジンに入らないスキャナが解決し、単語サイズの片はスタック上でアロケーションなしにマージされます。正規表現が正解であり続けます — プロパティテストが任意入力で両経路の一致を保証します。',
+    en: 'Common ASCII pieces are cut by a hand-written scanner that never enters the regex engine, and word-sized pieces merge on the stack without allocating. The regex stays the arbiter: property tests hold both paths to the same output for arbitrary input.',
+    zh: '常见 ASCII 片段由手写扫描器直接切分，不进正则引擎；词级片段在栈上合并，零分配。正则仍是判准 —— 属性测试要求两条路径对任意输入给出相同结果。',
+    ja: '一般的な ASCII 片は手書きスキャナが直接切り出し、正規表現エンジンを通しません。単語サイズの片はスタック上でマージし、アロケーションは発生しません。正解は正規表現側にあり、任意の入力で両経路が一致することをプロパティテストで担保しています。',
   },
   'feat.everywhere.h': { en: 'One implementation, two artefacts', zh: '同一实现，两种产物', ja: '一つの実装、二つの成果物' },
   'feat.everywhere.p': {
-    en: 'Pure Rust with no C dependencies and vocabularies embedded at compile time, published both as a crate and as a WebAssembly package. The playground above is that package, unmodified.',
-    zh: '纯 Rust、无 C 依赖，词表在编译期内嵌；以 crate 与 WebAssembly 包两种形态发布。上方的试用区就是该包本身，未经改动。',
-    ja: '純 Rust・C 依存なし、語彙はコンパイル時に埋め込み。クレートと WebAssembly パッケージの両方で公開しています。上のプレイグラウンドは、そのパッケージそのものです。',
+    en: 'Pure Rust, no C dependencies, vocabularies embedded at compile time. Published as a crate and as a WebAssembly package — the playground above is that package, unmodified.',
+    zh: '纯 Rust，无 C 依赖，词表在编译期内嵌。以 crate 和 WebAssembly 包两种形态发布 —— 上方试用区用的就是该包本身，未作改动。',
+    ja: '純 Rust、C 依存なし、語彙はコンパイル時に埋め込みます。クレートと WebAssembly パッケージの二形態で公開しており、上のプレイグラウンドはそのパッケージそのものです。',
   },
 
   // encodings
   'enc.heading': { en: 'Supported encodings', zh: '支持的编码', ja: '対応エンコーディング' },
   'enc.blurb': {
-    en: 'From GPT-2 through GPT-5.6, alongside the open-weights models that most implementations omit — Kimi, GLM, MiniMax, DeepSeek V4, Qwen, Llama and Mistral.',
-    zh: '从 GPT-2 到 GPT-5.6，并覆盖多数实现所忽略的开源权重模型 —— Kimi、GLM、MiniMax、DeepSeek V4、Qwen、Llama 与 Mistral。',
-    ja: 'GPT-2 から GPT-5.6 まで。加えて、多くの実装が省略するオープンウェイト系 — Kimi・GLM・MiniMax・DeepSeek V4・Qwen・Llama・Mistral — も対象です。',
+    en: 'GPT-2 through GPT-5.6, plus the open-weights models most implementations leave out: Kimi, GLM, MiniMax, DeepSeek V4, Qwen, Llama and Mistral.',
+    zh: '从 GPT-2 到 GPT-5.6，并覆盖多数实现不做的开源权重模型：Kimi、GLM、MiniMax、DeepSeek V4、Qwen、Llama、Mistral。',
+    ja: 'GPT-2 から GPT-5.6 まで。加えて、多くの実装が対象外とするオープンウェイト系（Kimi・GLM・MiniMax・DeepSeek V4・Qwen・Llama・Mistral）にも対応します。',
   },
   'enc.col.encoding': { en: 'Encoding', zh: '编码', ja: 'エンコーディング' },
   'enc.col.vendor': { en: 'Vendor', zh: '厂商', ja: 'ベンダー' },
@@ -145,17 +152,17 @@ const dict: Dict = {
   'enc.col.vocab': { en: 'Vocabulary', zh: '词表规模', ja: '語彙数' },
   'enc.caption.label': { en: 'Table 1.', zh: '表 1.', ja: '表 1.' },
   'enc.caption': {
-    en: 'Where a vendor ships one vocabulary across generations — Kimi K2 and K3, DeepSeek V3 and V4 — the data is stored once and the entries differ only in their special-token tables.',
-    zh: '若某厂商跨代共用同一词表 —— 如 Kimi K2 与 K3、DeepSeek V3 与 V4 —— 数据仅存储一份，各条目之间只有特殊 token 表不同。',
-    ja: 'ベンダーが世代をまたいで同一の語彙を用いる場合（Kimi K2 と K3、DeepSeek V3 と V4）、データは一度だけ保持し、エントリ間の差は特殊トークン表のみです。',
+    en: 'Where one vocabulary spans generations — Kimi K2 and K3, DeepSeek V3 and V4 — it is stored once; the entries differ only in their special-token tables.',
+    zh: '同一词表跨代复用时（Kimi K2 与 K3、DeepSeek V3 与 V4），数据只存一份，两个条目之间仅特殊 token 表不同。',
+    ja: '同一の語彙が世代をまたぐ場合（Kimi K2 と K3、DeepSeek V3 と V4）、データは一度だけ保持し、エントリの違いは特殊トークン表のみです。',
   },
 
   // performance
   'perf.heading': { en: 'Measured performance', zh: '实测性能', ja: '実測性能' },
   'perf.blurb': {
-    en: 'Encoding with cl100k_base on an Apple M4 Mac mini, single-threaded, criterion with n = 100. Token output was verified identical across all three implementations before timing them.',
-    zh: 'Apple M4 Mac mini 上使用 cl100k_base 编码，单线程，criterion n = 100。计时前已验证三个实现的 token 输出完全一致。',
-    ja: 'Apple M4 Mac mini 上で cl100k_base によるエンコード。シングルスレッド、criterion n = 100。計測前に 3 実装のトークン出力が同一であることを確認しています。',
+    en: 'cl100k_base encode on an Apple M4 Mac mini, single-threaded, criterion at n = 100. All three implementations were confirmed to produce identical tokens before timing.',
+    zh: 'Apple M4 Mac mini，cl100k_base 编码，单线程，criterion n = 100。计时前先确认三个实现的 token 输出完全一致。',
+    ja: 'Apple M4 Mac mini、cl100k_base によるエンコード、シングルスレッド、criterion n = 100。計測前に 3 実装のトークン出力が完全に一致することを確認しています。',
   },
   'perf.col.input': { en: 'Input', zh: '输入', ja: '入力' },
   'perf.col.python': { en: 'Python tiktoken', zh: 'Python tiktoken', ja: 'Python tiktoken' },
@@ -164,27 +171,27 @@ const dict: Dict = {
   'perf.col.speedup': { en: 'Speedup', zh: '加速比', ja: '高速化率' },
   'perf.caption.label': { en: 'Table 2.', zh: '表 2.', ja: '表 2.' },
   'perf.caption': {
-    en: 'Speedup is stated against tiktoken-rs. Unicode-heavy input gains least, which is expected: it falls through to the regex engine, and that path was never the target of the optimisation.',
-    zh: '加速比以 tiktoken-rs 为基准。Unicode 密集的输入提升最小，这符合预期 —— 该情形会回落到正则引擎，而这条路径本就不是优化目标。',
-    ja: '高速化率は tiktoken-rs を基準としています。Unicode 主体の入力で伸びが最も小さいのは想定どおりで、その場合は正規表現エンジンに委ねられ、そこは最適化の対象ではありません。',
+    en: 'Speedup is against tiktoken-rs. Unicode-heavy input gains least: it falls through to the regex engine, which the ASCII path was never meant to replace.',
+    zh: '加速比以 tiktoken-rs 为基准。Unicode 密集的输入提升最小 —— 这类输入会落到正则引擎，而 ASCII 路径本就不是用来取代它的。',
+    ja: '高速化率は tiktoken-rs 比です。Unicode 主体の入力で伸びが最も小さいのは、処理が正規表現エンジンに渡るためで、ASCII 経路はそこを置き換えるものではありません。',
   },
 
   // install
   'inst.heading': { en: 'Installation', zh: '安装', ja: '導入' },
   'inst.rust.blurb': {
-    en: 'In Rust. Encodings are cached globally, so repeated lookups cost nothing.',
-    zh: 'Rust 侧。编码实例全局缓存，重复获取没有开销。',
-    ja: 'Rust の場合。エンコーディングはグローバルにキャッシュされ、再取得のコストはありません。',
+    en: 'In Rust. Encodings are cached globally, so looking one up again costs nothing.',
+    zh: 'Rust。编码实例全局缓存，重复取用没有开销。',
+    ja: 'Rust の場合。エンコーディングはグローバルにキャッシュされ、取り直してもコストはかかりません。',
   },
   'inst.js.blurb': {
-    en: 'In the browser or Node.js, through the WebAssembly package used on this page.',
-    zh: '浏览器或 Node.js 侧，使用本页面所用的 WebAssembly 包。',
-    ja: 'ブラウザまたは Node.js で、本ページが使用している WebAssembly パッケージ経由。',
+    en: 'In the browser or Node.js, through the same WebAssembly package this page uses.',
+    zh: '浏览器或 Node.js，用的是本页面同一个 WebAssembly 包。',
+    ja: 'ブラウザまたは Node.js の場合。このページと同じ WebAssembly パッケージを使います。',
   },
   'inst.docs': {
-    en: 'Both distributions also carry cost estimation for 107 models across 10 providers. Full API reference:',
-    zh: '两种分发形态均内置 10 家厂商 107 个模型的成本估算。完整 API 参考：',
-    ja: 'いずれの配布形態にも、10 プロバイダ・107 モデルのコスト見積もりを同梱しています。完全な API リファレンス：',
+    en: 'Both also carry cost estimation for 107 models across 10 providers. Full API reference:',
+    zh: '两者都内置 10 家厂商 107 个模型的成本估算。完整 API 文档：',
+    ja: 'いずれにも 10 プロバイダ・107 モデルのコスト見積もりを同梱しています。API リファレンス：',
   },
 
   // colophon

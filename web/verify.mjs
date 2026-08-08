@@ -162,6 +162,48 @@ for (const [width, height, label] of [
   await page.close()
 }
 
+// CJK line-breaking: no line may begin with closing punctuation. Without
+// `line-break: strict` the browser breaks anywhere, which put a 。 at the head
+// of a line in both Chinese and Japanese.
+{
+  const FORBIDDEN = '。、，．：；！？」』）］｝〕〉》”’·・…—～'
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+  await page.goto(URL_, { waitUntil: 'networkidle', timeout: 120_000 })
+  await page.waitForTimeout(1000)
+
+  for (const [label, name] of [
+    ['zh', '中文'],
+    ['ja', '日本語'],
+  ]) {
+    await page.getByRole('button', { name, exact: true }).click()
+    await page.waitForTimeout(500)
+    const bad = await page.evaluate((forbidden) => {
+      const out = []
+      for (const el of document.querySelectorAll('.abstract, .lede, .caption, .claim p, h1, h2, .prose')) {
+        for (const node of [...el.childNodes].filter((n) => n.nodeType === 3)) {
+          const range = document.createRange()
+          const text = node.textContent
+          let prevTop = null
+          for (let i = 0; i < text.length; i++) {
+            range.setStart(node, i)
+            range.setEnd(node, i + 1)
+            const rect = range.getBoundingClientRect()
+            if (!rect.width && !rect.height) continue
+            if (prevTop !== null && Math.abs(rect.top - prevTop) > 2 && forbidden.includes(text[i])) {
+              out.push(`"${text[i]}" in …${text.slice(Math.max(0, i - 10), i + 6)}…`)
+            }
+            prevTop = rect.top
+          }
+        }
+      }
+      return out
+    }, FORBIDDEN)
+    if (bad.length) failures.push(`${label}: ${bad.length} line(s) start with closing punctuation — ${bad[0]}`)
+    console.log(`${label} kinsoku violations=${bad.length}`)
+  }
+  await page.close()
+}
+
 // the page is a light design: a dark UA preference must not invert it
 {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' })
