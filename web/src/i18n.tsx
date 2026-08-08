@@ -44,7 +44,7 @@ const dict: Dict = {
   },
   'front.title.a': { en: 'A ', zh: '', ja: '' },
   'front.title.b': { en: 'high-performance', zh: '高性能', ja: '高性能' },
-  'front.title.c': { en: ' BPE tokenizer.', zh: ' BPE 分词器', ja: ' BPE トークナイザー' },
+  'front.title.c': { en: ' BPE tokenizer', zh: ' BPE 分词器', ja: ' BPE トークナイザー' },
   'front.abstract': {
     en: 'Token counts drive billing, context limits and truncation, so a tokenizer has to be fast and exact at once. This one beats the fastest JavaScript tokenizers by 2–4× in the browser and tiktoken-rs by 5–49× natively, and each of its 17 encodings is checked byte-for-byte against the vendor’s own tokenizer — 44,518 differential cases, zero divergence. The playground below runs the published WebAssembly package itself, so both claims can be verified on this page.',
     zh: 'token 数直接决定计费、上下文上限和截断位置，分词器必须又快又准。本实现在浏览器里快于最快的 JavaScript 分词器 2–4 倍，原生快于 tiktoken-rs 5–49 倍；17 套编码逐一与厂商自己的分词器逐字节比对，44,518 组差分对照零分歧。下方试用区运行的就是发布的 WebAssembly 包本体，这两件事都可以当场验证。',
@@ -94,17 +94,17 @@ const dict: Dict = {
   'pg.loading': {
     en: 'Loading the WebAssembly module — 17 vocabularies, about 11 MB',
     zh: '正在加载 WebAssembly 模块 —— 内含 17 套词表，约 11 MB',
-    ja: 'WebAssembly モジュールを読み込み中。17 の語彙を内蔵、約 11 MB',
+    ja: 'WebAssembly モジュールを読み込み中 — 17 の語彙を内蔵、約 11 MB',
   },
   'pg.error': {
-    en: 'The WebAssembly module failed to load. A hard refresh usually fixes it.',
-    zh: 'WebAssembly 模块加载失败，强制刷新通常即可恢复。',
-    ja: 'WebAssembly モジュールの読み込みに失敗しました。強制リロードで解消することがほとんどです。',
+    en: 'The WebAssembly module failed to load — a hard refresh usually fixes it',
+    zh: 'WebAssembly 模块加载失败，强制刷新通常即可恢复',
+    ja: 'WebAssembly モジュールの読み込みに失敗 — 強制リロードで解消します',
   },
   'pg.empty': {
-    en: 'Tokens appear here as you type.',
-    zh: '输入后这里会显示分词结果。',
-    ja: '入力するとここに分割結果が出ます。',
+    en: 'Tokens appear here as you type',
+    zh: '输入后这里实时显示分词结果',
+    ja: '入力するとここに分割結果が表示されます',
   },
   'pg.foot': {
     en: 'Runs entirely in this browser',
@@ -180,14 +180,14 @@ const dict: Dict = {
   // install
   'inst.heading': { en: 'Installation', zh: '安装', ja: '導入' },
   'inst.rust.blurb': {
-    en: 'In Rust. Encodings are cached globally, so looking one up again costs nothing.',
-    zh: 'Rust。编码实例全局缓存，重复取用没有开销。',
-    ja: 'Rust の場合。エンコーディングはグローバルにキャッシュされ、取り直してもコストはかかりません。',
+    en: 'In Rust — encodings are cached globally, so looking one up again costs nothing.',
+    zh: 'Rust —— 编码实例全局缓存，重复取用没有开销。',
+    ja: 'Rust の場合 — エンコーディングはグローバルにキャッシュされ、取り直してもコストはかかりません。',
   },
   'inst.js.blurb': {
     en: 'In the browser or Node.js, through the same WebAssembly package this page uses.',
     zh: '浏览器或 Node.js，用的是本页面同一个 WebAssembly 包。',
-    ja: 'ブラウザまたは Node.js の場合。このページと同じ WebAssembly パッケージを使います。',
+    ja: 'ブラウザまたは Node.js の場合 — このページと同じ WebAssembly パッケージを使います。',
   },
   'inst.docs': {
     en: 'Both also carry cost estimation for 107 models across 10 providers. Full API reference:',
@@ -197,9 +197,9 @@ const dict: Dict = {
 
   // colophon
   'foot.license': {
-    en: 'Released under MIT OR Apache-2.0.',
-    zh: '以 MIT OR Apache-2.0 双许可发布。',
-    ja: 'MIT OR Apache-2.0 のデュアルライセンスで公開。',
+    en: 'Released under MIT OR Apache-2.0',
+    zh: '以 MIT OR Apache-2.0 双许可发布',
+    ja: 'MIT OR Apache-2.0 のデュアルライセンスで公開',
   },
 }
 
