@@ -9,8 +9,12 @@ switch persisted to `localStorage`.
 ## Stack
 
 - **Vite + React + TypeScript** — no CSS framework; the design system is
-  ~500 lines of hand-written CSS in `src/styles.css` (instrument-panel
-  aesthetic: dark ground, phosphor accent, Space Mono / Instrument Sans).
+  hand-written CSS in `src/styles.css`. The treatment is a research paper:
+  warm paper ground, ink black text, hairline rules, crimson used
+  structurally (section numbers, key figures, links) rather than
+  decoratively. Newsreader for headings, IBM Plex Sans for prose, IBM Plex
+  Mono for every number and identifier. Light only — `color-scheme` is
+  pinned so a dark-preference UA cannot invert it.
 - **`@goliapkg/tiktoken-wasm`** — loaded lazily on first paint; all 17
   encodings run in-browser, nothing the visitor types is uploaded.
 - **i18n** — a flat trilingual dictionary in `src/i18n.ts` with a React
@@ -24,10 +28,17 @@ src/
 ├── tokenizer.ts           wasm init + encoding cache + token→segment resolution
 ├── styles.css             the whole design system
 └── components/
-    ├── Playground.tsx     encoding picker, input, meters, colored token view
+    ├── Playground.tsx     encoding picker, input, meters, token segmentation
     ├── Tables.tsx         encoding spec sheet + benchmark table
     └── CodeBlock.tsx      copyable install/usage snippets
+
+public/golia-logo.png      the official GOLIA mark (from cdn.golia.jp)
+verify.mjs                 browser checks — see Verify
 ```
+
+The site is a Golia Lab project page and carries the GOLIA mark in the
+masthead and colophon. `Golia Lab` is the lab's own spelling in all three
+languages — do not translate it.
 
 ## Develop
 
@@ -36,6 +47,26 @@ cd web
 npm install
 npm run dev        # http://localhost:5173
 ```
+
+## Verify
+
+`npm run build` only proves the code compiles. `npm run verify` renders the
+site in a real browser and asserts what a build cannot:
+
+```bash
+npm run verify                              # against http://localhost:6040
+node verify.mjs https://tiktoken.golia.jp   # against the live site
+```
+
+It checks three viewports for horizontal overflow, collects console and page
+errors, confirms the GOLIA mark loads, drives the playground and asserts it
+returns tokens, and confirms the light treatment survives a dark
+`prefers-color-scheme`. This is worth running: the overflow check caught a
+real bug (grid items default to `min-width: auto`, so a long package name in
+a code block header was widening the page on mobile).
+
+Needs a Chromium — resolved from `$CHROME_PATH`, the Playwright browser
+cache, or the system Google Chrome, in that order.
 
 ## Build
 

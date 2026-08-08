@@ -9,6 +9,7 @@ const GITHUB = 'https://github.com/goliajp/rust-tiktoken'
 const CRATES = 'https://crates.io/crates/tiktoken'
 const NPM = 'https://www.npmjs.com/package/@goliapkg/tiktoken-wasm'
 const DOCSRS = 'https://docs.rs/tiktoken'
+const GOLIA = 'https://golia.jp'
 
 const RUST_SNIPPET = `let enc = tiktoken::get_encoding("o200k_base").unwrap();
 let tokens = enc.encode("hello world");        // → [24912, 2375]
@@ -24,6 +25,31 @@ const enc = getEncoding('o200k_base')
 enc.encode('hello world')                      // → Uint32Array [24912, 2375]
 encodingForModel('glm-5.2').count('你好世界')   // → 2`
 
+function Section({
+  id,
+  num,
+  title,
+  lede,
+  children,
+}: {
+  id: string
+  num: string
+  title: string
+  lede?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section id={id}>
+      <div className="sechead">
+        <div className="num">§ {num}</div>
+        <h2>{title}</h2>
+        {lede && <p className="lede">{lede}</p>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 export function App() {
   const [lang, setLang] = useState<Lang>('en')
   useEffect(() => {
@@ -36,21 +62,26 @@ export function App() {
 
   return (
     <LangContext.Provider value={lang}>
-      <div className="shell">
-        <header className="topbar">
+      <header className="masthead">
+        <div className="masthead-inner">
           <a className="brand" href="/">
-            <span className="dot">
-              <i />
-              <i />
-              <i />
-            </span>
-            tiktoken
+            <img src="/golia-logo.png" alt="GOLIA" width={26} height={26} />
+            <span className="wordmark">tiktoken</span>
+            <span className="lab">{t('brand.lab')}</span>
           </a>
           <nav className="topnav">
-            <a href="#playground">{t('nav.playground')}</a>
-            <a href="#encodings">{t('nav.encodings')}</a>
-            <a href="#performance">{t('nav.performance')}</a>
-            <a href="#install">{t('nav.install')}</a>
+            <a className="navlink" href="#playground">
+              {t('nav.playground')}
+            </a>
+            <a className="navlink" href="#encodings">
+              {t('nav.encodings')}
+            </a>
+            <a className="navlink" href="#performance">
+              {t('nav.performance')}
+            </a>
+            <a className="navlink" href="#install">
+              {t('nav.install')}
+            </a>
             <div className="langswitch" role="group" aria-label="language">
               {LANGS.map((l) => (
                 <button
@@ -66,109 +97,103 @@ export function App() {
               ))}
             </div>
           </nav>
-        </header>
+        </div>
+      </header>
 
-        <section className="hero reveal">
+      <div className="shell">
+        <section className="frontmatter reveal">
+          <div className="eyebrow">
+            <span className="bar" />
+            {t('front.eyebrow')}
+          </div>
           <h1>
-            {t('hero.title.pre')}
-            <span className="accent">{t('hero.title.accent')}</span>
+            {t('front.title.a')}
+            <em>{t('front.title.b')}</em>
+            {t('front.title.c')}
           </h1>
-          <p className="sub">{t('hero.sub')}</p>
+          <p className="abstract">{t('front.abstract')}</p>
 
-          <div className="hero-stats">
-            <div className="stat">
-              <div className="n">15–40x</div>
-              <div className="l">{t('hero.stat.speed')}</div>
+          <div className="figures">
+            <div className="figure">
+              <div className="v">167,849</div>
+              <div className="k">{t('front.fig.comparisons')}</div>
             </div>
-            <div className="stat">
-              <div className="n">43 ns</div>
-              <div className="l">{t('hero.stat.short')}</div>
+            <div className="figure">
+              <div className="v">17</div>
+              <div className="k">{t('front.fig.encodings')}</div>
             </div>
-            <div className="stat">
-              <div className="n">17</div>
-              <div className="l">{t('hero.stat.encodings')}</div>
+            <div className="figure">
+              <div className="v">43 ns</div>
+              <div className="k">{t('front.fig.short')}</div>
             </div>
-            <div className="stat">
-              <div className="n">107</div>
-              <div className="l">{t('hero.stat.models')}</div>
+            <div className="figure">
+              <div className="v">15–40×</div>
+              <div className="k">{t('front.fig.speed')}</div>
             </div>
           </div>
 
-          <div className="hero-links">
+          <div className="actions">
             <a className="btn primary" href="#playground">
-              {t('hero.cta.try')}
+              {t('front.cta.try')}
             </a>
             <a className="btn" href={GITHUB} target="_blank" rel="noreferrer">
-              {t('hero.cta.github')}
+              GitHub
             </a>
             <a className="btn" href={CRATES} target="_blank" rel="noreferrer">
-              {t('hero.cta.crates')}
+              crates.io
             </a>
             <a className="btn" href={NPM} target="_blank" rel="noreferrer">
-              {t('hero.cta.npm')}
+              npm
             </a>
           </div>
         </section>
 
-        <section id="playground-section" className="reveal" style={{ animationDelay: '90ms' }}>
-          <div className="tag">{t('pg.tag')}</div>
-          <h2>{t('pg.heading')}</h2>
-          <p className="prose" style={{ marginBottom: '1.6rem' }}>
-            {t('pg.blurb')}
-          </p>
+        <Section id="playground" num="01" title={t('pg.heading')} lede={t('pg.blurb')}>
           <Playground />
-        </section>
+          <p className="caption">
+            <b>{t('pg.caption.label')}</b> {t('pg.caption')}
+          </p>
+        </Section>
 
-        <section id="features" className="reveal" style={{ animationDelay: '160ms' }}>
-          <div className="tag">{t('feat.tag')}</div>
-          <h2>{t('feat.heading')}</h2>
-          <div className="grid3" style={{ marginTop: '1.6rem' }}>
-            <div className="cell">
-              <h3>
-                <span className="k">01</span> {t('feat.exact.h')}
-              </h3>
+        <Section id="method" num="02" title={t('feat.heading')}>
+          <div className="claims">
+            <div className="claim">
+              <span className="n">2.1</span>
+              <h3>{t('feat.exact.h')}</h3>
               <p>{t('feat.exact.p')}</p>
             </div>
-            <div className="cell">
-              <h3>
-                <span className="k">02</span> {t('feat.fast.h')}
-              </h3>
+            <div className="claim">
+              <span className="n">2.2</span>
+              <h3>{t('feat.fast.h')}</h3>
               <p>{t('feat.fast.p')}</p>
             </div>
-            <div className="cell">
-              <h3>
-                <span className="k">03</span> {t('feat.everywhere.h')}
-              </h3>
+            <div className="claim">
+              <span className="n">2.3</span>
+              <h3>{t('feat.everywhere.h')}</h3>
               <p>{t('feat.everywhere.p')}</p>
             </div>
           </div>
-        </section>
+        </Section>
 
-        <section id="encodings">
-          <div className="tag">{t('enc.tag')}</div>
-          <h2>{t('enc.heading')}</h2>
-          <p className="prose" style={{ marginBottom: '1.6rem' }}>
-            {t('enc.blurb')}
-          </p>
+        <Section id="encodings" num="03" title={t('enc.heading')} lede={t('enc.blurb')}>
           <EncodingTable />
-        </section>
-
-        <section id="performance">
-          <div className="tag">{t('perf.tag')}</div>
-          <h2>{t('perf.heading')}</h2>
-          <p className="prose" style={{ marginBottom: '1.6rem' }}>
-            {t('perf.blurb')}
+          <p className="caption">
+            <b>{t('enc.caption.label')}</b> {t('enc.caption')}
           </p>
-          <PerfTable />
-        </section>
+        </Section>
 
-        <section id="install">
-          <div className="tag">{t('inst.tag')}</div>
-          <h2>{t('inst.heading')}</h2>
+        <Section id="performance" num="04" title={t('perf.heading')} lede={t('perf.blurb')}>
+          <PerfTable />
+          <p className="caption">
+            <b>{t('perf.caption.label')}</b> {t('perf.caption')}
+          </p>
+        </Section>
+
+        <Section id="install" num="05" title={t('inst.heading')}>
           <div className="install-grid">
             <div>
               <p className="prose">{t('inst.rust.blurb')}</p>
-              <CodeBlock label="cargo add tiktoken" copy={'cargo add tiktoken'}>
+              <CodeBlock label="cargo add tiktoken" copy="cargo add tiktoken">
                 <span className="cm"># Cargo.toml → tiktoken = "3"</span>
                 {'\n\n'}
                 {RUST_SNIPPET}
@@ -176,22 +201,30 @@ export function App() {
             </div>
             <div>
               <p className="prose">{t('inst.js.blurb')}</p>
-              <CodeBlock label="npm install @goliapkg/tiktoken-wasm" copy={'npm install @goliapkg/tiktoken-wasm'}>
+              <CodeBlock
+                label="npm install @goliapkg/tiktoken-wasm"
+                copy="npm install @goliapkg/tiktoken-wasm"
+              >
                 {JS_SNIPPET}
               </CodeBlock>
             </div>
           </div>
-          <p className="prose" style={{ marginTop: '1.6rem' }}>
+          <p className="caption">
             {t('inst.docs')}{' '}
             <a href={DOCSRS} target="_blank" rel="noreferrer">
               docs.rs/tiktoken
             </a>
           </p>
-        </section>
+        </Section>
 
         <footer>
-          <span>{t('foot.license')}</span>
-          <span style={{ color: 'var(--phosphor-dim)' }}>{t('foot.tagline')}</span>
+          <div>
+            <a className="org" href={GOLIA} target="_blank" rel="noreferrer" style={{ borderBottom: 'none' }}>
+              <img src="/golia-logo.png" alt="GOLIA" width={20} height={20} />
+              <span>{t('foot.org')}</span>
+            </a>
+            <div>{t('foot.license')}</div>
+          </div>
           <div className="links">
             <a href={GITHUB} target="_blank" rel="noreferrer">
               GitHub
