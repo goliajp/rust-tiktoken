@@ -75,7 +75,7 @@ export function App() {
       <header className="masthead">
         <div className="masthead-inner">
           <a className="brand" href="/">
-            <img src="/golia-logo.png" alt="GOLIA" width={26} height={26} />
+            <img src="/tiktoken-logo.svg" alt="tiktoken" width={26} height={26} />
             <span className="wordmark">tiktoken</span>
           </a>
           <nav className="topnav">
