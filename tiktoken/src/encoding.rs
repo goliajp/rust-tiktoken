@@ -34,14 +34,16 @@ const MINIMAX_M2_DATA: &[u8] = include_bytes!("encodings/minimax_m2.tiktoken.zst
 pub(crate) const CL100K_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
 
 // o200k pattern: similar to cl100k but with finer Unicode category distinctions
-// (Lu/Lt/Lm/Lo/M vs plain \p{L}), supporting better CamelCase and mixed-script splitting
+// (Lu/Lt/Lm/Lo/M vs plain \p{L}), supporting better CamelCase and mixed-script
+// splitting. Note the punctuation rule's `[\r\n/]*` tail: unlike cl100k, o200k
+// admits `/` there and the vocabulary leans on it — ".\n/" is a single token.
 pub(crate) const O200K_PATTERN: &str = concat!(
     r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+",
     r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
     r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*",
     r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
     r"|\p{N}{1,3}",
-    r"| ?[^\s\p{L}\p{N}]+[\r\n]*",
+    r"| ?[^\s\p{L}\p{N}]+[\r\n/]*",
     r"|\s*[\r\n]+",
     r"|\s+",
 );
@@ -558,7 +560,7 @@ pub fn kimi_k2() -> CoreBpe {
         encoder,
         special,
         KIMI_PATTERN,
-        FastPath::O200k,
+        FastPath::Kimi,
         WhitespaceRules::NewlineFirst,
     )
 }
@@ -591,7 +593,7 @@ pub fn kimi_k3() -> CoreBpe {
         encoder,
         special,
         KIMI_PATTERN,
-        FastPath::O200k,
+        FastPath::Kimi,
         WhitespaceRules::NewlineFirst,
     )
 }
