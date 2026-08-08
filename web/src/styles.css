@@ -80,6 +80,19 @@ body {
 }
 
 
+/* Benchmark table sub-headings: quiet, monospace-tinged, and clearly bound
+   to the table that follows rather than to the section. */
+.benchhead {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin: 2rem 0 0.75rem;
+}
+section .benchhead:first-of-type {
+  margin-top: 0.5rem;
+}
+
 /* Headings balance across their lines; running text avoids a one-word last
    line. Both degrade to normal wrapping where unsupported. */
 h1,

@@ -7,7 +7,7 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md) · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** —— 浏览器在线体验
 
-最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral）。手写的 ASCII 快路径让 ASCII 文本 **比 tiktoken-rs 快 15〜40 倍**（CJK/Unicode 约 2 倍）。
+最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 5〜49 倍**，**浏览器内比 gpt-tokenizer 快 2〜4 倍** —— 中日文散文同样领先。
 
 ## 本 workspace 的 crate
 
@@ -64,7 +64,7 @@ const tokens = enc.encode('hello world')
 
 ## 性能
 
-在 Apple M4 Mac mini 上，ASCII 的 `encode` / `count` **比 tiktoken-rs 快 15〜40 倍**、**比 Python tiktoken 快约 20〜40 倍**（回退到正则的 CJK/Unicode 约 2 倍）。各编码的完整对比表与方法见 [`tiktoken/README.md#performance`](tiktoken/README.md#performance)。
+在 Apple M4 Mac mini 上，`encode` **比 tiktoken-rs 快 5〜49 倍**、**比 Python tiktoken 快 5〜29 倍**：ASCII 29〜49 倍，中日文散文 15〜17 倍，对抗性无重复 CJK 语料 5 倍。浏览器内（wasm）比 gpt-tokenizer 快 2〜4 倍。完整对比表与方法见 [`tiktoken/README.md#performance`](tiktoken/README.md#performance)。
 
 ## 构建
 

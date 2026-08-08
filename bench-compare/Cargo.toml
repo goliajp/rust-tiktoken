@@ -1,0 +1,17 @@
+# Comparative benchmark harness: this crate vs tiktoken-rs, identical corpora
+# and timing discipline (warmup + median of 9 rounds). A workspace member so
+# it builds against the local tiktoken, but never published — tiktoken-rs is
+# a competitor dependency that belongs nowhere near the shipped crate.
+[package]
+name = "bench-compare"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tiktoken = { path = "../tiktoken" }
+tiktoken-rs = "0.9"
+
+[[bin]]
+name = "bench-compare"
+path = "src/main.rs"

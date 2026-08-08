@@ -48,16 +48,32 @@ export function EncodingTable() {
   )
 }
 
-// cl100k_base encode, Apple M4 Mac mini — mirrors the README benchmark table.
-const PERF: { input: string; python: string; rs: string; ours: string; speedup: string }[] = [
-  { input: 'short (13 B)', python: '1,700 ns', rs: '1,248 ns', ours: '43 ns', speedup: '29x' },
-  { input: 'medium (900 B)', python: '32.2 µs', rs: '53.8 µs', ours: '1.5 µs', speedup: '35x' },
-  { input: 'long (45 KB)', python: '1,500 µs', rs: '2,611 µs', ours: '74 µs', speedup: '35x' },
-  { input: 'unicode (4.5 KB)', python: '141 µs', rs: '164 µs', ours: '91 µs', speedup: '1.8x' },
-  { input: 'code (3.9 KB)', python: '247 µs', rs: '264 µs', ours: '17 µs', speedup: '16x' },
+// Benchmark data — one full pass over the corpus, cl100k_base, warmup then
+// median of 9 rounds, token outputs asserted identical across implementations
+// before anything is timed. Corpora are byte-identical in every harness.
+//   browser — Mac Studio (M4 Max), Chromium: `npm run bench` in web/
+//   native  — Apple M4 Mac mini, single thread: `cargo run -p bench-compare`
+// Corpus labels are i18n'd; the numbers are not.
+
+const BROWSER: { key: string; ours: string; gpt: string; js: string }[] = [
+  { key: 'zh', ours: '13.4 µs', gpt: '36.8 µs', js: '8,029 µs' },
+  { key: 'ja', ours: '13.5 µs', gpt: '27.4 µs', js: '15,862 µs' },
+  { key: 'uni', ours: '24.2 µs', gpt: '41.2 µs', js: '4,665 µs' },
+  { key: 'varied', ours: '40.3 µs', gpt: '49.6 µs', js: '3,832 µs' },
+  { key: 'ascii', ours: '112.5 µs', gpt: '478 µs', js: '7,010 µs' },
+  { key: 'code', ours: '19.5 µs', gpt: '76.0 µs', js: '916 µs' },
 ]
 
-export function PerfTable() {
+const NATIVE: { key: string; ours: string; rs: string; py: string }[] = [
+  { key: 'zh', ours: '8.1 µs', rs: '135 µs', py: '120 µs' },
+  { key: 'ja', ours: '8.6 µs', rs: '145 µs', py: '131 µs' },
+  { key: 'uni', ours: '15.2 µs', rs: '160 µs', py: '139 µs' },
+  { key: 'varied', ours: '25.9 µs', rs: '141 µs', py: '132 µs' },
+  { key: 'ascii', ours: '51.5 µs', rs: '2,498 µs', py: '1,500 µs' },
+  { key: 'code', ours: '11.1 µs', rs: '318 µs', py: '264 µs' },
+]
+
+export function BrowserPerfTable() {
   const t = useT()
   return (
     <div className="tablewrap">
@@ -65,22 +81,50 @@ export function PerfTable() {
         <thead>
           <tr>
             <th>{t('perf.col.input')}</th>
-            <th>{t('perf.col.python')}</th>
-            <th>{t('perf.col.rs')}</th>
-            <th>{t('perf.col.ours')}</th>
-            <th>{t('perf.col.speedup')}</th>
+            <th>tiktoken (wasm)</th>
+            <th>gpt-tokenizer 3.4</th>
+            <th>js-tiktoken 1.0</th>
           </tr>
         </thead>
         <tbody>
-          {PERF.map((r) => (
-            <tr key={r.input}>
-              <td className="mono">{r.input}</td>
-              <td className="mono">{r.python}</td>
-              <td className="mono">{r.rs}</td>
+          {BROWSER.map((r) => (
+            <tr key={r.key}>
+              <td>{t(`perf.corpus.${r.key}`)}</td>
               <td>
                 <span className="hl">{r.ours}</span>
               </td>
-              <td className="mono">{r.speedup}</td>
+              <td className="mono">{r.gpt}</td>
+              <td className="mono">{r.js}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export function NativePerfTable() {
+  const t = useT()
+  return (
+    <div className="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{t('perf.col.input')}</th>
+            <th>tiktoken</th>
+            <th>tiktoken-rs 0.9</th>
+            <th>Python tiktoken 0.12</th>
+          </tr>
+        </thead>
+        <tbody>
+          {NATIVE.map((r) => (
+            <tr key={r.key}>
+              <td>{t(`perf.corpus.${r.key}`)}</td>
+              <td>
+                <span className="hl">{r.ours}</span>
+              </td>
+              <td className="mono">{r.rs}</td>
+              <td className="mono">{r.py}</td>
             </tr>
           ))}
         </tbody>

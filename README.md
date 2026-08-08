@@ -7,7 +7,7 @@
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** — live in-browser playground
 
-The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral). A hand-written ASCII fast-path makes ASCII text **15–40x faster than tiktoken-rs** (≈2x on CJK/Unicode).
+The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **5–49x faster than tiktoken-rs** natively and **2–4x faster than gpt-tokenizer in the browser** — CJK prose included.
 
 ## Crates in this workspace
 
@@ -21,7 +21,7 @@ The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatibl
 
 ## Highlights
 
-- **ASCII fast-path pre-tokenizer** — resolves the common ASCII pieces (letters, digits, punctuation, contractions) without invoking the regex engine; **2.3–5.5x faster** `encode` / `count` on ASCII text for cl100k / o200k / qwen2 / deepseek. Unicode/CJK transparently falls back to the regex.
+- **Hand-written pre-tokenizer for ASCII and CJK** — letters, digits, punctuation, contractions, Han/kana/hangul runs and fullwidth forms all resolve without the regex engine, which remains the arbiter (property-tested equivalence) and the fallback for rare shapes.
 - **17 encodings · 107 models · 10 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek V3/V4, Qwen, Mistral, Kimi K2/K3, GLM-4/5, MiniMax M2; plus USD cost estimation (Anthropic & Google included for pricing).
 - **Lean & portable** — arena-based vocabulary, hybrid linear/heap BPE merge, optional rayon parallelism, allocation-free `count()`, pure Rust with zero C dependencies, a tiny wasm build, and zstd-compressed vocab embedded at compile time.
 
@@ -64,7 +64,7 @@ const tokens = enc.encode('hello world')
 
 ## Performance
 
-On an Apple M4 Mac mini, ASCII `encode` / `count` is **15–40x faster than tiktoken-rs** and **~20–40x faster than Python tiktoken** (≈2x on CJK/Unicode, which defers to the regex). Full per-encoding tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
+On an Apple M4 Mac mini, `encode` is **5–49x faster than tiktoken-rs** and **5–29x faster than Python tiktoken**: 29–49x on ASCII, 15–17x on Chinese and Japanese prose, 5x even on an adversarial no-repeat CJK corpus. In the browser (wasm) it is 2–4x faster than gpt-tokenizer. Full tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
 
 ## Build
 
