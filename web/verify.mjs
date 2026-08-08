@@ -4,9 +4,9 @@
 // GOLIA mark actually loads, the light treatment survives a dark colour-scheme
 // preference, and the wasm playground returns tokens for real input.
 //
-// This is not decoration — the mobile-overflow check caught a live bug (grid
-// items default to min-width:auto, so a long package name in a code block
-// header widened the page).
+// This is not decoration — every check here guards a class of defect a build
+// cannot see (grid items default to min-width:auto and silently widen the
+// page; font stacks reflow text differently per engine).
 //
 //   node verify.mjs [url]        default: http://localhost:6040
 //   node verify.mjs https://tiktoken.golia.jp
@@ -106,8 +106,8 @@ for (const [width, height, label] of [
   if (!Number.isFinite(tokens) || tokens <= 0) failures.push(`playground produced no tokens (${tokens})`)
 
   // The two panes are read across, so they must start and end level and share
-  // type metrics; the install columns must line up the same way. Both drifted
-  // once already when copy of different lengths sat above them.
+  // type metrics; the install columns must line up the same way. Copy of
+  // differing lengths above either pair is what pushes them apart.
   const align = await page.evaluate(() => {
     const r = (s) => document.querySelector(s)?.getBoundingClientRect()
     const cs = (s) => getComputedStyle(document.querySelector(s))

@@ -233,10 +233,10 @@ const LATIN = /[0-9A-Za-z]/
  * A space between two Latin words ("Apple M4 Mac mini") is a real separator
  * and stays breakable.
  *
- * This is a string transform on purpose. An earlier version segmented the
- * text and emitted `<wbr>` between phrases, which shredded a sentence into
- * dozens of nodes, split "UTF-8", and — because `<wbr>` overrides
- * `line-break: strict` — put commas at the start of lines.
+ * Deliberately a plain string transform: emitting `<wbr>` or splitting into
+ * nodes would override `line-break: strict` — `<wbr>` is an explicit break
+ * opportunity honoured even where kinsoku forbids one — and shred the text
+ * into dozens of DOM nodes.
  */
 export function phrase(text: string, lang: Lang): string {
   if (lang === 'en') return text

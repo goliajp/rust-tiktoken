@@ -3,8 +3,7 @@
 //! The merge loop is lookup-bound: on Unicode-dense input it performs ~2.4
 //! vocabulary probes per emitted token, 77% of them misses, and 96.7% of the
 //! keys are 8 bytes or shorter (59% are exactly 2 — the initial adjacent-pair
-//! scan). See `PERF-2026-08-08-unicode-decomposition.md`. The layout serves
-//! those classes directly:
+//! scan). The layout serves those classes directly:
 //!
 //! - **2-byte keys** — a direct-indexed table of 65,536 ranks. No hash, no
 //!   probe, no byte comparison; one access into 256 KB.
