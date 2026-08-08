@@ -342,6 +342,18 @@ section {
   gap: 0.6rem;
   font-size: 0.88rem;
 }
+/* Brand marks are filled paths at the same optical size as the lucide
+   strokes beside them; both inherit the link colour. */
+.btn > svg:first-child,
+footer .links a > svg:first-child {
+  flex: none;
+  opacity: 0.75;
+}
+.btn:hover > svg:first-child,
+footer .links a:hover > svg:first-child {
+  opacity: 1;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -675,7 +687,16 @@ textarea::placeholder {
   border-top: 2px solid var(--ink);
   padding-top: 0.85rem;
 }
+/* The icon names what the card is about; it sits on the cap height of the
+   heading, not above it. */
+.claim h3 svg {
+  flex: none;
+  color: var(--accent);
+}
 .claim h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   font-family: var(--display);
   font-weight: 600;
   font-size: 1.02rem;

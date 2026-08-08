@@ -1,6 +1,7 @@
-import { ArrowDown, ArrowUpRight } from 'lucide-react'
+import { ArrowDown, ArrowUpRight, Boxes, GitCompare, Package, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import { Brand } from './components/Brand'
 import { Code, CodeBlock } from './components/CodeBlock'
 import { Playground } from './components/Playground'
 import { EncodingTable, PerfTable } from './components/Tables'
@@ -11,6 +12,16 @@ const CRATES = 'https://crates.io/crates/tiktoken'
 const NPM = 'https://www.npmjs.com/package/@goliapkg/tiktoken-wasm'
 const DOCSRS = 'https://docs.rs/tiktoken'
 const GOLIA = 'https://golia.jp'
+
+// lucide has no brand icons; GitHub, npm and docs.rs come from simple-icons
+// via components/Brand. crates.io has no mark there — Package is literal
+// enough (a crate is a box) and reads consistently beside the others.
+const LINKS = [
+  { label: 'GitHub', href: GITHUB, icon: <Brand name="GitHub" /> },
+  { label: 'crates.io', href: CRATES, icon: <Package size={14} strokeWidth={2} /> },
+  { label: 'npm', href: NPM, icon: <Brand name="Npm" /> },
+  { label: 'docs.rs', href: DOCSRS, icon: <Brand name="DocsRs" /> },
+]
 
 const RUST_SNIPPET = `// Cargo.toml → tiktoken = "3"
 
@@ -132,12 +143,9 @@ export function App() {
               <T k="front.cta.try" />
               <ArrowDown size={15} strokeWidth={2.25} />
             </a>
-            {[
-              ['GitHub', GITHUB],
-              ['crates.io', CRATES],
-              ['npm', NPM],
-            ].map(([label, href]) => (
+            {LINKS.slice(0, 3).map(({ label, href, icon }) => (
               <a key={label} className="btn" href={href} target="_blank" rel="noreferrer">
+                {icon}
                 {label}
                 <ArrowUpRight size={14} strokeWidth={2} className="ext" />
               </a>
@@ -155,15 +163,24 @@ export function App() {
         <Section id="method" title={<T k="feat.heading" />}>
           <div className="claims">
             <div className="claim">
-              <h3><T k="feat.exact.h" /></h3>
+              <h3>
+                <GitCompare size={16} strokeWidth={2} />
+                <T k="feat.exact.h" />
+              </h3>
               <p><T k="feat.exact.p" /></p>
             </div>
             <div className="claim">
-              <h3><T k="feat.fast.h" /></h3>
+              <h3>
+                <Zap size={16} strokeWidth={2} />
+                <T k="feat.fast.h" />
+              </h3>
               <p><T k="feat.fast.p" /></p>
             </div>
             <div className="claim">
-              <h3><T k="feat.everywhere.h" /></h3>
+              <h3>
+                <Boxes size={16} strokeWidth={2} />
+                <T k="feat.everywhere.h" />
+              </h3>
               <p><T k="feat.everywhere.p" /></p>
             </div>
           </div>
@@ -225,13 +242,9 @@ export function App() {
             <div><T k="foot.license" /></div>
           </div>
           <div className="links">
-            {[
-              ['GitHub', GITHUB],
-              ['crates.io', CRATES],
-              ['npm', NPM],
-              ['docs.rs', DOCSRS],
-            ].map(([label, href]) => (
+            {LINKS.map(({ label, href, icon }) => (
               <a key={label} href={href} target="_blank" rel="noreferrer">
+                {icon}
                 {label}
                 <ArrowUpRight size={12} strokeWidth={2} className="ext" />
               </a>
