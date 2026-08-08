@@ -710,8 +710,14 @@ textarea::placeholder {
   }
 }
 .claim {
+  /* Academic table rules: heavy above, light below. The bottom rule is the
+     row's visual baseline — grid stretch keeps all three exactly level no
+     matter how many lines each paragraph renders in a given font stack, so
+     ragged text bottoms read as in-frame whitespace, not misalignment. */
   border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
   padding-top: 0.85rem;
+  padding-bottom: 1.15rem;
 }
 /* The icon names what the card is about; it sits on the cap height of the
    heading, not above it. */
