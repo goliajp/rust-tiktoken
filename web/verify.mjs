@@ -130,16 +130,16 @@ for (const [width, height, label] of [
   }
   if (!align.sameType) failures.push('input and token panes do not share type metrics')
 
-  // Everything shares one left edge: section markers, headings, ledes and the
-  // content they introduce. A heading indented away from its own table reads
-  // as a mistake, and it was one.
+  // Everything shares one left edge: headings, ledes and the content they
+  // introduce. A heading indented away from its own table reads as a
+  // mistake, and it was one.
   const edges = await page.evaluate(() => {
     const L = (s) => Math.round(document.querySelector(s).getBoundingClientRect().left)
     const base = L('.playground')
     return {
       base,
       h1: L('.frontmatter h1') - base,
-      num: L('.sechead .num') - base,
+      eyebrow: L('.eyebrow') - base,
       h2: L('.sechead h2') - base,
       lede: L('.sechead .lede') - base,
       table: L('.tablewrap') - base,

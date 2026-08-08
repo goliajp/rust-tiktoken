@@ -58,7 +58,7 @@ const dict: Dict = {
   'front.fig.speed': { en: 'vs tiktoken-rs on ASCII', zh: 'ASCII 文本对比 tiktoken-rs', ja: 'ASCII で tiktoken-rs 比' },
   'front.cta.try': { en: 'Run it in your browser ↓', zh: '在浏览器中运行 ↓', ja: 'ブラウザで実行 ↓' },
 
-  // §1 playground
+  // playground
   'pg.heading': {
     en: 'Run the tokenizer, here, on your own text',
     zh: '就在此处，用你自己的文本运行分词器',
@@ -108,7 +108,7 @@ const dict: Dict = {
     ja: '網掛けされた各区間が 1 トークンです。ホバーすると id を表示します。単独では正しい UTF-8 にならないトークン（絵文字の断片など）は置換文字として表示されますが、id は正確です。',
   },
 
-  // §2 method
+  // method
   'feat.heading': {
     en: 'Correctness is established by differential testing, not by assertion',
     zh: '正确性由差分测试确立，而非声称',
@@ -133,7 +133,7 @@ const dict: Dict = {
     ja: '純 Rust・C 依存なし、語彙はコンパイル時に埋め込み。クレートと WebAssembly パッケージの両方で公開しています。上のプレイグラウンドは、そのパッケージそのものです。',
   },
 
-  // §3 encodings
+  // encodings
   'enc.heading': { en: 'Supported encodings', zh: '支持的编码', ja: '対応エンコーディング' },
   'enc.blurb': {
     en: 'From GPT-2 through GPT-5.6, alongside the open-weights models that most implementations omit — Kimi, GLM, MiniMax, DeepSeek V4, Qwen, Llama and Mistral.',
@@ -151,7 +151,7 @@ const dict: Dict = {
     ja: 'ベンダーが世代をまたいで同一の語彙を用いる場合（Kimi K2 と K3、DeepSeek V3 と V4）、データは一度だけ保持し、エントリ間の差は特殊トークン表のみです。',
   },
 
-  // §4 performance
+  // performance
   'perf.heading': { en: 'Measured performance', zh: '实测性能', ja: '実測性能' },
   'perf.blurb': {
     en: 'Encoding with cl100k_base on an Apple M4 Mac mini, single-threaded, criterion with n = 100. Token output was verified identical across all three implementations before timing them.',
@@ -170,7 +170,7 @@ const dict: Dict = {
     ja: '高速化率は tiktoken-rs を基準としています。Unicode 主体の入力で伸びが最も小さいのは想定どおりで、その場合は正規表現エンジンに委ねられ、そこは最適化の対象ではありません。',
   },
 
-  // §5 install
+  // install
   'inst.heading': { en: 'Installation', zh: '安装', ja: '導入' },
   'inst.rust.blurb': {
     en: 'In Rust. Encodings are cached globally, so repeated lookups cost nothing.',

@@ -30,13 +30,11 @@ encodingForModel('glm-5.2').count('你好世界')   // 2`
 
 function Section({
   id,
-  num,
   title,
   lede,
   children,
 }: {
   id: string
-  num: string
   title: string
   lede?: string
   children: React.ReactNode
@@ -44,7 +42,6 @@ function Section({
   return (
     <section id={id}>
       <div className="sechead">
-        <div className="num">§ {num}</div>
         <h2>{title}</h2>
         {lede && <p className="lede">{lede}</p>}
       </div>
@@ -105,10 +102,7 @@ export function App() {
 
       <div className="shell">
         <section className="frontmatter reveal">
-          <div className="eyebrow">
-            <span className="bar" />
-            {t('front.eyebrow')}
-          </div>
+          <div className="eyebrow">{t('front.eyebrow')}</div>
           <h1>
             {t('front.title.a')}
             <em>{t('front.title.b')}</em>
@@ -151,14 +145,14 @@ export function App() {
           </div>
         </section>
 
-        <Section id="playground" num="01" title={t('pg.heading')} lede={t('pg.blurb')}>
+        <Section id="playground" title={t('pg.heading')} lede={t('pg.blurb')}>
           <Playground />
           <p className="caption">
             <b>{t('pg.caption.label')}</b> {t('pg.caption')}
           </p>
         </Section>
 
-        <Section id="method" num="02" title={t('feat.heading')}>
+        <Section id="method" title={t('feat.heading')}>
           <div className="claims">
             <div className="claim">
               <span className="n">2.1</span>
@@ -178,21 +172,21 @@ export function App() {
           </div>
         </Section>
 
-        <Section id="encodings" num="03" title={t('enc.heading')} lede={t('enc.blurb')}>
+        <Section id="encodings" title={t('enc.heading')} lede={t('enc.blurb')}>
           <EncodingTable />
           <p className="caption">
             <b>{t('enc.caption.label')}</b> {t('enc.caption')}
           </p>
         </Section>
 
-        <Section id="performance" num="04" title={t('perf.heading')} lede={t('perf.blurb')}>
+        <Section id="performance" title={t('perf.heading')} lede={t('perf.blurb')}>
           <PerfTable />
           <p className="caption">
             <b>{t('perf.caption.label')}</b> {t('perf.caption')}
           </p>
         </Section>
 
-        <Section id="install" num="05" title={t('inst.heading')}>
+        <Section id="install" title={t('inst.heading')}>
           {/* Direct grid children, in row order: both blurbs share row 1 and
               both code blocks share row 2, so the columns line up top and
               bottom even when one blurb wraps to more lines than the other.
