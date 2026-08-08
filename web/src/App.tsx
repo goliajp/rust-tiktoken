@@ -155,17 +155,14 @@ export function App() {
         <Section id="method" title={t('feat.heading')}>
           <div className="claims">
             <div className="claim">
-              <span className="n">2.1</span>
               <h3>{t('feat.exact.h')}</h3>
               <p>{t('feat.exact.p')}</p>
             </div>
             <div className="claim">
-              <span className="n">2.2</span>
               <h3>{t('feat.fast.h')}</h3>
               <p>{t('feat.fast.p')}</p>
             </div>
             <div className="claim">
-              <span className="n">2.3</span>
               <h3>{t('feat.everywhere.h')}</h3>
               <p>{t('feat.everywhere.p')}</p>
             </div>

@@ -689,13 +689,6 @@ textarea::placeholder {
   font-size: 0.92rem;
   color: var(--ink-soft);
 }
-.claim .n {
-  font-family: var(--mono);
-  font-size: 0.74rem;
-  color: var(--accent);
-  display: block;
-  margin-bottom: 0.3rem;
-}
 
 /* ── tables ───────────────────────────────────────────────────────── */
 
