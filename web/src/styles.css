@@ -868,20 +868,18 @@ footer {
   }
 }
 footer .org {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.45rem;
+  display: inline-block;
+  border-bottom: none;
+  margin-bottom: 0.6rem;
+}
+footer .org:hover {
+  border-bottom: none;
+  opacity: 0.75;
 }
 footer .org img {
-  width: 20px;
+  display: block;
+  width: auto;
   height: 20px;
-  border-radius: 5px;
-}
-footer .org span {
-  color: var(--ink);
-  font-weight: 600;
-  font-size: 0.88rem;
 }
 footer .links {
   display: flex;

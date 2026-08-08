@@ -41,6 +41,7 @@ src/
     └── CodeBlock.tsx      copyable snippets + a small syntax highlighter
 
 public/golia-logo.png      the official GOLIA mark (from cdn.golia.jp)
+public/golia-wordmark.png  the official horizontal GOLIA wordmark, ditto
 verify.mjs                 browser checks — see Verify
 ```
 

@@ -219,9 +219,8 @@ export function App() {
 
         <footer>
           <div>
-            <a className="org" href={GOLIA} target="_blank" rel="noreferrer" style={{ borderBottom: 'none' }}>
-              <img src="/golia-logo.png" alt="GOLIA" width={20} height={20} />
-              <span>{t('foot.org')}</span>
+            <a className="org" href={GOLIA} target="_blank" rel="noreferrer" aria-label="GOLIA">
+              <img src="/golia-wordmark.png" alt="GOLIA" width={92} height={20} />
             </a>
             <div>{t('foot.license')}</div>
           </div>

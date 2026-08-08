@@ -36,9 +36,9 @@ const dict: Dict = {
 
   // front matter
   'front.eyebrow': {
-    en: 'A Golia Lab project · Open source',
-    zh: 'Golia Lab 研究项目 · 开源',
-    ja: 'Golia Lab のプロジェクト · オープンソース',
+    en: 'Open source · Maintained by Golia Lab',
+    zh: '开源 · 由 Golia Lab 承诺保持维护',
+    ja: 'オープンソース · Golia Lab が継続的にメンテナンス',
   },
   'front.title.a': { en: 'A ', zh: '', ja: '' },
   'front.title.b': { en: 'high-performance', zh: '高性能', ja: '高性能' },
@@ -189,7 +189,6 @@ const dict: Dict = {
   },
 
   // colophon
-  'foot.org': { en: 'Golia Lab · GOLIA K.K.', zh: 'Golia Lab · GOLIA株式会社', ja: 'Golia Lab · GOLIA株式会社' },
   'foot.license': {
     en: 'Released under MIT OR Apache-2.0.',
     zh: '以 MIT OR Apache-2.0 双许可发布。',
