@@ -32,7 +32,7 @@ src/
 └── components/
     ├── Playground.tsx     encoding picker, input, meters, token segmentation
     ├── Tables.tsx         encoding spec sheet + benchmark table
-    └── CodeBlock.tsx      copyable install/usage snippets
+    └── CodeBlock.tsx      copyable snippets + a small syntax highlighter
 
 public/golia-logo.png      the official GOLIA mark (from cdn.golia.jp)
 verify.mjs                 browser checks — see Verify
@@ -60,7 +60,8 @@ npm run verify                              # against http://localhost:6040
 node verify.mjs https://tiktoken.golia.jp   # against the live site
 ```
 
-It checks three viewports for horizontal overflow, collects console and page
+It checks three viewports for horizontal overflow (including the code
+blocks, which wrap rather than scroll), collects console and page
 errors, confirms the GOLIA mark loads, drives the playground and asserts it
 returns tokens, and confirms the light treatment survives a dark
 `prefers-color-scheme`. This is worth running: the overflow check caught a

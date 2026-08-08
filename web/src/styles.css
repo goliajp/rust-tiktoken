@@ -776,10 +776,44 @@ tbody tr:hover td {
 }
 .codeblock pre {
   padding: 0.9rem;
-  overflow-x: auto;
   font-size: 0.82rem;
   line-height: 1.7;
   color: var(--ink);
+  /* Wrap rather than scroll: a sideways scrollbar hides the end of every
+     line the reader most needs to see. */
+  white-space: pre-wrap;
+  /* break-word plus the <wbr> hints emitted per token: folds land on code
+     punctuation, and only a genuinely unbreakable run splits mid-word. */
+  overflow-wrap: break-word;
+}
+/* Each source line is a block with a hanging indent, so a wrapped
+   continuation is visibly subordinate to the line it belongs to. */
+.codeblock .ln {
+  display: block;
+  padding-left: 1.6em;
+  text-indent: -1.6em;
+}
+.codeblock .ln:empty::before {
+  content: '\200b'; /* keep blank lines from collapsing */
+}
+
+/* Syntax colours: four hues, all desaturated to sit inside the page's
+   paper-and-ink palette rather than fight it. */
+.tk-comment {
+  color: var(--ink-faint);
+}
+.tk-string {
+  color: #4a7c59;
+}
+.tk-number {
+  color: #3f6b9e;
+}
+.tk-keyword {
+  color: var(--red);
+  font-weight: 500;
+}
+.tk-macro {
+  color: #8a5a2b;
 }
 .codeblock .cm {
   color: var(--ink-faint);
