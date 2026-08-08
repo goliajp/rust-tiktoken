@@ -112,26 +112,21 @@ section {
 }
 
 /* section heading: §number in crimson, tight grotesque title */
+/* The section number sits above the title as a marker rather than in a
+   column beside it, so the title, the lede and everything the section
+   contains share one left edge — the page's content edge. A number column
+   would indent the heading away from the table or panel it introduces. */
 .sechead {
-  display: grid;
-  grid-template-columns: 3.4rem 1fr;
-  gap: 0 1rem;
-  align-items: baseline;
   margin-bottom: 1.5rem;
-}
-@media (max-width: 640px) {
-  .sechead {
-    grid-template-columns: 1fr;
-    gap: 0.3rem;
-  }
 }
 .sechead .num {
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: var(--accent);
-  letter-spacing: 0.04em;
-  padding-top: 0.45rem;
+  letter-spacing: 0.12em;
+  display: block;
+  margin-bottom: 0.5rem;
 }
 .sechead h2 {
   font-family: var(--display);
@@ -141,16 +136,10 @@ section {
   letter-spacing: -0.022em;
 }
 .sechead .lede {
-  grid-column: 2;
   color: var(--ink-soft);
   max-width: var(--measure);
   margin-top: 0.7rem;
   font-size: 1rem;
-}
-@media (max-width: 640px) {
-  .sechead .lede {
-    grid-column: 1;
-  }
 }
 
 .prose {
