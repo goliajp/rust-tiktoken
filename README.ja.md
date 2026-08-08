@@ -7,7 +7,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語** · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** — ブラウザで試す
 
-最速の Rust BPE トークナイザーと、その WebAssembly バインディング。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral）もサポート。手書きの ASCII 高速パスにより、ASCII テキストは **tiktoken-rs より 15〜40 倍高速**（CJK/Unicode では約 2 倍）。
+最速の Rust BPE トークナイザーと、その WebAssembly バインディング。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）もサポート。手書きスキャナが ASCII と CJK の両方を扱い、キー長で階層化した語彙と断片の丸ごとメモ化により、**ネイティブで tiktoken-rs の 5〜49 倍**、**ブラウザ内で gpt-tokenizer の 2〜4 倍** 高速——日本語・中国語の文章でも優位です。
 
 ## このワークスペースの crate
 
@@ -64,7 +64,7 @@ const tokens = enc.encode('hello world')
 
 ## パフォーマンス
 
-Apple M4 Mac mini での測定で、ASCII の `encode` / `count` は **tiktoken-rs より 15〜40 倍**、**Python tiktoken より約 20〜40 倍** 高速（正規表現へフォールバックする CJK/Unicode では約 2 倍）。エンコーディングごとの詳細表と方法論は [`tiktoken/README.md#performance`](tiktoken/README.md#performance) を参照。
+Apple M4 Mac mini での測定で、`encode` は **tiktoken-rs の 5〜49 倍**、**Python tiktoken の 5〜29 倍** 高速：ASCII で 29〜49 倍、日本語・中国語の文章で 15〜17 倍、繰り返しのない敵対的 CJK コーパスでも 5 倍。ブラウザ内（wasm）では gpt-tokenizer の 2〜4 倍です。詳細表と方法論は [`tiktoken/README.md#performance`](tiktoken/README.md#performance) を参照。
 
 ## ビルド
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Brand } from './components/Brand'
 import { Code, CodeBlock } from './components/CodeBlock'
 import { Playground } from './components/Playground'
-import { EncodingTable, PerfTable } from './components/Tables'
+import { BrowserPerfTable, EncodingTable, NativePerfTable } from './components/Tables'
 import { detectLang, LANGS, LangContext, T, type Lang } from './i18n'
 
 const GITHUB = 'https://github.com/goliajp/rust-tiktoken'
@@ -121,20 +121,20 @@ export function App() {
 
           <div className="figures">
             <div className="figure">
-              <div className="v">167,849</div>
+              <div className="v">2–4×</div>
+              <div className="k"><T k="front.fig.browser" /></div>
+            </div>
+            <div className="figure">
+              <div className="v">5–49×</div>
+              <div className="k"><T k="front.fig.speed" /></div>
+            </div>
+            <div className="figure">
+              <div className="v">44,518</div>
               <div className="k"><T k="front.fig.comparisons" /></div>
             </div>
             <div className="figure">
               <div className="v">17</div>
               <div className="k"><T k="front.fig.encodings" /></div>
-            </div>
-            <div className="figure">
-              <div className="v">43 ns</div>
-              <div className="k"><T k="front.fig.short" /></div>
-            </div>
-            <div className="figure">
-              <div className="v">15–40×</div>
-              <div className="k"><T k="front.fig.speed" /></div>
             </div>
           </div>
 
@@ -194,7 +194,13 @@ export function App() {
         </Section>
 
         <Section id="performance" title={<T k="perf.heading" />} lede={<T k="perf.blurb" />}>
-          <PerfTable />
+          <h3 className="benchhead"><T k="perf.browser.h" /></h3>
+          <BrowserPerfTable />
+          <p className="caption">
+            <b><T k="perf.caption.browser.label" /></b> <T k="perf.caption.browser" />
+          </p>
+          <h3 className="benchhead"><T k="perf.native.h" /></h3>
+          <NativePerfTable />
           <p className="caption">
             <b><T k="perf.caption.label" /></b> <T k="perf.caption" />
           </p>

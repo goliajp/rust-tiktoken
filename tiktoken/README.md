@@ -21,41 +21,63 @@ The fastest Rust BPE tokenizer — 15–40x faster than tiktoken-rs on ASCII tex
 
 ## Performance
 
-All benchmarks on Apple M4 Mac mini, single-threaded. Token output verified identical across all three implementations.
+Token outputs are asserted identical across implementations before anything is
+timed; each figure is one full pass over the corpus, median of 9 rounds after
+warmup. Corpora are byte-identical in every harness (`bench-compare/`,
+`benches/bench_python.py`, `web/bench/`).
 
-#### cl100k_base encode
+#### Native — Apple M4 Mac mini, single thread, `encode`
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
+`cargo run --release -p bench-compare`
+
+| Corpus | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| short (13 B) | 1,700 ns | 1,248 ns | **43 ns** | **29x** | **40x** |
-| medium (900 B) | 32.2 us | 53.8 us | **1.5 us** | **35x** | **21x** |
-| long (45 KB) | 1,500 us | 2,611 us | **74 us** | **35x** | **20x** |
-| unicode (4.5 KB) | 141 us | 164 us | **91 us** | **1.8x** | **1.6x** |
-| code (3.9 KB) | 247 us | 264 us | **17 us** | **16x** | **15x** |
+| short (13 B) | 1.6 µs | 1,081 ns | **33 ns** | **33x** | **48x** |
+| medium (900 B) | 31.9 µs | 52.2 µs | **1.1 µs** | **47x** | **29x** |
+| English prose (45 KB) | 1,500 µs | 2,498 µs | **51.5 µs** | **49x** | **29x** |
+| Chinese prose (4.3 KB) | 119.8 µs | 134.7 µs | **8.1 µs** | **17x** | **15x** |
+| Japanese prose (4.6 KB) | 131.0 µs | 144.6 µs | **8.6 µs** | **17x** | **15x** |
+| mixed CJK ×50 (4.5 KB) | 138.9 µs | 160.3 µs | **15.2 µs** | **11x** | **9.2x** |
+| adversarial CJK, no repeats (3.9 KB) | 131.7 µs | 141.2 µs | **25.9 µs** | **5.5x** | **5.1x** |
+| code (3.9 KB) | 263.7 µs | 317.7 µs | **11.1 µs** | **29x** | **24x** |
 
-#### o200k_base encode
+o200k_base tracks the same ratios (5–48x vs tiktoken-rs). `count()` runs
+another 5–15% faster than `encode` — it never allocates the id vector.
 
-| Input | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
-|---|---|---|---|---|---|
-| short (13 B) | 1,600 ns | 1,051 ns | **40 ns** | **26x** | **40x** |
-| medium (900 B) | 58.3 us | 56.2 us | **1.5 us** | **37x** | **39x** |
-| long (45 KB) | 2,900 us | 2,799 us | **73 us** | **38x** | **40x** |
-| unicode (4.5 KB) | 204 us | 187 us | **95 us** | **2.0x** | **2.2x** |
-| code (3.9 KB) | 332 us | 253 us | **16 us** | **16x** | **21x** |
+#### In the browser — Mac Studio (M4 Max), Chromium
+
+`npm run bench` in `web/` — this crate compiled to wasm, against the two
+mainstream JavaScript tokenizers.
+
+| Corpus | gpt-tokenizer 3.4 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+|---|---|---|---|
+| Chinese prose (4.3 KB) | 36.8 µs | 8,029 µs | **13.4 µs** |
+| Japanese prose (4.6 KB) | 27.4 µs | 15,862 µs | **13.5 µs** |
+| mixed CJK ×50 (4.5 KB) | 41.2 µs | 4,665 µs | **24.2 µs** |
+| adversarial CJK, no repeats (3.9 KB) | 49.6 µs | 3,832 µs | **40.3 µs** |
+| English prose (45 KB) | 478 µs | 7,010 µs | **112.5 µs** |
+| code (3.9 KB) | 76.0 µs | 916 µs | **19.5 µs** |
+
+The adversarial corpus never repeats a piece, which disables every
+implementation's memoisation — it is the floor, and the lead holds there too.
 
 <details>
 <summary>Why is it faster?</summary>
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| Vocab storage | Arena-based (single alloc, cache-friendly) | `HashMap<Vec<u8>>` (200k allocs) | Rust `HashMap` behind PyO3 |
-| Pre-tokenize (ASCII) | Hand-written ASCII fast-path, skips the regex | always runs the regex | always runs the regex |
+| Pre-tokenize | Hand-written scanners for ASCII **and** CJK (Han/kana/hangul, fullwidth forms); regex only as arbiter and rare-case fallback | always runs the regex | always runs the regex |
 | Regex engine (fallback) | `regex` (DFA, linear time) | `fancy-regex` (backtracking) | `regex` via PyO3 + FFI overhead |
-| Hash map | Custom open-addressing + `FxHash` | `rustc-hash` v1 | standard `HashMap` |
+| Vocab lookup | Layered by key size: direct-indexed tables for 1–2-byte keys, open addressing with inlined keys for 3–8, tagged arena slots above | `HashMap<Vec<u8>>` (200k allocs) | Rust `HashMap` behind PyO3 |
+| Repeated pieces | Thread-local direct-mapped memoisation, byte keys | none | none |
 | BPE merge | Hybrid: stack linear-scan (short pieces) + heap (long) | O(n*m) linear scan | O(n*m) linear scan |
 | `count()` without alloc | yes | no | no |
 
-Benchmark source: [`benches/`](benches/). Reproducible via `cargo bench`.
+The scanners are pinned to the regex by property tests (hundreds of thousands
+of random inputs per run), and every encoding is pinned to its vendor's
+tokenizer by 44,518 differential fixture cases.
+
+Benchmark source: [`benches/`](benches/), [`../bench-compare/`](../bench-compare/). Reproducible via `cargo bench` / `cargo run -p bench-compare`.
 
 </details>
 

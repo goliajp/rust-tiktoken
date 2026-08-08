@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["tiktoken"]
+members = ["tiktoken", "bench-compare"]
 exclude = ["tiktoken-wasm"]
 
 [workspace.package]
