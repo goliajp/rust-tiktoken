@@ -22,7 +22,10 @@ switch persisted to `localStorage`.
 - **`@goliapkg/tiktoken-wasm`** — loaded lazily on first paint; all 17
   encodings run in-browser, nothing the visitor types is uploaded.
 - **i18n** — a flat trilingual dictionary in `src/i18n.ts` with a React
-  context. No library: three locales, one page.
+  context. No library: three locales, one page. Each locale is written, not
+  translated: Chinese and Japanese use their own punctuation conventions
+  (`——` vs `（）`, never an English parenthetical dash) and drop the hedging
+  and filler that literal translation produces.
 - **lucide-react** — icons only where they do work: labelling an action,
   carrying a state, or marking a link as leaving the page. Each sits beside
   its own text, so nothing depends on decoding a glyph. Tree-shaken — the set
@@ -68,7 +71,8 @@ node verify.mjs https://tiktoken.golia.jp   # against the live site
 ```
 
 It checks three viewports for horizontal overflow (including the code
-blocks, which wrap rather than scroll), collects console and page
+blocks, which wrap rather than scroll), verifies CJK line-breaking (no line
+may start with closing punctuation, in either Chinese or Japanese), collects console and page
 errors, confirms the GOLIA mark loads, drives the playground and asserts it returns
 tokens, checks that the paired columns line up (playground panes and install
 columns, top and bottom, plus matching type metrics between the two panes),

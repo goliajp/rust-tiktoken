@@ -68,6 +68,28 @@ body {
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Kinsoku: CJK must not start a line with closing punctuation (。、」）)
+     or end one with an opener. Without this the browser breaks anywhere,
+     which is what put a 。 at the head of a line. */
+  line-break: strict;
+  overflow-wrap: break-word;
+}
+
+/* Headings balance across their lines; running text avoids a one-word last
+   line. Both degrade to normal wrapping where unsupported. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p,
+.lede,
+.caption,
+.abstract,
+.claim p,
+.figure .k,
+.meter .k {
+  text-wrap: pretty;
 }
 
 ::selection {
