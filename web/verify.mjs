@@ -155,6 +155,23 @@ for (const [width, height, label] of [
     if (k !== 'base' && Math.abs(v) > 1) failures.push(`${k} left edge off by ${v}px`)
   }
 
+  // A caption belongs to the table or figure above it, so it spans that
+  // width. Holding it to the prose measure made it narrower than its own
+  // subject and orphaned its last words onto a short second line.
+  const captions = await page.evaluate(() =>
+    [...document.querySelectorAll('.caption')].map((c) => {
+      const subject = c.previousElementSibling
+      return {
+        id: c.closest('section')?.id ?? '?',
+        delta: Math.round(c.getBoundingClientRect().width - subject.getBoundingClientRect().width),
+      }
+    }),
+  )
+  for (const c of captions) {
+    if (Math.abs(c.delta) > 1) failures.push(`#${c.id} caption is ${c.delta}px off its subject's width`)
+  }
+  console.log(`captions=${captions.map((c) => `${c.id}${c.delta >= 0 ? '+' : ''}${c.delta}`).join(' ')}`)
+
   console.log(
     `logo=${logoOk} wordmark=${wordmarkOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
       `codeΔ=${align.codeTop}/${align.codeBottom}px sameType=${align.sameType}`,

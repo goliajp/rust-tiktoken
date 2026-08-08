@@ -647,7 +647,10 @@ textarea::placeholder {
   font-size: 0.8rem;
   color: var(--ink-faint);
   margin-top: 0.75rem;
-  max-width: var(--measure);
+  /* No measure limit: a caption belongs to the table or figure above it and
+     is read as part of it, so it spans that width. Holding it to the prose
+     measure left it narrower than the thing it describes, which reads as a
+     mistake and orphaned the last few words onto a second line. */
 }
 .caption b {
   color: var(--ink-soft);
