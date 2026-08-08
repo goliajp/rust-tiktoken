@@ -36,7 +36,7 @@ WHITESPACE = [
 ]
 
 # What follows the run decides whether the lookahead would have trimmed it.
-FOLLOWERS = ["", "a", "A", "1", "!", "@", ".", "'s", " ", "\n", "你", "\U0001f389", "@rem", "word"]
+FOLLOWERS = ["", "a", "A", "1", "!", "@", ".", "'s", " ", "\n", "你", "\U0001f389", "@rem", "word", "/", "//x"]
 
 # What precedes it decides which branch claims the leading character.
 PRECEDERS = ["", "word", "1", "!", "你好", "\U0001f389"]
@@ -107,6 +107,17 @@ def corpus():
         "mixed \t\n\n\t end",
         'json:\n{\n  "a": 1,\n\n  "b": 2\n}\n',
         "CSV\r\n1,2,3\r\n4,5,6\r\n",
+    ]
+
+    # --- o200k punctuation tail: ` ?[^\s\p{L}\p{N}]+[\r\n/]*` admits `/` after
+    # newlines (cl100k's tail is `[\r\n]*`). ".\n/" is a single o200k token, so
+    # a pattern missing the `/` silently changes ids. These shapes were the
+    # corpus gap that let exactly that bug survive a green suite.
+    texts += [
+        ".\n/", ".\n/a", "x.\n//y", "hello.\n/usr/bin", " !\r\n///",
+        "\\ \n /", ".../...", ".\r/", ".\n\r//", "a.\n/b.\n/c",
+        "; \n//comment", "*/\n/*", "#!/bin/sh\n/usr/bin/env python",
+        "//\n//", "/\n/", ".\n\n/", ". \n/", "http://a.b/c\n/d",
     ]
 
     # --- systematic preceder x whitespace-run x follower matrix ---

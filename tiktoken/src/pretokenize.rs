@@ -38,6 +38,11 @@ pub(crate) enum FastPath {
     /// minimax_m2 pattern: o200k's letter/digit rules (contractions included)
     /// with Tekken's `[\r\n/]*` punctuation tail.
     MiniMax,
+    /// kimi_k2 / kimi_k3 pattern: o200k's ASCII behaviour but with the plain
+    /// `[\r\n]*` punctuation tail — Moonshot's pat_str does not admit `/`
+    /// there. (Its `[\p{Han}]+` branch and Han-excluded letter classes only
+    /// matter for non-ASCII input, where this scanner defers to the regex.)
+    Kimi,
 }
 
 /// Which whitespace rules a pattern uses, deciding whether the `\s+(?!\S)`
@@ -101,9 +106,10 @@ impl PreTokenizer for RegexPreTokenizer {
         let fast = match self.fast {
             FastPath::Cl100k => cl100k_ascii_next::<3>(bytes, pos),
             FastPath::Qwen2 => cl100k_ascii_next::<1>(bytes, pos),
-            FastPath::O200k => o200k_like_ascii_next::<true, 3, false>(bytes, pos),
+            FastPath::O200k => o200k_like_ascii_next::<true, 3, true>(bytes, pos),
             FastPath::Tekken => o200k_like_ascii_next::<false, 1, true>(bytes, pos),
             FastPath::MiniMax => o200k_like_ascii_next::<true, 3, true>(bytes, pos),
+            FastPath::Kimi => o200k_like_ascii_next::<true, 3, false>(bytes, pos),
             FastPath::Deepseek => deepseek_ascii_next(bytes, pos),
             FastPath::None => None,
         };
@@ -274,10 +280,10 @@ fn cl100k_ascii_next<const MAX_DIGITS: usize>(b: &[u8], i: usize) -> Option<(usi
 /// Within ASCII the upper class is `[A-Z]` and the lower class is `[a-z]`
 /// (Lt/Lm/Lo/M are empty in ASCII).
 ///
-/// The two differ in three places, all passed in by the caller:
-/// o200k attaches an optional contraction suffix to the word and uses
-/// `\p{N}{1,3}` + `[\r\n]*`; Tekken has no contraction rule and uses `\p{N}`
-/// + `[\r\n/]*`.
+/// The two differ in two places, both passed in by the caller: o200k attaches
+/// an optional contraction suffix to the word and uses `\p{N}{1,3}`; Tekken
+/// has no contraction rule and uses `\p{N}`. Both share the `[\r\n/]*`
+/// punctuation tail.
 #[inline(always)]
 fn o200k_like_ascii_next<
     const CONTRACTIONS: bool,
@@ -582,8 +588,8 @@ mod tests {
     // (rather than copying) guarantees the fast-path equivalence proptests below
     // validate against exactly the patterns used in production.
     use crate::encoding::{
-        CL100K_PATTERN, DEEPSEEK_V3_PATTERN, MISTRAL_V3_PATTERN, O200K_PATTERN, P50K_PATTERN,
-        QWEN2_PATTERN,
+        CL100K_PATTERN, DEEPSEEK_V3_PATTERN, KIMI_PATTERN, MISTRAL_V3_PATTERN, O200K_PATTERN,
+        P50K_PATTERN, QWEN2_PATTERN,
     };
 
     /// A production pattern bundled with the [`FastPath`] and
@@ -619,6 +625,11 @@ mod tests {
     const MISTRAL: Spec = Spec {
         pattern: MISTRAL_V3_PATTERN,
         fast: FastPath::Tekken,
+        ws: WhitespaceRules::NewlineFirst,
+    };
+    const KIMI: Spec = Spec {
+        pattern: KIMI_PATTERN,
+        fast: FastPath::Kimi,
         ws: WhitespaceRules::NewlineFirst,
     };
     const P50K: Spec = Spec {
@@ -819,7 +830,7 @@ mod tests {
             "a \n\n b",
         ];
 
-        for spec in [CL100K, O200K, QWEN2, DEEPSEEK, MISTRAL, P50K] {
+        for spec in [CL100K, O200K, QWEN2, DEEPSEEK, MISTRAL, KIMI, P50K] {
             for text in &texts {
                 assert_fast_matches_reference(spec, text);
             }
@@ -930,12 +941,40 @@ mod tests {
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
-        // Slash-dense generator: the `[\r\n/]*` punctuation tail unique to Tekken.
+        // Slash-dense generator: o200k's `[\r\n/]*` punctuation tail — the shape
+        // whose absence from the fixture corpus let a missing `/` survive.
+        #[test]
+        fn prop_o200k_fast_matches_regex_slashes(text in "[/\r\n .!abcAB0]*") {
+            let pt = O200K.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(O200K, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        // Slash-dense generator: the `[\r\n/]*` punctuation tail shared with o200k.
         #[test]
         fn prop_mistral_fast_matches_regex_slashes(text in "[/\r\n .!abcAB0]*") {
             let pt = MISTRAL.tokenizer();
             let fast = collect_matches(&pt, &text);
             let reference = reference_matches(MISTRAL, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        #[test]
+        fn prop_kimi_fast_matches_regex(text in ".*") {
+            let pt = KIMI.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(KIMI, &text);
+            proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
+        }
+
+        // Kimi keeps o200k's ASCII rules but NOT its `[\r\n/]*` tail — this
+        // generator is what separates the two scanners.
+        #[test]
+        fn prop_kimi_fast_matches_regex_slashes(text in "[/\r\n .!abcAB0]*") {
+            let pt = KIMI.tokenizer();
+            let fast = collect_matches(&pt, &text);
+            let reference = reference_matches(KIMI, &text);
             proptest::prop_assert_eq!(fast, reference, "fast/regex mismatch for {:?}", text);
         }
 
