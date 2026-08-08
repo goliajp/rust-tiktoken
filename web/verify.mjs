@@ -99,7 +99,41 @@ for (const [width, height, label] of [
   const tokens = Number((await page.locator('.meter.lead .v').first().textContent())?.replace(/,/g, ''))
   if (!Number.isFinite(tokens) || tokens <= 0) failures.push(`playground produced no tokens (${tokens})`)
 
-  console.log(`logo=${logoOk} sampleTokens=${tokens}`)
+  // The two panes are read across, so they must start and end level and share
+  // type metrics; the install columns must line up the same way. Both drifted
+  // once already when copy of different lengths sat above them.
+  const align = await page.evaluate(() => {
+    const r = (s) => document.querySelector(s)?.getBoundingClientRect()
+    const cs = (s) => getComputedStyle(document.querySelector(s))
+    const ta = r('.pg-input textarea')
+    const tk = r('.pg-tokens')
+    const ca = r('.i-code-a')
+    const cb = r('.i-code-b')
+    const a = cs('.pg-input textarea')
+    const c = cs('.pg-tokens')
+    return {
+      paneTop: Math.round(ta.top - tk.top),
+      paneBottom: Math.round(ta.bottom - tk.bottom),
+      sameType:
+        a.fontSize === c.fontSize && a.lineHeight === c.lineHeight && a.paddingTop === c.paddingTop,
+      codeTop: Math.round(ca.top - cb.top),
+      codeBottom: Math.round(ca.bottom - cb.bottom),
+    }
+  })
+  for (const [k, v] of [
+    ['playground panes top', align.paneTop],
+    ['playground panes bottom', align.paneBottom],
+    ['install columns top', align.codeTop],
+    ['install columns bottom', align.codeBottom],
+  ]) {
+    if (Math.abs(v) > 1) failures.push(`${k} misaligned by ${v}px`)
+  }
+  if (!align.sameType) failures.push('input and token panes do not share type metrics')
+
+  console.log(
+    `logo=${logoOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
+      `codeΔ=${align.codeTop}/${align.codeBottom}px sameType=${align.sameType}`,
+  )
   await page.close()
 }
 

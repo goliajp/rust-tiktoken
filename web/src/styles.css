@@ -454,50 +454,16 @@ select:focus {
   outline-offset: -1px;
 }
 
-.pg-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-@media (max-width: 860px) {
-  .pg-body {
-    grid-template-columns: 1fr;
-  }
-}
-.pg-input {
-  border-right: 1px solid var(--rule);
-  display: flex;
-  flex-direction: column;
-}
-@media (max-width: 860px) {
-  .pg-input {
-    border-right: none;
-    border-bottom: 1px solid var(--rule);
-  }
-}
-textarea {
-  flex: 1;
-  min-height: 15rem;
-  background: transparent;
-  border: none;
-  resize: vertical;
-  color: var(--ink);
-  font-family: var(--mono);
-  font-size: 0.88rem;
-  line-height: 1.75;
-  padding: 1rem;
-}
-textarea:focus {
-  outline: none;
-}
-textarea::placeholder {
-  color: var(--ink-faint);
+/* The two panes are read across: the user's line on the left against its
+   tokens on the right. They therefore share identical type metrics and start
+   at the same y — which is why the meters are a full-width strip above them
+   rather than a header on the output column only. */
+:root {
+  --pane-font: 0.875rem;
+  --pane-leading: 1.85;
+  --pane-pad: 1rem;
 }
 
-.pg-output {
-  display: flex;
-  flex-direction: column;
-  min-height: 15rem;
-}
 .pg-meters {
   display: flex;
   border-bottom: 1px solid var(--rule);
@@ -514,6 +480,7 @@ textarea::placeholder {
   font-family: var(--mono);
   font-weight: 600;
   font-size: 1.15rem;
+  line-height: 1.25;
 }
 .meter.lead .v {
   color: var(--red);
@@ -523,14 +490,62 @@ textarea::placeholder {
   color: var(--ink-faint);
 }
 
+.pg-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: stretch;
+}
+@media (max-width: 860px) {
+  .pg-body {
+    grid-template-columns: 1fr;
+  }
+}
+.pg-input {
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+@media (max-width: 860px) {
+  .pg-input {
+    border-right: none;
+    border-bottom: 1px solid var(--rule);
+  }
+}
+textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 17rem;
+  background: transparent;
+  border: none;
+  resize: vertical;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: var(--pane-font);
+  line-height: var(--pane-leading);
+  padding: var(--pane-pad);
+}
+textarea:focus {
+  outline: none;
+}
+textarea::placeholder {
+  color: var(--ink-faint);
+}
+
+.pg-output {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .pg-tokens {
   flex: 1;
-  padding: 0.9rem 0.95rem;
+  padding: var(--pane-pad);
   overflow-y: auto;
-  max-height: 24rem;
   font-family: var(--mono);
-  font-size: 0.86rem;
-  line-height: 1.95;
+  font-size: var(--pane-font);
+  line-height: var(--pane-leading);
   word-break: break-word;
   white-space: pre-wrap;
 }
@@ -559,6 +574,13 @@ textarea::placeholder {
 .tok.c5 { background: var(--t6); }
 .tok.c6 { background: var(--t7); }
 
+.pg-empty {
+  color: var(--ink-faint);
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
 .pg-ids {
   color: var(--ink-soft);
   font-size: 0.82rem;
@@ -567,6 +589,21 @@ textarea::placeholder {
 .pg-ids b {
   color: var(--ink);
   font-weight: 500;
+}
+
+/* Hovered-token readout: the id without waiting for a native tooltip. */
+.pg-hover {
+  font-family: var(--mono);
+  color: var(--ink-soft);
+}
+.pg-hover .id {
+  color: var(--red);
+}
+.pg-hover .lit {
+  color: var(--ink);
+  background: var(--paper-sunk);
+  padding: 0 0.25em;
+  border-radius: 2px;
 }
 
 .pg-foot {
