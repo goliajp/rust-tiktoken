@@ -68,7 +68,6 @@ export function App() {
           <a className="brand" href="/">
             <img src="/golia-logo.png" alt="GOLIA" width={26} height={26} />
             <span className="wordmark">tiktoken</span>
-            <span className="lab">{t('brand.lab')}</span>
           </a>
           <nav className="topnav">
             <a className="navlink" href="#playground">
