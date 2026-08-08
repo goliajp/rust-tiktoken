@@ -80,6 +80,19 @@ body {
 }
 
 
+/* The two benchmark tables are read as one comparison, so their columns share
+   one fixed grid — auto layout would size each table by its own content and
+   the shared columns would drift out of line. */
+.perftable {
+  table-layout: fixed;
+}
+.perftable th:first-child {
+  width: 37%;
+}
+.perftable th:not(:first-child) {
+  width: 21%;
+}
+
 /* Benchmark table sub-headings: quiet, monospace-tinged, and clearly bound
    to the table that follows rather than to the section. */
 .benchhead {

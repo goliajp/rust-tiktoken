@@ -77,7 +77,7 @@ export function BrowserPerfTable() {
   const t = useT()
   return (
     <div className="tablewrap">
-      <table>
+      <table className="perftable">
         <thead>
           <tr>
             <th>{t('perf.col.input')}</th>
@@ -107,7 +107,7 @@ export function NativePerfTable() {
   const t = useT()
   return (
     <div className="tablewrap">
-      <table>
+      <table className="perftable">
         <thead>
           <tr>
             <th>{t('perf.col.input')}</th>
