@@ -730,6 +730,13 @@ textarea::placeholder {
   margin-bottom: 0.45rem;
 }
 .claim p {
+  /* Seven-line floor: the cards must hold one height in every browser, but
+     engines' CJK font metrics differ by ~13% per line — on six lines that is
+     ±0.8 lines, so no copy length can render the same line count everywhere.
+     Structure over struggle: copy is written to ~6 lines with margin, and the
+     floor sits at the worst-case 7, so 5-, 6- and 7-line renderings all
+     occupy identical height. */
+  min-height: calc(7 * 1.65em);
   font-size: 0.92rem;
   color: var(--ink-soft);
 }
