@@ -216,6 +216,16 @@ for (const [width, height, label] of [
   const cardSpread = Math.max(...allHeights) - Math.min(...allHeights)
   if (cardSpread > 1) failures.push(`method-card boxes differ by ${cardSpread}px across languages`)
 
+  // The bottom rules are the row's visual baseline — they must sit level even
+  // if a font stack pushes one paragraph past the floor (grid stretch aligns
+  // the frames regardless of line counts).
+  const claimBottoms = await page.evaluate(() =>
+    [...document.querySelectorAll('.claim')].map((el) => Math.round(el.getBoundingClientRect().bottom)),
+  )
+  if (Math.max(...claimBottoms) - Math.min(...claimBottoms) > 1)
+    failures.push(`method-card bottom rules misaligned: ${claimBottoms.join('/')}`)
+  console.log(`claimBottoms=${claimBottoms.join('/')}`)
+
   console.log(
     `logo=${logoOk} wordmark=${wordmarkOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
       `codeΔ=${align.codeTop}/${align.codeBottom}px sameType=${align.sameType}`,
