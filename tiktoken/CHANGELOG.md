@@ -47,6 +47,12 @@
   (kimi 1.05 MB, glm4 0.93 MB, glm5 0.94 MB, minimax_m2 1.29 MB), which
   increases compiled artifact sizes accordingly (the wasm binary most
   noticeably).
+- The published package now excludes `tests/` (several MB of oracle fixtures
+  that only validate this crate against upstream tokenizers — they remain in
+  the repository and CI) and the `examples/react-app/` demo. This keeps the
+  package under crates.io's 10 MB cap, at 99.4% of it; adding another
+  vocabulary will require splitting the data into a separate crate or a cap
+  increase from crates.io — noted here so the next release plans for it.
 
 
 ## [3.6.0] - 2026-08-08
