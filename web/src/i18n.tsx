@@ -118,31 +118,6 @@ const dict: Dict = {
     ja: '網掛けされた各区間が 1 トークンで、ホバーすると id が出ます。単体では正しい UTF-8 にならないトークン（絵文字の半分など）は置換文字で表示されますが、id は正確です。',
   },
 
-  // method
-  'feat.heading': {
-    en: 'Seventeen encodings, each checked byte-for-byte against its reference',
-    zh: '17 套编码，每一套都与参考实现逐字节比对',
-    ja: '17 のエンコーディングを、すべて参照実装とバイト単位で照合',
-  },
-  'feat.exact.h': { en: 'Checked against the vendor', zh: '对照厂商实现', ja: 'ベンダー実装と照合' },
-  'feat.exact.p': {
-    en: 'OpenAI encodings are checked against Python tiktoken, the rest against each vendor’s HuggingFace tokenizer, Kimi against Moonshot’s vocabulary. The corpora target where patterns disagree: whitespace, newlines, digits, CJK, slashes.',
-    zh: 'OpenAI 系比对 Python tiktoken，其余比对各厂商的 HuggingFace 分词器，Kimi 比对 Moonshot 词表。语料专挑分歧位置：空白、换行、数字、CJK、斜杠，后两处各抓到过真实 bug。',
-    ja: 'OpenAI 系は Python tiktoken、他は各ベンダーの HuggingFace トークナイザー、Kimi は Moonshot の語彙と比較。コーパスは食い違う箇所（空白、改行、数字、CJK、スラッシュ）を狙います。',
-  },
-  'feat.fast.h': { en: 'Hand-written scanners, ASCII and CJK', zh: '手写扫描：ASCII 与 CJK', ja: '手書きスキャナ：ASCII と CJK' },
-  'feat.fast.p': {
-    en: 'ASCII and CJK pieces alike are cut by hand-written scanners that never enter the regex engine; the vocabulary is layered by key size, and repeated pieces are memoised whole. The regex stays the arbiter — property tests hold the scanners to its output.',
-    zh: 'ASCII 与汉字、假名、谚文的常见片段由手写扫描器切分，不进正则引擎；词表按 key 长度分层，重复片段整片记忆。正则仍是判准 —— 数十万条随机输入验证一致，拿不准的字符交回正则。',
-    ja: 'ASCII も漢字・かな・ハングルも、よくある断片は手書きスキャナが切り出し、正規表現エンジンを通しません。語彙はキー長ごとの構造で引き、繰り返す断片はメモ化。数十万件の入力で一致を担保します。',
-  },
-  'feat.everywhere.h': { en: 'Pure Rust, embeds anywhere', zh: '纯 Rust，随处可嵌', ja: '純 Rust、どこへでも' },
-  'feat.everywhere.p': {
-    en: 'No C dependencies, no runtime, no data files — vocabularies compile into one self-contained artifact that runs on servers, IoT and edge devices, and in browsers. The playground above is that very package.',
-    zh: '零 C 依赖、无运行时、无外部数据文件 —— 词表编译期内嵌成单一自足产物，服务器、IoT、浏览器都能直接嵌入，wasm 包里 97% 是词表数据。上方试用区就是该包本身。',
-    ja: 'C 依存なし・ランタイム不要・外部データなし。語彙を埋め込んだ自己完結の単一成果物が、サーバーでも IoT でもブラウザでもそのまま動く。上のプレイグラウンドはこのパッケージ本体です。',
-  },
-
   // encodings
   'enc.heading': { en: 'Supported encodings', zh: '支持的编码', ja: '対応エンコーディング' },
   'enc.blurb': {

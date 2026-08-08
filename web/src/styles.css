@@ -117,7 +117,6 @@ p,
 .lede,
 .caption,
 .abstract,
-.claim p,
 .figure .k,
 .meter .k {
   text-wrap: pretty;
@@ -695,57 +694,6 @@ textarea::placeholder {
   font-weight: 600;
 }
 
-/* ── numbered claim list (features) ───────────────────────────────── */
-
-.claims {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2rem;
-  margin-top: 0.5rem;
-}
-@media (max-width: 860px) {
-  .claims {
-    grid-template-columns: 1fr;
-    gap: 1.6rem;
-  }
-}
-.claim {
-  /* Academic table rules: heavy above, light below. The bottom rule is the
-     row's visual baseline — grid stretch keeps all three exactly level no
-     matter how many lines each paragraph renders in a given font stack, so
-     ragged text bottoms read as in-frame whitespace, not misalignment. */
-  border-top: 2px solid var(--ink);
-  border-bottom: 1px solid var(--rule);
-  padding-top: 0.85rem;
-  padding-bottom: 1.15rem;
-}
-/* The icon names what the card is about; it sits on the cap height of the
-   heading, not above it. */
-.claim h3 svg {
-  flex: none;
-  color: var(--accent);
-}
-.claim h3 {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-family: var(--display);
-  font-weight: 600;
-  font-size: 1.02rem;
-  letter-spacing: -0.015em;
-  margin-bottom: 0.45rem;
-}
-.claim p {
-  /* Seven-line floor: the cards must hold one height in every browser, but
-     engines' CJK font metrics differ by ~13% per line — on six lines that is
-     ±0.8 lines, so no copy length can render the same line count everywhere.
-     Structure over struggle: copy is written to ~6 lines with margin, and the
-     floor sits at the worst-case 7, so 5-, 6- and 7-line renderings all
-     occupy identical height. */
-  min-height: calc(7 * 1.65em);
-  font-size: 0.92rem;
-  color: var(--ink-soft);
-}
 
 /* ── tables ───────────────────────────────────────────────────────── */
 
@@ -889,7 +837,6 @@ tbody tr:hover td {
 /* Grid items default to min-width:auto, so the long package name in a
    .cb-head would set the column's minimum and push the page sideways. */
 .install-grid > *,
-.claims > *,
 .pg-body > * {
   min-width: 0;
 }

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUpRight, Boxes, GitCompare, Package, Zap } from 'lucide-react'
+import { ArrowDown, ArrowUpRight, Package } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Brand } from './components/Brand'
@@ -158,32 +158,6 @@ export function App() {
           <p className="caption">
             <b><T k="pg.caption.label" /></b> <T k="pg.caption" />
           </p>
-        </Section>
-
-        <Section id="method" title={<T k="feat.heading" />}>
-          <div className="claims">
-            <div className="claim">
-              <h3>
-                <GitCompare size={16} strokeWidth={2} />
-                <T k="feat.exact.h" />
-              </h3>
-              <p><T k="feat.exact.p" /></p>
-            </div>
-            <div className="claim">
-              <h3>
-                <Zap size={16} strokeWidth={2} />
-                <T k="feat.fast.h" />
-              </h3>
-              <p><T k="feat.fast.p" /></p>
-            </div>
-            <div className="claim">
-              <h3>
-                <Boxes size={16} strokeWidth={2} />
-                <T k="feat.everywhere.h" />
-              </h3>
-              <p><T k="feat.everywhere.p" /></p>
-            </div>
-          </div>
         </Section>
 
         <Section id="encodings" title={<T k="enc.heading" />} lede={<T k="enc.blurb" />}>
