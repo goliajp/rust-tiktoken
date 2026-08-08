@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { CodeBlock } from './components/CodeBlock'
+import { Code, CodeBlock } from './components/CodeBlock'
 import { Playground } from './components/Playground'
 import { EncodingTable, PerfTable } from './components/Tables'
 import { detectLang, LANGS, LangContext, t as tr, type Lang } from './i18n'
@@ -11,19 +11,22 @@ const NPM = 'https://www.npmjs.com/package/@goliapkg/tiktoken-wasm'
 const DOCSRS = 'https://docs.rs/tiktoken'
 const GOLIA = 'https://golia.jp'
 
-const RUST_SNIPPET = `let enc = tiktoken::get_encoding("o200k_base").unwrap();
-let tokens = enc.encode("hello world");        // → [24912, 2375]
-let count  = enc.count("hello world");         // zero-alloc counting
+const RUST_SNIPPET = `// Cargo.toml → tiktoken = "3"
 
-// by model name — GPT, Kimi, GLM, DeepSeek, Qwen, …
-let enc = tiktoken::encoding_for_model("kimi-k3").unwrap();`
+let enc = tiktoken::get_encoding("o200k_base").unwrap();
+let ids = enc.encode("hello world");  // [24912, 2375]
+let n = enc.count("hello world");     // zero-alloc
 
-const JS_SNIPPET = `import init, { getEncoding, encodingForModel } from '@goliapkg/tiktoken-wasm'
+// or by model name — GPT, Kimi, GLM, DeepSeek, Qwen, …
+tiktoken::encoding_for_model("kimi-k3").unwrap();`
 
-await init()                                   // load wasm once
+const JS_SNIPPET = `import init, { getEncoding, encodingForModel }
+  from '@goliapkg/tiktoken-wasm'
+
+await init()                     // load wasm once
 const enc = getEncoding('o200k_base')
-enc.encode('hello world')                      // → Uint32Array [24912, 2375]
-encodingForModel('glm-5.2').count('你好世界')   // → 2`
+enc.encode('hello world')        // [24912, 2375]
+encodingForModel('glm-5.2').count('你好世界')   // 2`
 
 function Section({
   id,
@@ -194,9 +197,7 @@ export function App() {
             <div>
               <p className="prose">{t('inst.rust.blurb')}</p>
               <CodeBlock label="cargo add tiktoken" copy="cargo add tiktoken">
-                <span className="cm"># Cargo.toml → tiktoken = "3"</span>
-                {'\n\n'}
-                {RUST_SNIPPET}
+                <Code src={RUST_SNIPPET} lang="rust" />
               </CodeBlock>
             </div>
             <div>
@@ -205,7 +206,7 @@ export function App() {
                 label="npm install @goliapkg/tiktoken-wasm"
                 copy="npm install @goliapkg/tiktoken-wasm"
               >
-                {JS_SNIPPET}
+                <Code src={JS_SNIPPET} lang="js" />
               </CodeBlock>
             </div>
           </div>
