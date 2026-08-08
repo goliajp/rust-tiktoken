@@ -123,7 +123,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-列出全部可用编码名（共 11 套）。
+列出全部可用编码名（共 17 套）。
 
 ### `getEncoding(name: string): Encoding`
 
@@ -140,6 +140,12 @@ module.exports = {
 - `deepseek_v3` —— DeepSeek V3/R1
 - `qwen2` —— Qwen 2/2.5/3
 - `mistral_v3` —— Mistral/Codestral/Pixtral（Tekken）
+- `deepseek_v4` —— DeepSeek V4 Pro/Flash
+- `kimi_k2` —— Kimi K2/K2.5/K2.6
+- `kimi_k3` —— Kimi K3
+- `glm4` —— GLM-4.5/4.6/4.7
+- `glm5` —— GLM-5/5.2
+- `minimax_m2` —— MiniMax M2 系列
 
 ### `encodingForModel(model: string): Encoding`
 
@@ -165,7 +171,7 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-按美元估算 API 成本。覆盖 7 家厂商 94 个模型。
+按美元估算 API 成本。覆盖 10 家厂商 107 个模型。
 
 ### `getModelInfo(modelId): ModelInfo`
 
@@ -173,7 +179,7 @@ module.exports = {
 
 ### `allModels(): ModelInfo[]`
 
-列出全部 94 个支持模型及其价格信息。
+列出全部 107 个支持模型及其价格信息。
 
 ### `modelsByProvider(provider): ModelInfo[]`
 

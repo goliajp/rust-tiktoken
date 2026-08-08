@@ -1,5 +1,54 @@
 # Changelog
 
+## [3.7.0] - 2026-08-08
+
+### Added
+- **Six new encodings for the 2026-08 model landscape**, with emphasis on the
+  Chinese open-weights ecosystem — every one verified byte-exact against its
+  reference tokenizer over a 10,489–10,491-case differential corpus
+  (104,903 comparisons total, 0 divergences):
+  - `kimi_k2` / `kimi_k3` (Moonshot Kimi K2 / K2.5 / K2.6 and K3): 163,584-token
+    native-tiktoken vocabulary, byte-identical across both generations; the
+    generations differ only in special-token tables (K2's `<|im_*|>` chat
+    markers vs K3's `<|end_of_msg|>` / media tokens). The split pattern is an
+    o200k variant with a dedicated `[\p{Han}]+` branch and Han-excluding
+    character-class intersections.
+  - `glm4` (Zhipu GLM-4.5 / 4.6 / 4.7, 151,329 tokens) and `glm5` (GLM-5 /
+    5.2, 154,820 tokens): independently trained vocabularies sharing the
+    cl100k split pattern and a common 36-entry special-token table.
+  - `minimax_m2` (MiniMax M2 / M2.1 / M2.5 / M2.7): 200,000-token vocabulary,
+    byte-identical across the family; o200k letter rules with a `[\r\n/]*`
+    punctuation tail (caught by the differential — the tail admits `/`).
+  - `deepseek_v4` (DeepSeek V4 Pro / Flash): shares V3's vocabulary, merges,
+    and pattern; extends the added-token table from 818 to 1,283 entries
+    (`<think>`, DSML markup, vision/grounding tags, 415 multimodal span
+    placeholders).
+- Model mapping for the new families: `kimi-k2*` / `kimi-k3*` / `kimi-latest`,
+  `glm-4*` / `glm-5*`, `minimax*`, `deepseek-v4*` — plus the DeepSeek API
+  aliases `deepseek-chat` and `deepseek-reasoner`, which point at V4 since
+  2026-07-24.
+- Pricing: 13 models across three new providers — Moonshot (`kimi-k3`,
+  `kimi-k2.7-code`, `kimi-k2.6`, `kimi-k2.5`), Zhipu (`glm-5.2`, `glm-5`,
+  `glm-4.7`, `glm-4.5`, `glm-4.5-air`), MiniMax (`minimax-m2.7` / `-m2.5` /
+  `-m2.1` / `-m2`) — all first-party rates read from the providers' official
+  price cards on 2026-08-08. The table now covers **107 models across 10
+  providers**. Max-output limits are not published by these three providers;
+  entries carry a conservative 32K placeholder.
+- `tests/fixtures/generate_kimi_fixtures.py` (reference fixtures from
+  Moonshot's native `tiktoken.model` + `tokenization_kimi.py` pat_str) and
+  `src/encodings/convert_hf_vocab.py` (the HF ByteLevel-BPE → `.tiktoken.zst`
+  converter with a built-in differential self-check — previously this
+  conversion was done by unversioned scripts).
+
+### Changed
+- **Breaking (match exhaustiveness):** `pricing::Provider` gains `Moonshot`,
+  `Zhipu`, and `MiniMax` variants.
+- Embedded vocabulary data grows from ~5.9 MB to ~10.3 MB compressed
+  (kimi 1.05 MB, glm4 0.93 MB, glm5 0.94 MB, minimax_m2 1.29 MB), which
+  increases compiled artifact sizes accordingly (the wasm binary most
+  noticeably).
+
+
 ## [3.6.0] - 2026-08-08
 
 ### Fixed
