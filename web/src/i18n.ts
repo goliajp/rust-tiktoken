@@ -28,7 +28,6 @@ type Dict = Record<string, { en: string; zh: string; ja: string }>
 
 const dict: Dict = {
   // masthead
-  'brand.lab': { en: 'Golia Lab', zh: 'Golia Lab', ja: 'Golia Lab' },
   'nav.playground': { en: 'Playground', zh: '在线试用', ja: 'プレイグラウンド' },
   'nav.encodings': { en: 'Encodings', zh: '编码', ja: 'エンコーディング' },
   'nav.performance': { en: 'Performance', zh: '性能', ja: '性能' },

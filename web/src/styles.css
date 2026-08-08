@@ -182,20 +182,6 @@ section {
   font-size: 1rem;
   letter-spacing: -0.01em;
 }
-.brand .lab {
-  font-family: var(--sans);
-  font-size: 0.72rem;
-  color: var(--ink-faint);
-  border-left: 1px solid var(--rule-strong);
-  padding-left: 0.6rem;
-  margin-left: 0.15rem;
-  letter-spacing: 0.02em;
-}
-@media (max-width: 720px) {
-  .brand .lab {
-    display: none;
-  }
-}
 
 .topnav {
   display: flex;
