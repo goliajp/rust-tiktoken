@@ -6,9 +6,9 @@
 //!
 //! # What changed in the 2026-08 refresh
 //!
-//! - **OpenAI**: added the GPT-5.6 family (`gpt-5.6-sol` / `-terra` / `-luna`,
-//!   launched 2026-07-09, Terra and Luna repriced down on 2026-07-30), plus the
-//!   `-pro` SKUs and the 5.1 / 5.2 point releases that were previously missing.
+//! - **OpenAI**: the GPT-5.6 family (`gpt-5.6-sol` / `-terra` / `-luna`,
+//!   launched 2026-07-09, Terra and Luna repriced down on 2026-07-30), the
+//!   `-pro` SKUs, and the 5.1 / 5.2 point releases.
 //! - **Anthropic**: added the Claude 5 generation (`claude-fable-5`,
 //!   `claude-mythos-5`, `claude-opus-5`, `claude-sonnet-5`). Corrected the
 //!   context window on Claude 4.6+ entries to 1M — those models carry the full

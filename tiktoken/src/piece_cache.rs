@@ -5,10 +5,8 @@
 //! recur every sentence. Memoising the merge turns every repeat into one hash
 //! and one byte-compare instead of a full BPE merge.
 //!
-//! `gpt-tokenizer` does the same with a 100k-entry LRU `Map` keyed by JS
-//! strings, paying a string hash per probe. This cache is direct-mapped with
-//! fixed-size byte keys, so a hit costs tens of nanoseconds, and it is
-//! thread-local, so no locking taxes the miss path.
+//! The cache is direct-mapped with fixed-size byte keys, so a hit costs tens
+//! of nanoseconds, and thread-local, so no locking taxes the miss path.
 //!
 //! Correctness containment:
 //! - the key is the exact piece bytes plus a per-[`CoreBpe`](crate::CoreBpe)
@@ -28,9 +26,8 @@ pub(crate) const KEY_MAX: usize = 96;
 /// Most tokens a stored piece may merge into.
 const TOKENS_MAX: usize = 48;
 /// Direct-mapped slot count. Power of two. 4,096 slots × ~300 B ≈ 1.2 MB per
-/// thread that tokenizes — chosen over 2,048 because a few hundred distinct
-/// pieces already produce measurable conflict evictions at the smaller size
-/// (+23% on the varied-Unicode corpus).
+/// thread that tokenizes — sized so that working sets of a few hundred
+/// distinct pieces keep conflict evictions negligible.
 const SLOTS: usize = 4096;
 
 /// Per-instance nonce source. Address reuse after a drop must not let a new

@@ -548,8 +548,8 @@ mod tests {
 
     #[test]
     fn test_encoding_for_first_gen_embedding_models() {
-        // Regression: these returned None — no prefix in the old scan covered the
-        // `text-search-*` / `text-similarity-*` / `code-search-*` families.
+        // The `text-search-*` / `text-similarity-*` / `code-search-*` families
+        // have no prefix rule and must resolve through the exact table.
         for m in [
             "text-search-davinci-doc-001",
             "text-search-curie-doc-001",
