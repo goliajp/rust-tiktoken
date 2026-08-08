@@ -6,19 +6,63 @@
     <title>tiktoken — a byte-exact BPE tokenizer in Rust · Golia Lab</title>
     <meta
       name="description"
-      content="A Golia Lab project. Drop-in tiktoken-compatible BPE tokenizer in pure Rust — 17 encodings across 8 vendors (OpenAI, Llama, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax), verified byte-exact against every reference implementation. Try it in your browser."
+      content="The fastest BPE tokenizer in the browser — 2–4× faster than gpt-tokenizer — and 5–49× faster than tiktoken-rs natively. 17 encodings across 8 vendors (OpenAI, Llama, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax), each verified byte-exact against its reference. Try it live."
     />
+    <link rel="canonical" href="https://tiktoken.golia.jp/" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#fcfbf8" />
     <link rel="icon" href="/tiktoken-logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="tiktoken" />
     <meta property="og:title" content="tiktoken — a byte-exact BPE tokenizer in Rust" />
     <meta
       property="og:description"
-      content="17 encodings, verified byte-exact against every reference tokenizer. A Golia Lab project."
+      content="2–4× faster than gpt-tokenizer in the browser, 5–49× faster than tiktoken-rs natively. 17 encodings, verified byte-exact against every reference tokenizer."
     />
-    <meta property="og:url" content="https://tiktoken.golia.jp" />
-    <meta property="og:image" content="https://tiktoken.golia.jp/apple-touch-icon.png" />
+    <meta property="og:url" content="https://tiktoken.golia.jp/" />
+    <meta property="og:image" content="https://tiktoken.golia.jp/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="tiktoken — a high-performance BPE tokenizer. 2–4× faster than gpt-tokenizer in-browser, 5–49× faster than tiktoken-rs native, 44,518 differential cases, 17 encodings." />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="zh_CN" />
+    <meta property="og:locale:alternate" content="ja_JP" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="tiktoken — a byte-exact BPE tokenizer in Rust" />
+    <meta
+      name="twitter:description"
+      content="2–4× faster than gpt-tokenizer in the browser, 5–49× faster than tiktoken-rs natively. 17 encodings, verified byte-exact. Try it live."
+    />
+    <meta name="twitter:image" content="https://tiktoken.golia.jp/og-card.png" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "tiktoken",
+      "url": "https://tiktoken.golia.jp/",
+      "description": "A high-performance, byte-exact BPE tokenizer in Rust with WebAssembly bindings. 17 encodings across 8 vendors, verified against each vendor's reference tokenizer; 2–4× faster than gpt-tokenizer in the browser and 5–49× faster than tiktoken-rs natively.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Any",
+      "softwareVersion": "3.8.2",
+      "license": "https://spdx.org/licenses/MIT.html",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": {
+        "@type": "Organization",
+        "name": "Golia Lab",
+        "url": "https://golia.jp"
+      },
+      "sameAs": [
+        "https://github.com/goliajp/rust-tiktoken",
+        "https://crates.io/crates/tiktoken",
+        "https://www.npmjs.com/package/@goliapkg/tiktoken-wasm"
+      ]
+    }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
