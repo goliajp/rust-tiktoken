@@ -172,6 +172,21 @@ for (const [width, height, label] of [
   }
   console.log(`captions=${captions.map((c) => `${c.id}${c.delta >= 0 ? '+' : ''}${c.delta}`).join(' ')}`)
 
+  // The two benchmark tables are read as one comparison: every column edge
+  // must sit at the same x in both, or the eye re-reads the header per table.
+  const perfCols = await page.evaluate(() => {
+    const tables = [...document.querySelectorAll('.perftable')]
+    if (tables.length !== 2) return { error: `${tables.length} perftables` }
+    const xs = tables.map((t) =>
+      [...t.querySelectorAll('thead th')].map((th) => Math.round(th.getBoundingClientRect().left)),
+    )
+    const drift = xs[0].map((x, i) => Math.abs(x - xs[1][i]))
+    return { drift: Math.max(...drift) }
+  })
+  if (perfCols.error) failures.push(`perf tables: ${perfCols.error}`)
+  else if (perfCols.drift > 1) failures.push(`perf table columns misaligned by ${perfCols.drift}px`)
+  console.log(`perfTableColumnDrift=${perfCols.drift ?? 'n/a'}px`)
+
   console.log(
     `logo=${logoOk} wordmark=${wordmarkOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
       `codeΔ=${align.codeTop}/${align.codeBottom}px sameType=${align.sameType}`,
