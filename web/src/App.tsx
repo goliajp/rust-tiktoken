@@ -207,7 +207,10 @@ export function App() {
             </CodeBlock>
           </div>
           <p className="caption">
-            <T k="inst.docs" />{' '}
+            <T k="inst.docs" />
+            {/* The Chinese and Japanese strings end in a full-width colon,
+                which already carries its own trailing space. */}
+            {lang === 'en' ? ' ' : ''}
             <a href={DOCSRS} target="_blank" rel="noreferrer">
               docs.rs/tiktoken
             </a>
