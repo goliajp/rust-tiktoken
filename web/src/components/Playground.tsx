@@ -127,7 +127,6 @@ export function Playground() {
               <div className="pg-tokens" onMouseLeave={() => setHover(null)}>
                 {result.segs.length === 0 ? (
                   <div className="pg-empty">
-                    <ScanText size={20} strokeWidth={1.5} />
                     <T k="pg.empty" />
                   </div>
                 ) : view === 'text' ? (

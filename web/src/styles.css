@@ -595,10 +595,11 @@ textarea::placeholder {
 .tok.c5 { background: var(--t6); }
 .tok.c6 { background: var(--t7); }
 
+/* The empty state mirrors the input placeholder exactly — same mono face,
+   size and grey, same top-left position — so the two panes read as a pair
+   before any text exists. */
 .pg-empty {
-  font-family: var(--sans);
-  font-size: 0.85rem;
-  line-height: 1.6;
+  color: var(--ink-faint);
 }
 
 .pg-ids {
@@ -961,16 +962,6 @@ footer .links a {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-}
-
-.pg-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  color: var(--ink-faint);
-}
-.pg-empty svg {
-  opacity: 0.5;
 }
 
 .spin {
