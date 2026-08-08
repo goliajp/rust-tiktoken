@@ -116,15 +116,17 @@ export function Code({ src, lang }: { src: string; lang: Lang }) {
 export function CodeBlock({
   label,
   copy,
+  className,
   children,
 }: {
   label: string
   copy: string
+  className?: string
   children: ReactNode
 }) {
   const [copied, setCopied] = useState(false)
   return (
-    <div className="codeblock">
+    <div className={className ? `codeblock ${className}` : 'codeblock'}>
       <div className="cb-head">
         <span>{label}</span>
         <button
