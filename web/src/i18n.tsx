@@ -238,17 +238,39 @@ function segmenter(locale: string): Intl.Segmenter | null {
   return s
 }
 
+/**
+ * Kinsoku, applied to our own break opportunities.
+ *
+ * `<wbr>` is an *explicit* break opportunity: the browser honours it even
+ * where `line-break: strict` would forbid a break. Since the segmenter treats
+ * 、 and 。 as segments of their own, a naive `<wbr>` between every pair puts
+ * one right before a comma — and a line then legitimately starts with 、.
+ * So a boundary is only offered when both sides allow it.
+ */
+const NO_LINE_START =
+  '。、，．：；！？）］｝」』〕〉》〙〗»›・…‥ー〜～ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〻%‰℃°'
+const NO_LINE_END = '（［｛「『〔〈《〘〖«‹＄￥£€#'
+
+function breakable(before: string, after: string): boolean {
+  const prev = before.at(-1)
+  const next = after[0]
+  if (!prev || !next) return false
+  if (NO_LINE_START.includes(next)) return false
+  if (NO_LINE_END.includes(prev)) return false
+  return true
+}
+
 export function phrase(text: string, lang: Lang): ReactNode {
   if (lang === 'en') return text
   const seg = segmenter(lang === 'zh' ? 'zh-Hans' : 'ja')
   if (!seg) return text
-  const parts = [...seg.segment(text)]
+  const parts = [...seg.segment(text)].map((s) => s.segment)
   return (
     <span className="phrase">
-      {parts.map((s, i) => (
+      {parts.map((part, i) => (
         <Fragment key={i}>
-          {s.segment}
-          {i < parts.length - 1 && <wbr />}
+          {part}
+          {i < parts.length - 1 && breakable(part, parts[i + 1]) && <wbr />}
         </Fragment>
       ))}
     </span>

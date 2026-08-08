@@ -223,7 +223,44 @@ for (const [width, height, label] of [
       failures.push(`${label}: ${bad.kinsoku.length} line(s) start with closing punctuation — ${bad.kinsoku[0]}`)
     if (bad.midWord.length)
       failures.push(`${label}: ${bad.midWord.length} mid-word line break(s) — ${bad.midWord[0]}`)
-    console.log(`${label} kinsoku=${bad.kinsoku.length} midWord=${bad.midWord.length}`)
+    // Rendered-line checks only catch a bad break opportunity if some width
+    // happens to land on it — the reported 、-at-line-start was invisible
+    // across 126 width×locale combinations here, because the reporter's Safari
+    // has different font metrics. So also check the opportunities themselves,
+    // which is deterministic and font-independent: a <wbr> immediately before
+    // a character that cannot start a line is a defect whether or not this
+    // viewport reveals it.
+    const wbr = await page.evaluate(
+      ({ noStart, noEnd }) => {
+        const bad = []
+        let total = 0
+        const edgeText = (node, dir) => {
+          let n = dir > 0 ? node.nextSibling : node.previousSibling
+          while (n && n.nodeType !== 3) n = dir > 0 ? (n.firstChild ?? n.nextSibling) : (n.lastChild ?? n.previousSibling)
+          const t = n?.textContent
+          return dir > 0 ? t?.[0] : t?.at(-1)
+        }
+        for (const el of document.querySelectorAll('.phrase wbr')) {
+          total++
+          const after = edgeText(el, 1)
+          const before = edgeText(el, -1)
+          if (after && noStart.includes(after)) bad.push(`break offered before "${after}"`)
+          else if (before && noEnd.includes(before)) bad.push(`break offered after "${before}"`)
+        }
+        return { total, bad }
+      },
+      {
+        noStart: '。、，．：；！？）］｝」』〕〉》・…ー〜～々%‰℃',
+        noEnd: '（［｛「『〔〈《',
+      },
+    )
+    if (wbr.bad.length)
+      failures.push(`${label}: ${wbr.bad.length} kinsoku-violating break opportunities — ${wbr.bad[0]}`)
+
+    console.log(
+      `${label} kinsoku=${bad.kinsoku.length} midWord=${bad.midWord.length} ` +
+        `badBreakOpportunities=${wbr.bad.length}/${wbr.total}`,
+    )
   }
   await page.close()
 }
