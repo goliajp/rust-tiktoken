@@ -1,9 +1,11 @@
 //! High-performance pure-Rust BPE tokenizer compatible with OpenAI's tiktoken
 //! and all mainstream LLM tokenizers.
 //!
-//! Supports 11 encodings across 5 providers: OpenAI (`cl100k_base`, `o200k_base`,
+//! Supports 17 encodings across 8 providers: OpenAI (`cl100k_base`, `o200k_base`,
 //! `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`, `gpt2`), Meta (`llama3`),
-//! DeepSeek (`deepseek_v3`), Alibaba (`qwen2`), and Mistral (`mistral_v3`).
+//! DeepSeek (`deepseek_v3`, `deepseek_v4`), Alibaba (`qwen2`), Mistral
+//! (`mistral_v3`), Moonshot (`kimi_k2`, `kimi_k3`), Zhipu (`glm4`, `glm5`),
+//! and MiniMax (`minimax_m2`).
 //!
 //! Includes token encoding, decoding, counting, and multi-provider pricing.
 //!
@@ -43,6 +45,12 @@ static LLAMA3: OnceLock<CoreBpe> = OnceLock::new();
 static DEEPSEEK_V3: OnceLock<CoreBpe> = OnceLock::new();
 static QWEN2: OnceLock<CoreBpe> = OnceLock::new();
 static MISTRAL_V3: OnceLock<CoreBpe> = OnceLock::new();
+static KIMI_K2: OnceLock<CoreBpe> = OnceLock::new();
+static KIMI_K3: OnceLock<CoreBpe> = OnceLock::new();
+static GLM4: OnceLock<CoreBpe> = OnceLock::new();
+static GLM5: OnceLock<CoreBpe> = OnceLock::new();
+static MINIMAX_M2: OnceLock<CoreBpe> = OnceLock::new();
+static DEEPSEEK_V4: OnceLock<CoreBpe> = OnceLock::new();
 
 /// All available encoding names.
 ///
@@ -55,8 +63,9 @@ static MISTRAL_V3: OnceLock<CoreBpe> = OnceLock::new();
 /// assert!(names.contains(&"cl100k_base"));
 /// assert!(names.contains(&"o200k_harmony"));
 /// assert!(names.contains(&"gpt2"));
-/// assert!(names.contains(&"llama3"));
-/// assert_eq!(names.len(), 11);
+/// assert!(names.contains(&"kimi_k3"));
+/// assert!(names.contains(&"glm5"));
+/// assert_eq!(names.len(), 17);
 /// ```
 pub fn list_encodings() -> &'static [&'static str] {
     &[
@@ -69,8 +78,14 @@ pub fn list_encodings() -> &'static [&'static str] {
         "gpt2",
         "llama3",
         "deepseek_v3",
+        "deepseek_v4",
         "qwen2",
         "mistral_v3",
+        "kimi_k2",
+        "kimi_k3",
+        "glm4",
+        "glm5",
+        "minimax_m2",
     ]
 }
 
@@ -79,9 +94,12 @@ pub fn list_encodings() -> &'static [&'static str] {
 /// Supported encodings:
 /// - OpenAI: `cl100k_base`, `o200k_base`, `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`, `gpt2`
 /// - Meta: `llama3`
-/// - DeepSeek: `deepseek_v3`
+/// - DeepSeek: `deepseek_v3`, `deepseek_v4`
 /// - Alibaba: `qwen2`
 /// - Mistral: `mistral_v3`
+/// - Moonshot: `kimi_k2`, `kimi_k3`
+/// - Zhipu: `glm4`, `glm5`
+/// - MiniMax: `minimax_m2`
 ///
 /// Note: `gpt2` is a name-level alias for `r50k_base`; both return the same cached instance.
 pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
@@ -95,15 +113,21 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
         "r50k_base" | "gpt2" => Some(R50K_BASE.get_or_init(encoding::r50k_base)),
         "llama3" => Some(LLAMA3.get_or_init(encoding::llama3)),
         "deepseek_v3" => Some(DEEPSEEK_V3.get_or_init(encoding::deepseek_v3)),
+        "deepseek_v4" => Some(DEEPSEEK_V4.get_or_init(encoding::deepseek_v4)),
         "qwen2" => Some(QWEN2.get_or_init(encoding::qwen2)),
         "mistral_v3" => Some(MISTRAL_V3.get_or_init(encoding::mistral_v3)),
+        "kimi_k2" => Some(KIMI_K2.get_or_init(encoding::kimi_k2)),
+        "kimi_k3" => Some(KIMI_K3.get_or_init(encoding::kimi_k3)),
+        "glm4" => Some(GLM4.get_or_init(encoding::glm4)),
+        "glm5" => Some(GLM5.get_or_init(encoding::glm5)),
+        "minimax_m2" => Some(MINIMAX_M2.get_or_init(encoding::minimax_m2)),
         _ => None,
     }
 }
 
 /// Get a cached tokenizer by model name.
 ///
-/// Supports OpenAI, Meta, DeepSeek, Qwen, and Mistral models.
+/// Supports OpenAI, Meta, DeepSeek, Qwen, Mistral, Moonshot (Kimi), Zhipu (GLM), and MiniMax models.
 /// Maps model name prefixes to their encoding.
 /// Returns `None` for unknown models.
 pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
@@ -113,7 +137,7 @@ pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
 /// Map a model name to its encoding name.
 ///
 /// Returns the encoding name (e.g. `"o200k_base"`) for the given model,
-/// or `None` for unknown models. Supports OpenAI, Meta, DeepSeek, Qwen, and Mistral models.
+/// or `None` for unknown models. Supports OpenAI, Meta, DeepSeek, Qwen, Mistral, Moonshot (Kimi), Zhipu (GLM), and MiniMax models.
 pub fn model_to_encoding(model: &str) -> Option<&'static str> {
     // Strip the `ft:` prefix used for fine-tuned model IDs
     // (e.g. `ft:gpt-4o:my-org::abc123` → `gpt-4o:my-org::abc123`). Upstream
@@ -180,6 +204,11 @@ const EXACT_MODEL_ENCODINGS: &[(&str, &str)] = &[
     ("text-curie-001", "r50k_base"),
     ("text-babbage-001", "r50k_base"),
     ("text-ada-001", "r50k_base"),
+    // DeepSeek API aliases: both point at V4 since 2026-07-24
+    ("deepseek-chat", "deepseek_v4"),
+    ("deepseek-reasoner", "deepseek_v4"),
+    // Moonshot API alias for the current flagship
+    ("kimi-latest", "kimi_k3"),
     // embeddings
     ("text-embedding-3-small", "cl100k_base"),
     ("text-embedding-3-large", "cl100k_base"),
@@ -242,9 +271,29 @@ const MODEL_PREFIX_ENCODINGS: &[(&str, &str)] = &[
     ("llama4", "llama3"),
     ("Llama-", "llama3"),
     ("Meta-Llama-", "llama3"),
-    // DeepSeek
+    // DeepSeek — v4 prefixes must precede the generation catch-alls
+    ("deepseek-v4", "deepseek_v4"),
+    ("DeepSeek-V4", "deepseek_v4"),
     ("deepseek", "deepseek_v3"),
     ("DeepSeek", "deepseek_v3"),
+    // Moonshot — k3 before k2 is not required (distinct prefixes), but keep
+    // the newest generation first for readability
+    ("kimi-k3", "kimi_k3"),
+    ("Kimi-K3", "kimi_k3"),
+    ("kimi-k2", "kimi_k2"),
+    ("Kimi-K2", "kimi_k2"),
+    ("kimi", "kimi_k3"),
+    ("Kimi", "kimi_k3"),
+    // Zhipu
+    ("glm-5", "glm5"),
+    ("GLM-5", "glm5"),
+    ("glm-4", "glm4"),
+    ("GLM-4", "glm4"),
+    ("glm", "glm4"),
+    ("GLM", "glm4"),
+    // MiniMax — the M2 tokenizer covers the whole M2.x family
+    ("minimax", "minimax_m2"),
+    ("MiniMax", "minimax_m2"),
     // Alibaba
     ("qwen", "qwen2"),
     ("Qwen", "qwen2"),
@@ -276,8 +325,14 @@ mod tests {
             "r50k_base",
             "llama3",
             "deepseek_v3",
+            "deepseek_v4",
             "qwen2",
             "mistral_v3",
+            "kimi_k2",
+            "kimi_k3",
+            "glm4",
+            "glm5",
+            "minimax_m2",
         ] {
             assert!(get_encoding(name).is_some(), "missing encoding: {name}");
         }
@@ -411,6 +466,66 @@ mod tests {
         ] {
             assert_eq!(model_to_encoding(m), Some("o200k_base"), "{m}");
         }
+    }
+
+    #[test]
+    fn test_encoding_for_chinese_model_families() {
+        // Moonshot: K2 and K3 share a vocabulary but have distinct special
+        // tables; kimi-latest is the API alias for the current flagship.
+        assert_eq!(model_to_encoding("kimi-k3"), Some("kimi_k3"));
+        assert_eq!(model_to_encoding("kimi-k2-0711-preview"), Some("kimi_k2"));
+        assert_eq!(model_to_encoding("kimi-k2.6"), Some("kimi_k2"));
+        assert_eq!(model_to_encoding("kimi-latest"), Some("kimi_k3"));
+        assert_eq!(model_to_encoding("Kimi-K3"), Some("kimi_k3"));
+        // Zhipu: generation split — 4.x and 5.x are independently trained vocabularies.
+        assert_eq!(model_to_encoding("glm-5.2"), Some("glm5"));
+        assert_eq!(model_to_encoding("glm-5"), Some("glm5"));
+        assert_eq!(model_to_encoding("glm-4.7"), Some("glm4"));
+        assert_eq!(model_to_encoding("glm-4.5-air"), Some("glm4"));
+        assert_eq!(model_to_encoding("GLM-4.6"), Some("glm4"));
+        // MiniMax: one tokenizer across the whole M2 family.
+        assert_eq!(model_to_encoding("minimax-m2.7"), Some("minimax_m2"));
+        assert_eq!(model_to_encoding("MiniMax-M2.1"), Some("minimax_m2"));
+        // DeepSeek: v4 prefix wins over the generation catch-all; the API
+        // aliases point at V4 since 2026-07-24.
+        assert_eq!(model_to_encoding("deepseek-v4-flash"), Some("deepseek_v4"));
+        assert_eq!(model_to_encoding("DeepSeek-V4-Pro"), Some("deepseek_v4"));
+        assert_eq!(model_to_encoding("deepseek-chat"), Some("deepseek_v4"));
+        assert_eq!(model_to_encoding("deepseek-reasoner"), Some("deepseek_v4"));
+        assert_eq!(model_to_encoding("deepseek-v3"), Some("deepseek_v3"));
+        assert_eq!(model_to_encoding("deepseek-r1"), Some("deepseek_v3"));
+    }
+
+    #[test]
+    fn test_kimi_generations_share_vocab_but_not_specials() {
+        let k2 = get_encoding("kimi_k2").unwrap();
+        let k3 = get_encoding("kimi_k3").unwrap();
+        // plain text encodes identically (shared merges)
+        for text in ["hello world", "你好世界", "let x = 42;"] {
+            assert_eq!(k2.encode(text), k3.encode(text), "{text}");
+        }
+        // id 163586 means <|im_end|> in K2 but <|end_of_msg|> in K3
+        assert_eq!(k2.encode_with_special_tokens("<|im_end|>"), vec![163586]);
+        assert_eq!(
+            k3.encode_with_special_tokens("<|end_of_msg|>"),
+            vec![163586]
+        );
+    }
+
+    #[test]
+    fn test_deepseek_v4_extends_v3_specials() {
+        let v4 = get_encoding("deepseek_v4").unwrap();
+        // inherited from V3
+        assert_eq!(v4.encode_with_special_tokens("<｜User｜>"), vec![128803]);
+        // V4-only
+        assert_eq!(v4.encode_with_special_tokens("<think>"), vec![128821]);
+        assert_eq!(
+            v4.encode_with_special_tokens("<|place_holder_mm_span_0021|>"),
+            vec![128847]
+        );
+        // V3 does not know the V4-only ids
+        let v3 = get_encoding("deepseek_v3").unwrap();
+        assert_ne!(v3.encode_with_special_tokens("<think>"), vec![128821]);
     }
 
     #[test]
