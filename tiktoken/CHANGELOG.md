@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.8.2] - 2026-08-09
+
+### Docs
+- npm-page fix, in lockstep: the wasm package's README carried a hand-copied
+  "Supported Models" listing frozen at the 3.5-era catalogue (no gpt-5
+  family, no Moonshot/Zhipu/MiniMax, no DeepSeek V4) — its second silent
+  drift. Replaced with a per-provider summary (107 models / 10 providers)
+  that names `allModels()` and docs.rs as the authority. Top-level
+  quickstarts now pin `tiktoken = "3.8"`. No code changes.
+
 ## [3.8.1] - 2026-08-09
 
 ### Docs

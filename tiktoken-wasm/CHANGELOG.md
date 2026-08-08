@@ -5,6 +5,15 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.2] - 2026-08-09
+
+### Docs
+- The README's "Supported Models" table was a hand-copied listing frozen at
+  the 3.5-era catalogue; the npm page was missing the gpt-5 family, the
+  Moonshot/Zhipu/MiniMax providers and DeepSeek V4 entirely. Now a
+  per-provider summary (107 models / 10 providers) with `allModels()` and
+  docs.rs as the authority. No code changes.
+
 ## [3.8.1] - 2026-08-09
 
 Version lockstep with `tiktoken` 3.8.1 (README corrections on the crate side);
