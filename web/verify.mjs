@@ -162,9 +162,10 @@ for (const [width, height, label] of [
   await page.close()
 }
 
-// CJK line-breaking: no line may begin with closing punctuation. Without
-// `line-break: strict` the browser breaks anywhere, which put a 。 at the head
-// of a line in both Chinese and Japanese.
+// CJK line-breaking, two rules the browser will not enforce on its own:
+//   - no line may begin with closing punctuation (kinsoku)
+//   - no line may break inside a word — Chinese and Japanese have no spaces,
+//     so the default breaks anywhere: 各厂商发 / 布的
 {
   const FORBIDDEN = '。、，．：；！？」』）］｝〕〉》”’·・…—～'
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
@@ -177,29 +178,52 @@ for (const [width, height, label] of [
   ]) {
     await page.getByRole('button', { name, exact: true }).click()
     await page.waitForTimeout(500)
-    const bad = await page.evaluate((forbidden) => {
-      const out = []
-      for (const el of document.querySelectorAll('.abstract, .lede, .caption, .claim p, h1, h2, .prose')) {
-        for (const node of [...el.childNodes].filter((n) => n.nodeType === 3)) {
-          const range = document.createRange()
-          const text = node.textContent
-          let prevTop = null
-          for (let i = 0; i < text.length; i++) {
-            range.setStart(node, i)
-            range.setEnd(node, i + 1)
-            const rect = range.getBoundingClientRect()
-            if (!rect.width && !rect.height) continue
-            if (prevTop !== null && Math.abs(rect.top - prevTop) > 2 && forbidden.includes(text[i])) {
-              out.push(`"${text[i]}" in …${text.slice(Math.max(0, i - 10), i + 6)}…`)
+    const bad = await page.evaluate(
+      ({ forbidden, locale }) => {
+        // Intl.Segmenter is the same segmentation the page itself uses to place
+        // its <wbr> hints, so "inside a word" means the same thing to both.
+        const seg = new Intl.Segmenter(locale, { granularity: 'word' })
+        const kinsoku = []
+        const midWord = []
+        for (const el of document.querySelectorAll(
+          '.abstract, .lede, .caption, .claim p, h1, h2, .prose',
+        )) {
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+          const nodes = []
+          while (walker.nextNode()) nodes.push(walker.currentNode)
+          for (const node of nodes) {
+            const text = node.textContent
+            const inside = new Set()
+            for (const s of seg.segment(text)) {
+              if (!s.isWordLike) continue
+              for (let k = s.index + 1; k < s.index + s.segment.length; k++) inside.add(k)
             }
-            prevTop = rect.top
+            const range = document.createRange()
+            let prevTop = null
+            for (let i = 0; i < text.length; i++) {
+              range.setStart(node, i)
+              range.setEnd(node, i + 1)
+              const rect = range.getBoundingClientRect()
+              if (!rect.width && !rect.height) continue
+              const broke = prevTop !== null && Math.abs(rect.top - prevTop) > 2
+              if (broke) {
+                const ctx = `…${text.slice(Math.max(0, i - 8), i)} ⏎ ${text.slice(i, i + 8)}…`
+                if (forbidden.includes(text[i])) kinsoku.push(`"${text[i]}" ${ctx}`)
+                else if (inside.has(i)) midWord.push(ctx)
+              }
+              prevTop = rect.top
+            }
           }
         }
-      }
-      return out
-    }, FORBIDDEN)
-    if (bad.length) failures.push(`${label}: ${bad.length} line(s) start with closing punctuation — ${bad[0]}`)
-    console.log(`${label} kinsoku violations=${bad.length}`)
+        return { kinsoku, midWord }
+      },
+      { forbidden: FORBIDDEN, locale: label === 'zh' ? 'zh-Hans' : 'ja' },
+    )
+    if (bad.kinsoku.length)
+      failures.push(`${label}: ${bad.kinsoku.length} line(s) start with closing punctuation — ${bad.kinsoku[0]}`)
+    if (bad.midWord.length)
+      failures.push(`${label}: ${bad.midWord.length} mid-word line break(s) — ${bad.midWord[0]}`)
+    console.log(`${label} kinsoku=${bad.kinsoku.length} midWord=${bad.midWord.length}`)
   }
   await page.close()
 }

@@ -1,7 +1,7 @@
 import { FileText, Hash, LoaderCircle, MonitorCheck, ScanText, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
-import { useT } from '../i18n'
+import { T, useT } from '../i18n'
 import { encodingNames, initWasm, segments, utf8Len, type Segment } from '../tokenizer'
 
 const EXAMPLE = `Many words map to one token, but some don't: indivisible.
@@ -86,13 +86,13 @@ export function Playground() {
       {state === 'loading' && (
         <div className="pg-loading">
           <LoaderCircle className="spin" size={22} strokeWidth={1.75} />
-          {t('pg.loading')}
+          <T k="pg.loading" />
         </div>
       )}
       {state === 'error' && (
         <div className="pg-loading">
           <TriangleAlert size={22} strokeWidth={1.75} />
-          {t('pg.error')}
+          <T k="pg.error" />
         </div>
       )}
 
@@ -128,7 +128,7 @@ export function Playground() {
                 {result.segs.length === 0 ? (
                   <div className="pg-empty">
                     <ScanText size={20} strokeWidth={1.5} />
-                    {t('pg.empty')}
+                    <T k="pg.empty" />
                   </div>
                 ) : view === 'text' ? (
                   result.segs.map((s, i) => (

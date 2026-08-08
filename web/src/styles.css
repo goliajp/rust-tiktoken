@@ -73,6 +73,20 @@ body {
      which is what put a 。 at the head of a line. */
   line-break: strict;
   overflow-wrap: break-word;
+  /* Kinsoku only governs punctuation. Chinese and Japanese have no spaces, so
+     the browser's default is still free to break inside a word — 各厂商发 /
+     布的, 各ベンダー / 公開の. auto-phrase breaks at phrase boundaries
+     instead, using the browser's own segmentation. Unsupported engines fall
+     back to `normal`, i.e. today's behaviour. */
+  word-break: auto-phrase;
+}
+
+/* Emitted by <T>: the segments carry <wbr> between them, so the only breaks
+   allowed are the phrase boundaries Intl.Segmenter found. overflow-wrap
+   stays as the escape hatch for a segment too long for the column. */
+.phrase {
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* Headings balance across their lines; running text avoids a one-word last

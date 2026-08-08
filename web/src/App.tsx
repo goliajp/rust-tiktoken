@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Code, CodeBlock } from './components/CodeBlock'
 import { Playground } from './components/Playground'
 import { EncodingTable, PerfTable } from './components/Tables'
-import { detectLang, LANGS, LangContext, t as tr, type Lang } from './i18n'
+import { detectLang, LANGS, LangContext, T, type Lang } from './i18n'
 
 const GITHUB = 'https://github.com/goliajp/rust-tiktoken'
 const CRATES = 'https://crates.io/crates/tiktoken'
@@ -36,8 +36,8 @@ function Section({
   children,
 }: {
   id: string
-  title: string
-  lede?: string
+  title: React.ReactNode
+  lede?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -59,8 +59,6 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang
   }, [lang])
-  const t = (k: string) => tr(lang, k)
-
   return (
     <LangContext.Provider value={lang}>
       <header className="masthead">
@@ -71,16 +69,16 @@ export function App() {
           </a>
           <nav className="topnav">
             <a className="navlink" href="#playground">
-              {t('nav.playground')}
+              <T k="nav.playground" />
             </a>
             <a className="navlink" href="#encodings">
-              {t('nav.encodings')}
+              <T k="nav.encodings" />
             </a>
             <a className="navlink" href="#performance">
-              {t('nav.performance')}
+              <T k="nav.performance" />
             </a>
             <a className="navlink" href="#install">
-              {t('nav.install')}
+              <T k="nav.install" />
             </a>
             <div className="langswitch" role="group" aria-label="language">
               {LANGS.map((l) => (
@@ -102,36 +100,36 @@ export function App() {
 
       <div className="shell">
         <section className="frontmatter reveal">
-          <div className="eyebrow">{t('front.eyebrow')}</div>
+          <div className="eyebrow"><T k="front.eyebrow" /></div>
           <h1>
-            {t('front.title.a')}
-            <em>{t('front.title.b')}</em>
-            {t('front.title.c')}
+            <T k="front.title.a" />
+            <em><T k="front.title.b" /></em>
+            <T k="front.title.c" />
           </h1>
-          <p className="abstract">{t('front.abstract')}</p>
+          <p className="abstract"><T k="front.abstract" /></p>
 
           <div className="figures">
             <div className="figure">
               <div className="v">167,849</div>
-              <div className="k">{t('front.fig.comparisons')}</div>
+              <div className="k"><T k="front.fig.comparisons" /></div>
             </div>
             <div className="figure">
               <div className="v">17</div>
-              <div className="k">{t('front.fig.encodings')}</div>
+              <div className="k"><T k="front.fig.encodings" /></div>
             </div>
             <div className="figure">
               <div className="v">43 ns</div>
-              <div className="k">{t('front.fig.short')}</div>
+              <div className="k"><T k="front.fig.short" /></div>
             </div>
             <div className="figure">
               <div className="v">15–40×</div>
-              <div className="k">{t('front.fig.speed')}</div>
+              <div className="k"><T k="front.fig.speed" /></div>
             </div>
           </div>
 
           <div className="actions">
             <a className="btn primary" href="#playground">
-              {t('front.cta.try')}
+              <T k="front.cta.try" />
               <ArrowDown size={15} strokeWidth={2.25} />
             </a>
             {[
@@ -147,52 +145,52 @@ export function App() {
           </div>
         </section>
 
-        <Section id="playground" title={t('pg.heading')} lede={t('pg.blurb')}>
+        <Section id="playground" title={<T k="pg.heading" />} lede={<T k="pg.blurb" />}>
           <Playground />
           <p className="caption">
-            <b>{t('pg.caption.label')}</b> {t('pg.caption')}
+            <b><T k="pg.caption.label" /></b> <T k="pg.caption" />
           </p>
         </Section>
 
-        <Section id="method" title={t('feat.heading')}>
+        <Section id="method" title={<T k="feat.heading" />}>
           <div className="claims">
             <div className="claim">
-              <h3>{t('feat.exact.h')}</h3>
-              <p>{t('feat.exact.p')}</p>
+              <h3><T k="feat.exact.h" /></h3>
+              <p><T k="feat.exact.p" /></p>
             </div>
             <div className="claim">
-              <h3>{t('feat.fast.h')}</h3>
-              <p>{t('feat.fast.p')}</p>
+              <h3><T k="feat.fast.h" /></h3>
+              <p><T k="feat.fast.p" /></p>
             </div>
             <div className="claim">
-              <h3>{t('feat.everywhere.h')}</h3>
-              <p>{t('feat.everywhere.p')}</p>
+              <h3><T k="feat.everywhere.h" /></h3>
+              <p><T k="feat.everywhere.p" /></p>
             </div>
           </div>
         </Section>
 
-        <Section id="encodings" title={t('enc.heading')} lede={t('enc.blurb')}>
+        <Section id="encodings" title={<T k="enc.heading" />} lede={<T k="enc.blurb" />}>
           <EncodingTable />
           <p className="caption">
-            <b>{t('enc.caption.label')}</b> {t('enc.caption')}
+            <b><T k="enc.caption.label" /></b> <T k="enc.caption" />
           </p>
         </Section>
 
-        <Section id="performance" title={t('perf.heading')} lede={t('perf.blurb')}>
+        <Section id="performance" title={<T k="perf.heading" />} lede={<T k="perf.blurb" />}>
           <PerfTable />
           <p className="caption">
-            <b>{t('perf.caption.label')}</b> {t('perf.caption')}
+            <b><T k="perf.caption.label" /></b> <T k="perf.caption" />
           </p>
         </Section>
 
-        <Section id="install" title={t('inst.heading')}>
+        <Section id="install" title={<T k="inst.heading" />}>
           {/* Direct grid children, in row order: both blurbs share row 1 and
               both code blocks share row 2, so the columns line up top and
               bottom even when one blurb wraps to more lines than the other.
               On one column, `order` restores blurb → code pairing. */}
           <div className="install-grid">
-            <p className="prose i-blurb-a">{t('inst.rust.blurb')}</p>
-            <p className="prose i-blurb-b">{t('inst.js.blurb')}</p>
+            <p className="prose i-blurb-a"><T k="inst.rust.blurb" /></p>
+            <p className="prose i-blurb-b"><T k="inst.js.blurb" /></p>
             <CodeBlock
               className="i-code-a"
               label="cargo add tiktoken"
@@ -209,7 +207,7 @@ export function App() {
             </CodeBlock>
           </div>
           <p className="caption">
-            {t('inst.docs')}{' '}
+            <T k="inst.docs" />{' '}
             <a href={DOCSRS} target="_blank" rel="noreferrer">
               docs.rs/tiktoken
             </a>
@@ -221,7 +219,7 @@ export function App() {
             <a className="org" href={GOLIA} target="_blank" rel="noreferrer" aria-label="GOLIA">
               <img src="/golia-wordmark.png" alt="GOLIA" width={92} height={20} />
             </a>
-            <div>{t('foot.license')}</div>
+            <div><T k="foot.license" /></div>
           </div>
           <div className="links">
             {[

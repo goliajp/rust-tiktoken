@@ -8,7 +8,7 @@
 // no hedging, no filler connectives. Those read as translationese in Chinese
 // and Japanese and as padding in English.
 
-import { createContext, useContext } from 'react'
+import { createContext, Fragment, useContext, type ReactNode } from 'react'
 
 export type Lang = 'en' | 'zh' | 'ja'
 
@@ -209,7 +209,54 @@ export function t(lang: Lang, key: string): string {
 }
 
 export const LangContext = createContext<Lang>('en')
+
 export function useT() {
   const lang = useContext(LangContext)
   return (key: string) => t(lang, key)
+}
+
+/**
+ * Chinese and Japanese are written without spaces, so a browser is free to
+ * break between any two characters — which is how "各厂商发 / 布的" happens.
+ * `word-break: auto-phrase` fixes this, but Chrome's model only covers
+ * Japanese, so Chinese still breaks mid-word.
+ *
+ * `Intl.Segmenter` is the same segmentation the platform uses elsewhere and
+ * ships with the browser. Splitting on its word boundaries and emitting a
+ * `<wbr>` between segments gives the line-breaker exactly the phrase
+ * boundaries it lacks; `.phrase { word-break: keep-all }` then stops it
+ * breaking anywhere else.
+ */
+const segmenters = new Map<string, Intl.Segmenter>()
+function segmenter(locale: string): Intl.Segmenter | null {
+  if (typeof Intl === 'undefined' || !('Segmenter' in Intl)) return null
+  let s = segmenters.get(locale)
+  if (!s) {
+    s = new Intl.Segmenter(locale, { granularity: 'word' })
+    segmenters.set(locale, s)
+  }
+  return s
+}
+
+export function phrase(text: string, lang: Lang): ReactNode {
+  if (lang === 'en') return text
+  const seg = segmenter(lang === 'zh' ? 'zh-Hans' : 'ja')
+  if (!seg) return text
+  const parts = [...seg.segment(text)]
+  return (
+    <span className="phrase">
+      {parts.map((s, i) => (
+        <Fragment key={i}>
+          {s.segment}
+          {i < parts.length - 1 && <wbr />}
+        </Fragment>
+      ))}
+    </span>
+  )
+}
+
+/** Dictionary lookup that returns phrase-aware nodes rather than a string. */
+export function T({ k }: { k: string }) {
+  const lang = useContext(LangContext)
+  return <>{phrase(t(lang, k), lang)}</>
 }
