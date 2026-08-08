@@ -257,9 +257,35 @@ for (const [width, height, label] of [
     if (wbr.bad.length)
       failures.push(`${label}: ${wbr.bad.length} kinsoku-violating break opportunities — ${wbr.bad[0]}`)
 
+    // The space around embedded Latin is typographic, not lexical: "ASCII 路径"
+    // and "特殊 token 表" are single terms and must not fold across lines. Those
+    // spaces are rendered U+00A0; a plain space left at a CJK↔Latin boundary is
+    // a break opportunity the renderer will take. Same reasoning as above —
+    // check the opportunity, not whether this viewport happens to reveal it.
+    const glue = await page.evaluate(() => {
+      const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f]/
+      const LATIN = /[0-9A-Za-z]/
+      const bad = []
+      let total = 0
+      for (const el of document.querySelectorAll('.phrase')) {
+        const text = el.textContent
+        for (let i = 1; i < text.length - 1; i++) {
+          if (text[i] === '\u00a0') total++
+          if (text[i] !== ' ') continue
+          const a = text[i - 1]
+          const b = text[i + 1]
+          if ((CJK.test(a) && LATIN.test(b)) || (LATIN.test(a) && CJK.test(b)))
+            bad.push(`breakable space in "${text.slice(Math.max(0, i - 6), i + 7)}"`)
+        }
+      }
+      return { total, bad }
+    })
+    if (glue.bad.length)
+      failures.push(`${label}: ${glue.bad.length} splittable CJK↔Latin term(s) — ${glue.bad[0]}`)
+
     console.log(
       `${label} kinsoku=${bad.kinsoku.length} midWord=${bad.midWord.length} ` +
-        `badBreakOpportunities=${wbr.bad.length}/${wbr.total}`,
+        `badBreakOpportunities=${wbr.bad.length}/${wbr.total} splittableTerms=${glue.bad.length} glued=${glue.total}`,
     )
   }
   await page.close()

@@ -251,6 +251,9 @@ const NO_LINE_START =
   '。、，．：；！？）］｝」』〕〉》〙〗»›・…‥ー〜～ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々〻%‰℃°'
 const NO_LINE_END = '（［｛「『〔〈《〘〖«‹＄￥£€#'
 
+const CJK = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f]/
+const LATIN = /[0-9A-Za-z]/
+
 function breakable(before: string, after: string): boolean {
   const prev = before.at(-1)
   const next = after[0]
@@ -260,17 +263,50 @@ function breakable(before: string, after: string): boolean {
   return true
 }
 
+/**
+ * A space with CJK on one side and Latin on the other is typographic, not
+ * lexical — it is the gap Chinese and Japanese put around embedded Latin
+ * (盘古之白), and the two sides usually form one term. Breaking there splits
+ * "ASCII 路径" and "特殊 token 表" across lines.
+ *
+ * A space between two Latin words ("Apple M4 Mac mini") is a real separator
+ * and stays breakable, so glued runs remain short.
+ */
+function isTypographicSpace(prev: string, space: string, next: string): boolean {
+  if (space !== ' ') return false
+  const a = prev.at(-1)
+  const b = next[0]
+  if (!a || !b) return false
+  return (CJK.test(a) && LATIN.test(b)) || (LATIN.test(a) && CJK.test(b))
+}
+
 export function phrase(text: string, lang: Lang): ReactNode {
   if (lang === 'en') return text
   const seg = segmenter(lang === 'zh' ? 'zh-Hans' : 'ja')
   if (!seg) return text
   const parts = [...seg.segment(text)].map((s) => s.segment)
+
+  // Glue Latin↔CJK across the typographic space: the space becomes
+  // non-breaking and no break is offered on either side of it.
+  const out: { text: string; breakAfter: boolean }[] = []
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    const prev = parts[i - 1]
+    const next = parts[i + 1]
+    if (prev !== undefined && next !== undefined && isTypographicSpace(prev, part, next)) {
+      out[out.length - 1].breakAfter = false
+      out.push({ text: '\u00a0', breakAfter: false })
+      continue
+    }
+    out.push({ text: part, breakAfter: next !== undefined && breakable(part, next) })
+  }
+
   return (
     <span className="phrase">
-      {parts.map((part, i) => (
+      {out.map((p, i) => (
         <Fragment key={i}>
-          {part}
-          {i < parts.length - 1 && breakable(part, parts[i + 1]) && <wbr />}
+          {p.text}
+          {p.breakAfter && <wbr />}
         </Fragment>
       ))}
     </span>
