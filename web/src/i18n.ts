@@ -40,9 +40,9 @@ const dict: Dict = {
     zh: 'Golia Lab 研究项目 · 开源',
     ja: 'Golia Lab のプロジェクト · オープンソース',
   },
-  'front.title.a': { en: 'A ', zh: '一个与参考实现', ja: '参照実装と' },
-  'front.title.b': { en: 'byte-exact', zh: '逐字节一致', ja: 'バイト単位で一致する' },
-  'front.title.c': { en: ' BPE tokenizer.', zh: '的 BPE 分词器。', ja: ' BPE トークナイザー。' },
+  'front.title.a': { en: 'A ', zh: '', ja: '' },
+  'front.title.b': { en: 'high-performance', zh: '高性能', ja: '高性能' },
+  'front.title.c': { en: ' BPE tokenizer.', zh: ' BPE 分词器', ja: ' BPE トークナイザー' },
   'front.abstract': {
     en: 'Tokenization decides what a language model actually reads, and a tokenizer that is merely close is a silent source of error. This implementation reproduces 17 encodings from 8 vendors and is checked against each vendor’s own tokenizer over adversarial differential corpora — currently 167,849 comparisons with no divergence. It is also, as a consequence of how it is built, considerably faster than the alternatives.',
     zh: '分词决定了语言模型真正读到的内容，而一个「差不多对」的分词器是一种静默的错误来源。本实现复刻了 8 家厂商的 17 套编码，并使用对抗性差分语料逐一对照各厂商自己的分词器 —— 目前 167,849 次对照，零分歧。同时，由于其实现方式，它也显著快于现有方案。',
@@ -56,7 +56,7 @@ const dict: Dict = {
   'front.fig.encodings': { en: 'encodings, 8 vendors', zh: '套编码，8 家厂商', ja: 'エンコーディング・8 ベンダー' },
   'front.fig.short': { en: 'to encode a short string', zh: '短字符串编码耗时', ja: '短い文字列のエンコード' },
   'front.fig.speed': { en: 'vs tiktoken-rs on ASCII', zh: 'ASCII 文本对比 tiktoken-rs', ja: 'ASCII で tiktoken-rs 比' },
-  'front.cta.try': { en: 'Run it in your browser ↓', zh: '在浏览器中运行 ↓', ja: 'ブラウザで実行 ↓' },
+  'front.cta.try': { en: 'Run it in your browser', zh: '在浏览器中运行', ja: 'ブラウザで実行' },
 
   // playground
   'pg.heading': {

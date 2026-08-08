@@ -1,3 +1,4 @@
+import { FileText, Hash, LoaderCircle, MonitorCheck, ScanText, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { useT } from '../i18n'
@@ -64,6 +65,7 @@ export function Playground() {
         </span>
         <div className="pg-controls">
           <button className="linkbtn" onClick={() => setText(EXAMPLE)}>
+            <FileText size={13} strokeWidth={2} />
             {t('pg.example')}
           </button>
           <select
@@ -83,13 +85,16 @@ export function Playground() {
 
       {state === 'loading' && (
         <div className="pg-loading">
-          <div className="bar">
-            <i />
-          </div>
+          <LoaderCircle className="spin" size={22} strokeWidth={1.75} />
           {t('pg.loading')}
         </div>
       )}
-      {state === 'error' && <div className="pg-loading">{t('pg.error')}</div>}
+      {state === 'error' && (
+        <div className="pg-loading">
+          <TriangleAlert size={22} strokeWidth={1.75} />
+          {t('pg.error')}
+        </div>
+      )}
 
       {state === 'ready' && (
         <>
@@ -121,7 +126,10 @@ export function Playground() {
             <div className="pg-output">
               <div className="pg-tokens" onMouseLeave={() => setHover(null)}>
                 {result.segs.length === 0 ? (
-                  <div className="pg-empty">{t('pg.empty')}</div>
+                  <div className="pg-empty">
+                    <ScanText size={20} strokeWidth={1.5} />
+                    {t('pg.empty')}
+                  </div>
                 ) : view === 'text' ? (
                   result.segs.map((s, i) => (
                     <span
@@ -156,13 +164,18 @@ export function Playground() {
                 <span className="lit">{JSON.stringify(hover.seg.text).slice(1, -1)}</span>
               </span>
             ) : (
-              <span>{t('pg.foot')}</span>
+              <span className="pg-local">
+                <MonitorCheck size={14} strokeWidth={1.9} />
+                {t('pg.foot')}
+              </span>
             )}
             <div className="viewswitch">
               <button className={view === 'text' ? 'on' : ''} onClick={() => setView('text')}>
+                <ScanText size={13} strokeWidth={2} />
                 {t('pg.view.text')}
               </button>
               <button className={view === 'ids' ? 'on' : ''} onClick={() => setView('ids')}>
+                <Hash size={13} strokeWidth={2} />
                 {t('pg.view.ids')}
               </button>
             </div>

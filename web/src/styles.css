@@ -546,7 +546,6 @@ textarea::placeholder {
 .tok.c6 { background: var(--t7); }
 
 .pg-empty {
-  color: var(--ink-faint);
   font-family: var(--sans);
   font-size: 0.85rem;
   line-height: 1.6;
@@ -627,26 +626,8 @@ textarea::placeholder {
   text-align: center;
   min-height: 15rem;
 }
-.pg-loading .bar {
-  width: 11rem;
-  height: 2px;
-  background: var(--rule);
-  overflow: hidden;
-}
-.pg-loading .bar i {
-  display: block;
-  height: 100%;
-  width: 35%;
-  background: var(--accent);
-  animation: sweep 1.2s ease-in-out infinite;
-}
-@keyframes sweep {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(390%);
-  }
+.pg-loading svg {
+  color: var(--accent);
 }
 
 .caption {
@@ -913,6 +894,71 @@ footer a {
 }
 footer a:hover {
   color: var(--accent);
+}
+
+/* ── icons ────────────────────────────────────────────────────────────
+   Icons here are functional, never decorative: they label an action (copy,
+   sample, view mode), carry a state (loading, error, empty) or mark a link
+   as leaving the page. Every one sits beside its own text — none replaces a
+   label — so nothing depends on the reader decoding a glyph. */
+
+svg {
+  flex: none;
+}
+
+/* Optical alignment: an icon's box is taller than the x-height beside it. */
+.btn svg,
+.cb-copy svg,
+.linkbtn svg,
+.viewswitch svg,
+.pg-local svg,
+footer .links svg {
+  vertical-align: -0.15em;
+}
+
+.btn .ext,
+footer .links .ext {
+  opacity: 0.45;
+  transition: opacity 130ms ease, transform 130ms ease;
+}
+.btn:hover .ext,
+footer .links a:hover .ext {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+.cb-copy,
+.linkbtn,
+.viewswitch button,
+.pg-local {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+footer .links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.pg-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  color: var(--ink-faint);
+}
+.pg-empty svg {
+  opacity: 0.5;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* entrance */
