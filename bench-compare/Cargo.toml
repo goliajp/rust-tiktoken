@@ -7,9 +7,11 @@ name = "bench-compare"
 version = "0.0.0"
 edition = "2024"
 publish = false
+# never published; the license satisfies cargo-deny's workspace-wide check
+license = "MIT OR Apache-2.0"
 
 [dependencies]
-tiktoken = { path = "../tiktoken" }
+tiktoken = { path = "../tiktoken", version = "3.8.0" }
 tiktoken-rs = "0.9"
 
 [[bin]]
