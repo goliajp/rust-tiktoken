@@ -193,22 +193,27 @@ export function App() {
         </Section>
 
         <Section id="install" num="05" title={t('inst.heading')}>
+          {/* Direct grid children, in row order: both blurbs share row 1 and
+              both code blocks share row 2, so the columns line up top and
+              bottom even when one blurb wraps to more lines than the other.
+              On one column, `order` restores blurb → code pairing. */}
           <div className="install-grid">
-            <div>
-              <p className="prose">{t('inst.rust.blurb')}</p>
-              <CodeBlock label="cargo add tiktoken" copy="cargo add tiktoken">
-                <Code src={RUST_SNIPPET} lang="rust" />
-              </CodeBlock>
-            </div>
-            <div>
-              <p className="prose">{t('inst.js.blurb')}</p>
-              <CodeBlock
-                label="npm install @goliapkg/tiktoken-wasm"
-                copy="npm install @goliapkg/tiktoken-wasm"
-              >
-                <Code src={JS_SNIPPET} lang="js" />
-              </CodeBlock>
-            </div>
+            <p className="prose i-blurb-a">{t('inst.rust.blurb')}</p>
+            <p className="prose i-blurb-b">{t('inst.js.blurb')}</p>
+            <CodeBlock
+              className="i-code-a"
+              label="cargo add tiktoken"
+              copy="cargo add tiktoken"
+            >
+              <Code src={RUST_SNIPPET} lang="rust" />
+            </CodeBlock>
+            <CodeBlock
+              className="i-code-b"
+              label="npm install @goliapkg/tiktoken-wasm"
+              copy="npm install @goliapkg/tiktoken-wasm"
+            >
+              <Code src={JS_SNIPPET} lang="js" />
+            </CodeBlock>
           </div>
           <p className="caption">
             {t('inst.docs')}{' '}
