@@ -5,6 +5,21 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-08-09
+
+Inherits `tiktoken` 3.8.0 — see the [crate changelog](../tiktoken/CHANGELOG.md)
+for the o200k `[\r\n/]*` fix and the full performance notes.
+
+### Changed
+- **2–4x faster than gpt-tokenizer 3.4 in the browser on every corpus, CJK
+  prose included** (previously 2–3x slower on CJK): layered vocabulary lookup,
+  CJK fast-path scanners, and whole-piece memoisation land in the wasm build.
+- The wasm artifact now optimizes for speed (`opt-level = 3`, `wasm-opt -O3`
+  instead of `-Os`): ~97% of the file is vocabulary data, so the faster code
+  section costs ~130 KB against 11.3 MB.
+- Reproducible in-browser benchmark against gpt-tokenizer and js-tiktoken:
+  `npm run bench` in the repository's `web/`.
+
 ## [3.7.1] - 2026-08-08
 
 Dependency refresh in lockstep with `tiktoken` 3.7.1 (`base64` 0.23, `ruzstd`
