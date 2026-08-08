@@ -77,3 +77,33 @@ fn oracle_qwen2() {
 fn oracle_mistral_v3() {
     verify_roundtrip_and_count("mistral_v3");
 }
+
+#[test]
+fn oracle_deepseek_v4() {
+    verify_roundtrip_and_count("deepseek_v4");
+}
+
+#[test]
+fn oracle_kimi_k2() {
+    verify_roundtrip_and_count("kimi_k2");
+}
+
+#[test]
+fn oracle_kimi_k3() {
+    verify_roundtrip_and_count("kimi_k3");
+}
+
+#[test]
+fn oracle_glm4() {
+    verify_roundtrip_and_count("glm4");
+}
+
+#[test]
+fn oracle_glm5() {
+    verify_roundtrip_and_count("glm5");
+}
+
+#[test]
+fn oracle_minimax_m2() {
+    verify_roundtrip_and_count("minimax_m2");
+}

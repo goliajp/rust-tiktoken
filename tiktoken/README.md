@@ -12,10 +12,10 @@ The fastest Rust BPE tokenizer — 15–40x faster than tiktoken-rs on ASCII tex
 
 ## Features
 
-- **Multi-provider**: 11 encodings across 5 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral)
+- **Multi-provider**: 17 encodings across 8 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, MiniMax)
 - **Fast**: hand-written ASCII fast-path pre-tokenizer (bypasses the regex), arena-based vocabulary, hybrid BPE merge
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
-- **Pricing**: cost estimation for 94 models across 7 providers
+- **Pricing**: cost estimation for 107 models across 10 providers
 - **Compact**: ruzstd-compressed vocabulary data embedded at compile time
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
@@ -99,9 +99,16 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 | `r50k_base` | OpenAI | GPT-3 era: davinci, curie, babbage, ada |
 | `gpt2` | OpenAI | GPT-2 (alias for `r50k_base`) |
 | `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
+| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
+| `deepseek_v4` | DeepSeek | DeepSeek V4 Pro / Flash (V3 vocab + V4 special tokens) |
 | `qwen2` | Alibaba | Qwen 2.5, Qwen 3 |
 | `mistral_v3` | Mistral | Mistral, Mixtral (Tekken tokenizer) |
+| `kimi_k2` | Moonshot | Kimi K2 / K2.5 / K2.6 |
+| `kimi_k3` | Moonshot | Kimi K3 (K2 vocab + K3 special tokens) |
+| `glm4` | Zhipu | GLM-4.5 / 4.6 / 4.7 |
+| `glm5` | Zhipu | GLM-5 / 5.2 |
+| `minimax_m2` | MiniMax | MiniMax M2 / M2.1 / M2.5 / M2.7 |
 
 ## API
 
@@ -159,7 +166,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-Supports 94 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
+Supports 107 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
 
 ## WebAssembly
 

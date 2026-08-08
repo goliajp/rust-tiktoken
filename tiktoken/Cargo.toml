@@ -5,11 +5,16 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/tiktoken"
-version = "3.6.0"
+version = "3.7.0"
 edition.workspace = true
 authors.workspace = true
 keywords = ["tiktoken", "tokenizer", "bpe", "openai", "gpt"]
 categories = ["text-processing", "algorithms"]
+# Oracle fixtures and differential tests stay in the repository but are
+# excluded from the published package: they are several MB of reference data
+# only used to validate this crate against upstream tokenizers, and crates.io
+# enforces a 10 MB package cap that the embedded vocabularies already approach.
+exclude = ["tests/", "examples/react-app/"]
 
 [features]
 default = []

@@ -5,6 +5,24 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-08-08
+
+Inherits `tiktoken` 3.7.0 — see the [crate changelog](../tiktoken/CHANGELOG.md).
+
+### Added
+- Six new encodings, focused on the Chinese open-weights ecosystem: `kimi_k2` /
+  `kimi_k3` (Moonshot), `glm4` / `glm5` (Zhipu), `minimax_m2` (MiniMax), and
+  `deepseek_v4` — all verified byte-exact against their reference tokenizers.
+  `encodingForModel` resolves `kimi-*`, `glm-*`, `minimax-*`, `deepseek-v4*`,
+  and the `deepseek-chat` / `deepseek-reasoner` API aliases.
+- Pricing for 13 models across the new Moonshot / Zhipu / MiniMax providers
+  (**107 models, 10 providers** total); `modelsByProvider` accepts the new
+  provider names.
+
+### Changed
+- The wasm binary grows by ~4.4 MB (compressed vocabularies for the new
+  encodings are embedded, as with all encodings).
+
 ## [3.6.0] - 2026-08-08
 
 Inherits the `tiktoken` 3.6.0 fixes — see the

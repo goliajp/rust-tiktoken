@@ -13,7 +13,7 @@ The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatibl
 
 | Path | Crate / Package | Description | Version |
 |:-----|:----------------|:------------|:--------|
-| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE tokenizer — 11 encodings, 94 models, multi-provider pricing | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
+| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE tokenizer — 17 encodings, 107 models, multi-provider pricing | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`tiktoken-wasm`](https://crates.io/crates/tiktoken-wasm) (Rust) | WASM binding crate for the above | [![crates.io](https://img.shields.io/crates/v/tiktoken-wasm.svg?style=flat-square)](https://crates.io/crates/tiktoken-wasm) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) (npm) | Same, published to npm via `wasm-pack` | [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm.svg?style=flat-square)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) |
 
@@ -22,7 +22,7 @@ The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatibl
 ## Highlights
 
 - **ASCII fast-path pre-tokenizer** — resolves the common ASCII pieces (letters, digits, punctuation, contractions) without invoking the regex engine; **2.3–5.5x faster** `encode` / `count` on ASCII text for cl100k / o200k / qwen2 / deepseek. Unicode/CJK transparently falls back to the regex.
-- **11 encodings · 94 models · 7 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek, Qwen, Mistral; plus USD cost estimation (Anthropic & Google included for pricing).
+- **17 encodings · 107 models · 10 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek V3/V4, Qwen, Mistral, Kimi K2/K3, GLM-4/5, MiniMax M2; plus USD cost estimation (Anthropic & Google included for pricing).
 - **Lean & portable** — arena-based vocabulary, hybrid linear/heap BPE merge, optional rayon parallelism, allocation-free `count()`, pure Rust with zero C dependencies, a tiny wasm build, and zstd-compressed vocab embedded at compile time.
 
 Full API, supported-model tables, and benchmarks live in the per-crate READMEs: **[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**.

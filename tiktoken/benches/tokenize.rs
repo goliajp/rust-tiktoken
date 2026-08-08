@@ -108,6 +108,10 @@ bench_fns! {
     bench_deepseek_v3 => "deepseek_v3",
     bench_qwen2       => "qwen2",
     bench_mistral_v3  => "mistral_v3",
+    bench_kimi_k2     => "kimi_k2",
+    bench_glm4        => "glm4",
+    bench_glm5        => "glm5",
+    bench_minimax_m2  => "minimax_m2",
 }
 
 criterion_group!(
@@ -122,5 +126,9 @@ criterion_group!(
     bench_deepseek_v3,
     bench_qwen2,
     bench_mistral_v3,
+    bench_kimi_k2,
+    bench_glm4,
+    bench_glm5,
+    bench_minimax_m2,
 );
 criterion_main!(benches);
