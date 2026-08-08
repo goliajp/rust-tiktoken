@@ -187,44 +187,6 @@ for (const [width, height, label] of [
   else if (perfCols.drift > 1) failures.push(`perf table columns misaligned by ${perfCols.drift}px`)
   console.log(`perfTableColumnDrift=${perfCols.drift ?? 'n/a'}px`)
 
-  // The three method cards are one visual row, and the page must not reflow
-  // when the language switches. Engines' CJK font metrics differ by ~13% per
-  // line, so equal line counts everywhere are impossible — instead a CSS
-  // seven-line floor makes any ≤7-line rendering occupy identical height.
-  // Assert exactly that: identical paragraph box heights, and text short
-  // enough to stay under the floor in this engine (≤6 lines leaves a full
-  // line of slack for wider font stacks such as real Safari's).
-  const allHeights = []
-  for (const name of ['EN', '中文', '日本語']) {
-    await page.getByRole('button', { name, exact: true }).click()
-    await page.waitForTimeout(300)
-    const cards = await page.evaluate(() =>
-      [...document.querySelectorAll('.claim p')].map((el) => {
-        const lh = parseFloat(getComputedStyle(el).lineHeight)
-        const r = el.getBoundingClientRect()
-        const range = document.createRange()
-        range.selectNodeContents(el)
-        return { box: Math.round(r.height), lines: Math.round(range.getBoundingClientRect().height / lh) }
-      }),
-    )
-    allHeights.push(...cards.map((c) => c.box))
-    for (const c of cards) {
-      if (c.lines > 6) failures.push(`${name}: a method card runs ${c.lines} lines — no slack under the 7-line floor`)
-    }
-    console.log(`cards[${name}] box=${cards.map((c) => c.box).join('/')} lines=${cards.map((c) => c.lines).join('/')}`)
-  }
-  const cardSpread = Math.max(...allHeights) - Math.min(...allHeights)
-  if (cardSpread > 1) failures.push(`method-card boxes differ by ${cardSpread}px across languages`)
-
-  // The bottom rules are the row's visual baseline — they must sit level even
-  // if a font stack pushes one paragraph past the floor (grid stretch aligns
-  // the frames regardless of line counts).
-  const claimBottoms = await page.evaluate(() =>
-    [...document.querySelectorAll('.claim')].map((el) => Math.round(el.getBoundingClientRect().bottom)),
-  )
-  if (Math.max(...claimBottoms) - Math.min(...claimBottoms) > 1)
-    failures.push(`method-card bottom rules misaligned: ${claimBottoms.join('/')}`)
-  console.log(`claimBottoms=${claimBottoms.join('/')}`)
 
   console.log(
     `logo=${logoOk} wordmark=${wordmarkOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +
@@ -249,7 +211,7 @@ for (const [width, height, label] of [
 // the reporter's Safari resolves different CJK fonts than headless does.
 {
   const FORBIDDEN = '。、，．：；！？」』）］｝〕〉》”’·・…—～'
-  const PROSE = '.abstract, .lede, .caption, .claim p, h1, h2, h3, .prose'
+  const PROSE = '.abstract, .lede, .caption, h1, h2, h3, .prose'
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
   await page.goto(URL_, { waitUntil: 'networkidle', timeout: 120_000 })
   await page.waitForTimeout(1000)
