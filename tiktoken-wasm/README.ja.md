@@ -140,6 +140,12 @@ module.exports = {
 - `deepseek_v3` — DeepSeek V3/R1
 - `qwen2` — Qwen 2/2.5/3
 - `mistral_v3` — Mistral/Codestral/Pixtral（Tekken）
+- `deepseek_v4` — DeepSeek V4 Pro/Flash
+- `kimi_k2` — Kimi K2/K2.5/K2.6
+- `kimi_k3` — Kimi K3
+- `glm4` — GLM-4.5/4.6/4.7
+- `glm5` — GLM-5/5.2
+- `minimax_m2` — MiniMax M2 ファミリー
 
 ### `encodingForModel(model: string): Encoding`
 
@@ -165,7 +171,7 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-USD で API コストを見積もり。7 プロバイダ 94 モデル対応。
+USD で API コストを見積もり。10 プロバイダ 107 モデル対応。
 
 ### `getModelInfo(modelId): ModelInfo`
 
@@ -173,7 +179,7 @@ USD で API コストを見積もり。7 プロバイダ 94 モデル対応。
 
 ### `allModels(): ModelInfo[]`
 
-サポート 94 モデルすべてを価格情報付きで列挙。
+サポート 107 モデルすべてを価格情報付きで列挙。
 
 ### `modelsByProvider(provider): ModelInfo[]`
 
