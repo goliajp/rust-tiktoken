@@ -33,7 +33,7 @@
 
 ```toml
 [dependencies]
-tiktoken = "3.5"
+tiktoken = "3.8"
 ```
 
 ```rust
