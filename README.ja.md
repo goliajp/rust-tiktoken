@@ -5,7 +5,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/goliajp/rust-tiktoken/ci.yml?branch=develop&style=flat-square&logo=github&label=ci)](https://github.com/goliajp/rust-tiktoken/actions/workflows/ci.yml)
 [![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](#ライセンス)
 
-[English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
+[English](README.md) | [简体中文](README.zh-CN.md) | **日本語** · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** — ブラウザで試す
 
 最速の Rust BPE トークナイザーと、その WebAssembly バインディング。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral）もサポート。手書きの ASCII 高速パスにより、ASCII テキストは **tiktoken-rs より 15〜40 倍高速**（CJK/Unicode では約 2 倍）。
 

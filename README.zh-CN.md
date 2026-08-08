@@ -5,7 +5,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/goliajp/rust-tiktoken/ci.yml?branch=develop&style=flat-square&logo=github&label=ci)](https://github.com/goliajp/rust-tiktoken/actions/workflows/ci.yml)
 [![License](https://img.shields.io/crates/l/tiktoken?style=flat-square)](#许可证)
 
-[English](README.md) | **简体中文** | [日本語](README.ja.md)
+[English](README.md) | **简体中文** | [日本語](README.ja.md) · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** —— 浏览器在线体验
 
 最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral）。手写的 ASCII 快路径让 ASCII 文本 **比 tiktoken-rs 快 15〜40 倍**（CJK/Unicode 约 2 倍）。
 
