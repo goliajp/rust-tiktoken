@@ -35,7 +35,7 @@ switch persisted to `localStorage`.
 src/
 ├── main.tsx               entry
 ├── App.tsx                page shell: hero, sections, footer, language switch
-├── i18n.ts                en/zh/ja dictionary + detection
+├── i18n.tsx               en/zh/ja dictionary, detection, phrase-aware <T>
 ├── tokenizer.ts           wasm init + encoding cache + token→segment resolution
 ├── styles.css             the whole design system
 └── components/
@@ -71,8 +71,9 @@ node verify.mjs https://tiktoken.golia.jp   # against the live site
 ```
 
 It checks three viewports for horizontal overflow (including the code
-blocks, which wrap rather than scroll), verifies CJK line-breaking (no line
-may start with closing punctuation, in either Chinese or Japanese), collects console and page
+blocks, which wrap rather than scroll), verifies CJK line-breaking (no
+line may start with closing punctuation, and none may break inside a word,
+in either Chinese or Japanese), collects console and page
 errors, confirms the GOLIA mark loads, drives the playground and asserts it returns
 tokens, checks that the paired columns line up (playground panes and install
 columns, top and bottom, plus matching type metrics between the two panes),
