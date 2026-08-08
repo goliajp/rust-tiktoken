@@ -12,10 +12,10 @@
 
 ## 特徴
 
-- **マルチプロバイダ**: 5 社 11 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
+- **マルチプロバイダ**: 5 社 17 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral）
 - **高速**: 手書き ASCII 高速パス（正規表現をバイパス）、Arena ベースの語彙、ハイブリッド BPE マージ
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
-- **料金見積もり**: 7 プロバイダ 94 モデルのコスト推定
+- **料金見積もり**: 10 プロバイダ 107 モデルのコスト推定
 - **コンパクト**: ruzstd 圧縮語彙データをコンパイル時に埋め込み
 - **ゼロアロケーションカウント**: `count()` パスはトークンベクタを割り当てません
 
@@ -100,8 +100,14 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 | `gpt2` | OpenAI | GPT-2（`r50k_base` のエイリアス） |
 | `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
+| `deepseek_v4` | DeepSeek | DeepSeek V4 Pro / Flash（V3 語彙 + V4 特殊トークン） |
 | `qwen2` | Alibaba | Qwen 2.5, Qwen 3 |
 | `mistral_v3` | Mistral | Mistral, Mixtral（Tekken トークナイザ） |
+| `kimi_k2` | Moonshot | Kimi K2 / K2.5 / K2.6 |
+| `kimi_k3` | Moonshot | Kimi K3（K2 語彙 + K3 特殊トークン） |
+| `glm4` | Zhipu | GLM-4.5 / 4.6 / 4.7 |
+| `glm5` | Zhipu | GLM-5 / 5.2 |
+| `minimax_m2` | MiniMax | MiniMax M2 / M2.1 / M2.5 / M2.7 |
 
 ## API
 
@@ -159,7 +165,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 94 モデルに対応。
+OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 107 モデルに対応。
 
 ## WebAssembly
 

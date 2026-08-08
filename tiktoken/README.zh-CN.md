@@ -12,10 +12,10 @@
 
 ## 特性
 
-- **多厂商**：11 种编码，覆盖 5 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral）
+- **多厂商**：11 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
 - **高性能**：手写 ASCII 快路径（绕开正则）、Arena 词表存储、混合 BPE 合并
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
-- **费用估算**：覆盖 7 家厂商共 94 个模型
+- **费用估算**：覆盖 10 家厂商共 107 个模型
 - **体积紧凑**：ruzstd 压缩词表数据，编译期嵌入
 - **零分配计数**：`count()` 不分配 token 向量
 
@@ -100,8 +100,14 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 | `gpt2` | OpenAI | GPT-2（`r50k_base` 的别名） |
 | `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
 | `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
+| `deepseek_v4` | DeepSeek | DeepSeek V4 Pro / Flash（V3 词表 + V4 特殊 token） |
 | `qwen2` | 阿里巴巴 | Qwen 2.5, Qwen 3 |
 | `mistral_v3` | Mistral | Mistral, Mixtral（Tekken 分词器） |
+| `kimi_k2` | Moonshot | Kimi K2 / K2.5 / K2.6 |
+| `kimi_k3` | Moonshot | Kimi K3（K2 词表 + K3 特殊 token） |
+| `glm4` | 智谱 | GLM-4.5 / 4.6 / 4.7 |
+| `glm5` | 智谱 | GLM-5 / 5.2 |
+| `minimax_m2` | MiniMax | MiniMax M2 / M2.1 / M2.5 / M2.7 |
 
 ## API
 
@@ -159,7 +165,7 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
 ```
 
-支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 94 个模型。
+支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 107 个模型。
 
 ## WebAssembly
 

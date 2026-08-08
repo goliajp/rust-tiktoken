@@ -22,6 +22,10 @@ const LLAMA3_DATA: &[u8] = include_bytes!("encodings/llama3.tiktoken.zst");
 const DEEPSEEK_V3_DATA: &[u8] = include_bytes!("encodings/deepseek_v3.tiktoken.zst");
 const QWEN2_DATA: &[u8] = include_bytes!("encodings/qwen2.tiktoken.zst");
 const MISTRAL_V3_DATA: &[u8] = include_bytes!("encodings/mistral_v3.tiktoken.zst");
+const KIMI_K2_DATA: &[u8] = include_bytes!("encodings/kimi_k2.tiktoken.zst");
+const GLM4_DATA: &[u8] = include_bytes!("encodings/glm4.tiktoken.zst");
+const GLM5_DATA: &[u8] = include_bytes!("encodings/glm5.tiktoken.zst");
+const MINIMAX_M2_DATA: &[u8] = include_bytes!("encodings/minimax_m2.tiktoken.zst");
 
 // cl100k pattern: handles English contractions, Unicode letters/numbers, punctuation, whitespace.
 // original tiktoken uses `\s+(?!\S)|\s+` but we use plain `\s+` and emulate the negative
@@ -67,6 +71,43 @@ pub(crate) const DEEPSEEK_V3_PATTERN: &str = concat!(
 
 // qwen2 pattern: similar to cl100k but \p{N} matches single digits (not 1-3)
 pub(crate) const QWEN2_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
+
+// kimi pattern (Kimi K2 / K3, from moonshotai's tokenization_kimi.py): a
+// dedicated leading `[\p{Han}]+` branch, then o200k-style case-splitting rules
+// whose letter classes use set intersection to exclude Han (so CJK never mixes
+// into a case-split word), then the digit/punct/whitespace rules shared with
+// o200k. The original ends `\s+(?!\S)|\s+`; the lookahead is emulated via
+// `WhitespaceRules::NewlineFirst` like the other patterns.
+pub(crate) const KIMI_PATTERN: &str = concat!(
+    r"[\p{Han}]+",
+    r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+",
+    r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
+    r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*",
+    r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
+    r"|\p{N}{1,3}",
+    r"| ?[^\s\p{L}\p{N}]+[\r\n]*",
+    r"|\s*[\r\n]+",
+    r"|\s+",
+);
+
+// glm4 / glm5 (Zhipu GLM-4.x / GLM-5.x): the tokenizer.json split regex is
+// exactly the cl100k pattern; the two generations differ only in vocabulary
+// (151,329 vs 154,820 base tokens, independently trained merges).
+const GLM_PATTERN: &str = CL100K_PATTERN;
+
+// minimax_m2 (MiniMax M2 family): o200k's letter/digit/whitespace rules, but
+// the punctuation rule's trailing class is `[\r\n/]*` (admitting `/`, like
+// Tekken) rather than o200k's `[\r\n]*`.
+pub(crate) const MINIMAX_M2_PATTERN: &str = concat!(
+    r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+",
+    r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
+    r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*",
+    r"(?i:'s|'t|'re|'ve|'m|'ll|'d)?",
+    r"|\p{N}{1,3}",
+    r"| ?[^\s\p{L}\p{N}]+[\r\n/]*",
+    r"|\s*[\r\n]+",
+    r"|\s+",
+);
 
 // mistral v3 (tekken) pattern. Case-splitting like o200k, but with three
 // deliberate differences that a cl100k/o200k stand-in gets wrong:
@@ -298,6 +339,18 @@ pub fn llama3() -> CoreBpe {
 /// `|`; `<|EOT|>` is the one exception and really is ASCII.
 pub fn deepseek_v3() -> CoreBpe {
     let encoder = parse_tiktoken_data(DEEPSEEK_V3_DATA);
+    CoreBpe::new(
+        encoder,
+        deepseek_v3_special_tokens(),
+        DEEPSEEK_V3_PATTERN,
+        FastPath::Deepseek,
+        WhitespaceRules::NewlineFirstSplitOnNumCjk,
+    )
+}
+
+/// DeepSeek V3's 818-entry added-token table, shared as the base of
+/// [`deepseek_v4`]'s table.
+fn deepseek_v3_special_tokens() -> FxHashMap<Vec<u8>, u32> {
     let mut special = special_tokens(&[
         ("<｜begin▁of▁sentence｜>", 0),
         ("<｜end▁of▁sentence｜>", 1),
@@ -322,13 +375,7 @@ pub fn deepseek_v3() -> CoreBpe {
         let n = id - 128000;
         special.insert(format!("<｜place▁holder▁no▁{n}｜>").into_bytes(), id);
     }
-    CoreBpe::new(
-        encoder,
-        special,
-        DEEPSEEK_V3_PATTERN,
-        FastPath::Deepseek,
-        WhitespaceRules::NewlineFirstSplitOnNumCjk,
-    )
+    special
 }
 
 /// Construct the qwen2 encoding (Qwen 2.5 / 3).
@@ -396,6 +443,300 @@ pub fn mistral_v3() -> CoreBpe {
         special,
         MISTRAL_V3_PATTERN,
         FastPath::Tekken,
+        WhitespaceRules::NewlineFirst,
+    )
+}
+
+/// Construct the deepseek_v4 encoding (DeepSeek V4 Pro / Flash, 2026).
+///
+/// Same 128,000-token vocabulary, merges, and split pattern as
+/// [`deepseek_v3`]; the delta is the added-token table, which grows from
+/// V3's 818 entries to 1,283 — 50 new named tokens (`<think>`, the DSML
+/// markup markers, vision/grounding tags) plus 415 multimodal span
+/// placeholders (`<|place_holder_mm_span_0021|>`..=`_0435|>`).
+pub fn deepseek_v4() -> CoreBpe {
+    let encoder = parse_tiktoken_data(DEEPSEEK_V3_DATA);
+    let mut special = deepseek_v3_special_tokens();
+    for (name, id) in [
+        ("<｜begin▁of▁repo▁name｜>", 128815_u32),
+        ("<｜end▁of▁repo▁name｜>", 128816),
+        ("<｜begin▁of▁file▁name｜>", 128817),
+        ("<｜end▁of▁file▁name｜>", 128818),
+        ("<｜begin▁of▁file｜>", 128819),
+        ("<｜end▁of▁file｜>", 128820),
+        ("<think>", 128821),
+        ("</think>", 128822),
+        ("<｜place▁holder▁for▁copy｜>", 128823),
+        ("<｜place▁holder▁for▁pointer▁replace｜>", 128824),
+        ("｜DSML｜", 128825),
+        ("<｜begin▁sys｜>", 128826),
+        ("<｜end▁sys｜>", 128827),
+        ("<｜latest_reminder｜>", 128828),
+        ("<｜action｜>", 128829),
+        ("<｜query｜>", 128830),
+        ("<｜authority｜>", 128831),
+        ("<｜domain｜>", 128832),
+        ("<｜task｜>", 128833),
+        ("<｜political｜>", 128834),
+        ("<｜entity｜>", 128835),
+        ("<｜title｜>", 128836),
+        ("<｜safety｜>", 128837),
+        ("<｜answer｜>", 128838),
+        ("<｜search｜>", 128839),
+        ("<dsml:", 128840),
+        ("</dsml:", 128841),
+        ("<｜search▁begin｜>", 128842),
+        ("<｜search▁end｜>", 128843),
+        ("<｜extracted_url｜>", 128844),
+        ("<｜read_url｜>", 128845),
+        ("<｜end_of_query｜>", 128846),
+        ("<｜rl_image_pad｜>", 129262),
+        ("<｜rl_image_start｜>", 129263),
+        ("<｜image2｜>", 129264),
+        ("<｜/table>｜", 129265),
+        ("<｜table｜>", 129266),
+        ("<｜/td｜>", 129267),
+        ("<｜td｜>", 129268),
+        ("<｜/tr｜>", 129269),
+        ("<｜tr｜>", 129270),
+        ("<｜/polygon｜>", 129271),
+        ("<｜polygon｜>", 129272),
+        ("<｜/point｜>", 129273),
+        ("<｜point｜>", 129274),
+        ("<｜/box｜>", 129275),
+        ("<｜box｜>", 129276),
+        ("<｜/ref｜>", 129277),
+        ("<｜ref｜>", 129278),
+        ("<｜image｜>", 129279),
+    ] {
+        special.insert(name.as_bytes().to_vec(), id);
+    }
+    // 415 multimodal span placeholders: number 0021..=0435 map to contiguous
+    // ids 128847..=129261 (id = 128847 + (n - 21)).
+    for n in 21..=435_u32 {
+        special.insert(
+            format!("<|place_holder_mm_span_{n:04}|>").into_bytes(),
+            128847 + (n - 21),
+        );
+    }
+    CoreBpe::new(
+        encoder,
+        special,
+        DEEPSEEK_V3_PATTERN,
+        FastPath::Deepseek,
+        WhitespaceRules::NewlineFirstSplitOnNumCjk,
+    )
+}
+
+/// The Kimi K2 / K3 shared base vocabulary is 163,584 tokens (byte-identical
+/// `tiktoken.model` across both generations); each generation defines its own
+/// special-token ids in the 163584..163839 reserved range.
+///
+/// Construct the kimi_k2 encoding (Kimi K2 / K2.5 / K2.6, Moonshot).
+pub fn kimi_k2() -> CoreBpe {
+    let encoder = parse_tiktoken_data(KIMI_K2_DATA);
+    let special = special_tokens(&[
+        ("[BOS]", 163584),
+        ("[EOS]", 163585),
+        ("<|im_end|>", 163586),
+        ("<|im_user|>", 163587),
+        ("<|im_assistant|>", 163588),
+        ("<|start_header_id|>", 163590),
+        ("<|end_header_id|>", 163591),
+        ("[EOT]", 163593),
+        ("<|im_system|>", 163594),
+        ("<|tool_calls_section_begin|>", 163595),
+        ("<|tool_calls_section_end|>", 163596),
+        ("<|tool_call_begin|>", 163597),
+        ("<|tool_call_argument_begin|>", 163598),
+        ("<|tool_call_end|>", 163599),
+        ("<|im_middle|>", 163601),
+        ("[UNK]", 163838),
+        ("[PAD]", 163839),
+    ]);
+    CoreBpe::new(
+        encoder,
+        special,
+        KIMI_PATTERN,
+        FastPath::O200k,
+        WhitespaceRules::NewlineFirst,
+    )
+}
+
+/// Construct the kimi_k3 encoding (Kimi K3, Moonshot 2026).
+///
+/// Shares [`kimi_k2`]'s merge ranks and regex; only the special-token table
+/// differs (K3 renames the chat markers and adds media tokens).
+pub fn kimi_k3() -> CoreBpe {
+    let encoder = parse_tiktoken_data(KIMI_K2_DATA);
+    let special = special_tokens(&[
+        ("[BOS]", 163584),
+        ("[EOS]", 163585),
+        ("<|end_of_msg|>", 163586),
+        ("<|open|>", 163587),
+        ("<|close|>", 163588),
+        ("<|sep|>", 163589),
+        ("[start_header_id]", 163590),
+        ("[end_header_id]", 163591),
+        ("[EOT]", 163593),
+        ("<|media_begin|>", 163602),
+        ("<|media_content|>", 163603),
+        ("<|media_end|>", 163604),
+        ("<|media_pad|>", 163605),
+        ("<osagent_mode>", 163649),
+        ("[UNK]", 163838),
+        ("[PAD]", 163839),
+    ]);
+    CoreBpe::new(
+        encoder,
+        special,
+        KIMI_PATTERN,
+        FastPath::O200k,
+        WhitespaceRules::NewlineFirst,
+    )
+}
+
+/// Build the GLM special-token table: both generations use the same 36 names
+/// at contiguous ids starting right after the base vocabulary.
+fn glm_special_tokens(base: u32) -> FxHashMap<Vec<u8>, u32> {
+    const NAMES: [&str; 36] = [
+        "<|endoftext|>",
+        "[MASK]",
+        "[gMASK]",
+        "[sMASK]",
+        "<sop>",
+        "<eop>",
+        "<|system|>",
+        "<|user|>",
+        "<|assistant|>",
+        "<|observation|>",
+        "<|begin_of_image|>",
+        "<|end_of_image|>",
+        "<|begin_of_video|>",
+        "<|end_of_video|>",
+        "<|begin_of_audio|>",
+        "<|end_of_audio|>",
+        "<|begin_of_transcription|>",
+        "<|end_of_transcription|>",
+        "<|code_prefix|>",
+        "<|code_middle|>",
+        "<|code_suffix|>",
+        "<think>",
+        "</think>",
+        "<tool_call>",
+        "</tool_call>",
+        "<tool_response>",
+        "</tool_response>",
+        "<arg_key>",
+        "</arg_key>",
+        "<arg_value>",
+        "</arg_value>",
+        "/nothink",
+        "<|begin_of_box|>",
+        "<|end_of_box|>",
+        "<|image|>",
+        "<|video|>",
+    ];
+    NAMES
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.as_bytes().to_vec(), base + i as u32))
+        .collect()
+}
+
+/// Construct the glm4 encoding (Zhipu GLM-4.5 / 4.6 / 4.7).
+/// Vocabulary size: 151,329 regular tokens + 36 special tokens.
+pub fn glm4() -> CoreBpe {
+    let encoder = parse_tiktoken_data(GLM4_DATA);
+    CoreBpe::new(
+        encoder,
+        glm_special_tokens(151_329),
+        GLM_PATTERN,
+        FastPath::Cl100k,
+        WhitespaceRules::NewlineFirst,
+    )
+}
+
+/// Construct the glm5 encoding (Zhipu GLM-5 / 5.2).
+/// Vocabulary size: 154,820 regular tokens + 36 special tokens
+/// (independently trained merges — not an extension of glm4's).
+pub fn glm5() -> CoreBpe {
+    let encoder = parse_tiktoken_data(GLM5_DATA);
+    CoreBpe::new(
+        encoder,
+        glm_special_tokens(154_820),
+        GLM_PATTERN,
+        FastPath::Cl100k,
+        WhitespaceRules::NewlineFirst,
+    )
+}
+
+/// Construct the minimax_m2 encoding (MiniMax M2 / M2.1 / M2.5 / M2.7).
+/// Vocabulary size: 200,000 regular tokens + 54 special tokens
+/// (byte-identical tokenizer across the whole M2 family).
+pub fn minimax_m2() -> CoreBpe {
+    let encoder = parse_tiktoken_data(MINIMAX_M2_DATA);
+    let special = special_tokens(&[
+        ("]!p~[", 200000),
+        ("<fim_prefix>", 200001),
+        ("<fim_middle>", 200002),
+        ("<fim_suffix>", 200003),
+        ("<fim_pad>", 200004),
+        ("<reponame>", 200005),
+        ("<filename>", 200006),
+        ("<gh_stars>", 200007),
+        ("<issue_start>", 200008),
+        ("<issue_comment>", 200009),
+        ("<issue_closed>", 200010),
+        ("<jupyter_start>", 200011),
+        ("<jupyter_text>", 200012),
+        ("<jupyter_code>", 200013),
+        ("<jupyter_output>", 200014),
+        ("<empty_output>", 200015),
+        ("<commit_before>", 200016),
+        ("<commit_msg>", 200017),
+        ("<commit_after>", 200018),
+        ("]~b]", 200019),
+        ("[e~[", 200020),
+        ("]!d~[", 200021),
+        ("<function_call>", 200022),
+        ("<code_interpreter>", 200023),
+        ("]<]speech[>[", 200024),
+        ("]<]image[>[", 200025),
+        ("]<]video[>[", 200026),
+        ("]<]start of speech[>[", 200027),
+        ("]<]end of speech[>[", 200028),
+        ("]<]start of image[>[", 200029),
+        ("]<]end of image[>[", 200030),
+        ("]<]start of video[>[", 200031),
+        ("]<]end of video[>[", 200032),
+        ("]<]vision pad[>[", 200033),
+        ("]~!b[", 200034),
+        ("<jupyter_error>", 200035),
+        ("<add_file>", 200036),
+        ("<delete_file>", 200037),
+        ("<rename_file>", 200038),
+        ("<edit_file>", 200039),
+        ("<commit_message>", 200040),
+        ("<empty_source_file>", 200041),
+        ("<repo_struct>", 200042),
+        ("<code_context>", 200043),
+        ("<file_content>", 200044),
+        ("<source_files>", 200045),
+        ("<pr_start>", 200046),
+        ("<review_comment>", 200047),
+        ("<filepath>", 200048),
+        ("<file_sep>", 200049),
+        ("<think>", 200050),
+        ("</think>", 200051),
+        ("<minimax:tool_call>", 200052),
+        ("</minimax:tool_call>", 200053),
+    ]);
+    CoreBpe::new(
+        encoder,
+        special,
+        MINIMAX_M2_PATTERN,
+        FastPath::MiniMax,
         WhitespaceRules::NewlineFirst,
     )
 }

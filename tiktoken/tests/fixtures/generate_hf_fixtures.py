@@ -32,7 +32,11 @@ REFERENCES = {
     "llama3": ("unsloth/llama-3-8b", 128_000),
     "qwen2": ("Qwen/Qwen2.5-7B", 151_643),
     "deepseek_v3": ("deepseek-ai/DeepSeek-V3", 128_000),
+    "deepseek_v4": ("deepseek-ai/DeepSeek-V4-Flash", 128_000),
     "mistral_v3": ("mistralai/Mistral-Nemo-Base-2407", 131_072),
+    "glm4": ("zai-org/GLM-4.5", 151_329),
+    "glm5": ("zai-org/GLM-5.2", 154_820),
+    "minimax_m2": ("MiniMaxAI/MiniMax-M2", 200_000),
 }
 
 WHITESPACE = [
