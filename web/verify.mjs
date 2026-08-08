@@ -188,21 +188,33 @@ for (const [width, height, label] of [
   console.log(`perfTableColumnDrift=${perfCols.drift ?? 'n/a'}px`)
 
   // The three method cards are one visual row, and the page must not reflow
-  // when the language switches: copy in every language is written to the same
-  // paragraph height across all cards AND all languages (one-line tolerance).
+  // when the language switches. Engines' CJK font metrics differ by ~13% per
+  // line, so equal line counts everywhere are impossible — instead a CSS
+  // seven-line floor makes any ≤7-line rendering occupy identical height.
+  // Assert exactly that: identical paragraph box heights, and text short
+  // enough to stay under the floor in this engine (≤6 lines leaves a full
+  // line of slack for wider font stacks such as real Safari's).
   const allHeights = []
   for (const name of ['EN', '中文', '日本語']) {
     await page.getByRole('button', { name, exact: true }).click()
     await page.waitForTimeout(300)
-    const heights = await page.evaluate(() =>
-      [...document.querySelectorAll('.claim p')].map((el) => Math.round(el.getBoundingClientRect().height)),
+    const cards = await page.evaluate(() =>
+      [...document.querySelectorAll('.claim p')].map((el) => {
+        const lh = parseFloat(getComputedStyle(el).lineHeight)
+        const r = el.getBoundingClientRect()
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        return { box: Math.round(r.height), lines: Math.round(range.getBoundingClientRect().height / lh) }
+      }),
     )
-    allHeights.push(...heights)
-    console.log(`cards[${name}] heights=${heights.join('/')}`)
+    allHeights.push(...cards.map((c) => c.box))
+    for (const c of cards) {
+      if (c.lines > 6) failures.push(`${name}: a method card runs ${c.lines} lines — no slack under the 7-line floor`)
+    }
+    console.log(`cards[${name}] box=${cards.map((c) => c.box).join('/')} lines=${cards.map((c) => c.lines).join('/')}`)
   }
   const cardSpread = Math.max(...allHeights) - Math.min(...allHeights)
-  if (cardSpread > 26)
-    failures.push(`method-card paragraphs differ by ${cardSpread}px across languages (>1 line)`)
+  if (cardSpread > 1) failures.push(`method-card boxes differ by ${cardSpread}px across languages`)
 
   console.log(
     `logo=${logoOk} wordmark=${wordmarkOk} sampleTokens=${tokens} paneΔ=${align.paneTop}/${align.paneBottom}px ` +

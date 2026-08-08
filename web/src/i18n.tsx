@@ -126,21 +126,21 @@ const dict: Dict = {
   },
   'feat.exact.h': { en: 'Checked against the vendor', zh: '对照厂商实现', ja: 'ベンダー実装と照合' },
   'feat.exact.p': {
-    en: 'OpenAI encodings are compared against Python tiktoken, the rest against each vendor’s published HuggingFace tokenizer, and Kimi against the vocabulary Moonshot ships. The corpora target where these patterns actually disagree: whitespace runs, newline boundaries, digits, CJK, slashes.',
-    zh: 'OpenAI 系比对 Python tiktoken，其余比对各厂商发布的 HuggingFace 分词器，Kimi 比对 Moonshot 自带词表。语料专挑各家 pattern 真正会分歧的位置：连续空白、换行边界、数字、CJK、斜杠 —— 不是猜的，换行边界和斜杠尾类各抓到过一个真实 bug，语料也随修复同步扩充。',
-    ja: 'OpenAI 系は Python tiktoken、その他は各ベンダー公開の HuggingFace トークナイザー、Kimi は Moonshot 同梱の語彙と比較します。コーパスは、実際に食い違う箇所（連続する空白、改行境界、数字、CJK、スラッシュ）を狙って作っています。',
+    en: 'OpenAI encodings are checked against Python tiktoken, the rest against each vendor’s HuggingFace tokenizer, Kimi against Moonshot’s vocabulary. The corpora target where patterns disagree: whitespace, newlines, digits, CJK, slashes.',
+    zh: 'OpenAI 系比对 Python tiktoken，其余比对各厂商的 HuggingFace 分词器，Kimi 比对 Moonshot 词表。语料专挑分歧位置：空白、换行、数字、CJK、斜杠，后两处各抓到过真实 bug。',
+    ja: 'OpenAI 系は Python tiktoken、他は各ベンダーの HuggingFace トークナイザー、Kimi は Moonshot の語彙と比較。コーパスは食い違う箇所（空白、改行、数字、CJK、スラッシュ）を狙います。',
   },
   'feat.fast.h': { en: 'Hand-written scanners, ASCII and CJK', zh: '手写扫描：ASCII 与 CJK', ja: '手書きスキャナ：ASCII と CJK' },
   'feat.fast.p': {
-    en: 'ASCII and CJK pieces alike are cut by hand-written scanners that never enter the regex engine; the vocabulary serves each key size its own structure, and repeated pieces are memoised whole. The regex stays the arbiter — property tests hold the scanners to its exact output.',
-    zh: 'ASCII 与汉字、假名、谚文的常见片段都由手写扫描器直接切分，不进正则引擎；词表按 key 长度分层，重复片段整片记忆。正则仍是判准 —— 属性测试以每轮数十万条随机输入要求两者切分完全一致，扫描器拿不准的字符一律交回正则，速度从不以正确性为代价。',
-    ja: 'ASCII も漢字・かな・ハングルも、一般的な断片は手書きスキャナが直接切り出し、正規表現エンジンを通しません。語彙はキー長ごとに最適な構造で引き、繰り返す断片は丸ごとメモ化。正解は正規表現側にあり、毎回数十万件のランダム入力で一致を担保します。',
+    en: 'ASCII and CJK pieces alike are cut by hand-written scanners that never enter the regex engine; the vocabulary is layered by key size, and repeated pieces are memoised whole. The regex stays the arbiter — property tests hold the scanners to its output.',
+    zh: 'ASCII 与汉字、假名、谚文的常见片段由手写扫描器切分，不进正则引擎；词表按 key 长度分层，重复片段整片记忆。正则仍是判准 —— 数十万条随机输入验证一致，拿不准的字符交回正则。',
+    ja: 'ASCII も漢字・かな・ハングルも、よくある断片は手書きスキャナが切り出し、正規表現エンジンを通しません。語彙はキー長ごとの構造で引き、繰り返す断片はメモ化。数十万件の入力で一致を担保します。',
   },
   'feat.everywhere.h': { en: 'Pure Rust, embeds anywhere', zh: '纯 Rust，随处可嵌', ja: '純 Rust、どこへでも' },
   'feat.everywhere.p': {
-    en: 'No C dependencies, no runtime, no external data files — vocabularies compile into one self-contained artifact that drops into servers, IoT and edge devices, and browsers alike, as a crate or a WebAssembly package. The playground above is that package, unmodified.',
-    zh: '零 C 依赖、无运行时、无外部数据文件 —— 词表在编译期内嵌成单一自足产物，服务器、IoT 与边缘设备、浏览器都能直接嵌入，以 crate 和 WebAssembly 包发布，wasm 包 11 MB 中约 97% 就是词表数据本身。一条 cargo add 或 npm install 即可使用，上方试用区就是该包，未作改动。',
-    ja: 'C 依存なし・ランタイム不要・外部データなし。語彙を埋め込んだ自己完結の単一成果物は、サーバーでも IoT・エッジ機器でもブラウザでも、クレートか WebAssembly パッケージでそのまま動きます。上のプレイグラウンドはそのパッケージ本体です。',
+    en: 'No C dependencies, no runtime, no data files — vocabularies compile into one self-contained artifact that runs on servers, IoT and edge devices, and in browsers. The playground above is that very package.',
+    zh: '零 C 依赖、无运行时、无外部数据文件 —— 词表编译期内嵌成单一自足产物，服务器、IoT、浏览器都能直接嵌入，wasm 包里 97% 是词表数据。上方试用区就是该包本身。',
+    ja: 'C 依存なし・ランタイム不要・外部データなし。語彙を埋め込んだ自己完結の単一成果物が、サーバーでも IoT でもブラウザでもそのまま動く。上のプレイグラウンドはこのパッケージ本体です。',
   },
 
   // encodings
