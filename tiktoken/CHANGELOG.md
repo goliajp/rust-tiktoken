@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.8.1] - 2026-08-09
+
+### Docs
+- The crate READMEs (en/zh/ja) shipped in 3.8.0 still opened with the
+  pre-3.8.0 headline (15–40x on ASCII, ≈2x on CJK) above the new tables —
+  contradicting them on the crates.io page. Headlines, feature bullets and
+  the zh/ja performance sections now carry the 3.8.0 numbers: 5–49x vs
+  tiktoken-rs native, 2–4x vs gpt-tokenizer in-browser, CJK prose 15–17x.
+  No code changes.
+
 ## [3.8.0] - 2026-08-09
 
 ### Fixed

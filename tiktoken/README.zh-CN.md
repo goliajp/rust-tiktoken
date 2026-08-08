@@ -8,12 +8,12 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器 — ASCII 文本上比 tiktoken-rs 快 15〜40 倍（CJK/Unicode 约 2 倍），得益于手写的 ASCII 快路径。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen 和 Mistral。
+最快的 Rust BPE 分词器 — 原生比 tiktoken-rs 快 5〜49 倍（中日文散文 15〜17 倍），浏览器内（wasm）比 gpt-tokenizer 快 2〜4 倍。手写扫描器同时覆盖 ASCII 与 CJK，词表按 key 长度分层，重复片段整片记忆。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
 
 ## 特性
 
 - **多厂商**：11 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
-- **高性能**：手写 ASCII 快路径（绕开正则）、Arena 词表存储、混合 BPE 合并
+- **高性能**：手写扫描器覆盖 ASCII 与 CJK（绕开正则）、词表按 key 长度分层、重复片段整片记忆、混合 BPE 合并
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
 - **费用估算**：覆盖 10 家厂商共 107 个模型
 - **体积紧凑**：ruzstd 压缩词表数据，编译期嵌入
@@ -21,41 +21,62 @@
 
 ## 性能
 
-所有基准测试在 Apple M4 Mac mini 上单线程运行。三个实现的 token 输出已验证完全一致。
+计时前先断言各实现的 token 输出完全一致；每个数字是一次完整处理，预热后取
+9 轮中位数。语料在所有基准衣架中逐字节相同（`bench-compare/`、
+`benches/bench_python.py`、`web/bench/`）。
 
-#### cl100k_base encode
+#### 原生 — Apple M4 Mac mini、单线程、`encode`
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
+`cargo run --release -p bench-compare`
+
+| 语料 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1,700 ns | 1,248 ns | **43 ns** | **29x** | **40x** |
-| 中等文本 (900 B) | 32.2 us | 53.8 us | **1.5 us** | **35x** | **21x** |
-| 长文本 (45 KB) | 1,500 us | 2,611 us | **74 us** | **35x** | **20x** |
-| Unicode (4.5 KB) | 141 us | 164 us | **91 us** | **1.8x** | **1.6x** |
-| 代码 (3.9 KB) | 247 us | 264 us | **17 us** | **16x** | **15x** |
+| 短文本 (13 B) | 1.6 µs | 1,081 ns | **33 ns** | **33x** | **48x** |
+| 中等文本 (900 B) | 31.9 µs | 52.2 µs | **1.1 µs** | **47x** | **29x** |
+| 英文文本 (45 KB) | 1,500 µs | 2,498 µs | **51.5 µs** | **49x** | **29x** |
+| 中文散文 (4.3 KB) | 119.8 µs | 134.7 µs | **8.1 µs** | **17x** | **15x** |
+| 日文散文 (4.6 KB) | 131.0 µs | 144.6 µs | **8.6 µs** | **17x** | **15x** |
+| 多语混排 ×50 (4.5 KB) | 138.9 µs | 160.3 µs | **15.2 µs** | **11x** | **9.2x** |
+| 对抗语料：CJK 无重复 (3.9 KB) | 131.7 µs | 141.2 µs | **25.9 µs** | **5.5x** | **5.1x** |
+| 代码 (3.9 KB) | 263.7 µs | 317.7 µs | **11.1 µs** | **29x** | **24x** |
 
-#### o200k_base encode
+o200k_base 比例一致（对 tiktoken-rs 5〜48 倍）。`count()` 比 `encode`
+再快 5〜15% —— 它从不分配 id 向量。
 
-| 输入 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs tiktoken-rs | vs Python |
-|---|---|---|---|---|---|
-| 短文本 (13 B) | 1,600 ns | 1,051 ns | **40 ns** | **26x** | **40x** |
-| 中等文本 (900 B) | 58.3 us | 56.2 us | **1.5 us** | **37x** | **39x** |
-| 长文本 (45 KB) | 2,900 us | 2,799 us | **73 us** | **38x** | **40x** |
-| Unicode (4.5 KB) | 204 us | 187 us | **95 us** | **2.0x** | **2.2x** |
-| 代码 (3.9 KB) | 332 us | 253 us | **16 us** | **16x** | **21x** |
+#### 浏览器内 — Mac Studio (M4 Max)、Chromium
+
+在 `web/` 目录 `npm run bench` —— 本 crate 编译为 wasm，对比两个主流
+JavaScript 分词器。
+
+| 语料 | gpt-tokenizer 3.4 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+|---|---|---|---|
+| 中文散文 (4.3 KB) | 36.8 µs | 8,029 µs | **13.4 µs** |
+| 日文散文 (4.6 KB) | 27.4 µs | 15,862 µs | **13.5 µs** |
+| 多语混排 ×50 (4.5 KB) | 41.2 µs | 4,665 µs | **24.2 µs** |
+| 对抗语料：CJK 无重复 (3.9 KB) | 49.6 µs | 3,832 µs | **40.3 µs** |
+| 英文文本 (45 KB) | 478 µs | 7,010 µs | **112.5 µs** |
+| 代码 (3.9 KB) | 76.0 µs | 916 µs | **19.5 µs** |
+
+对抗语料不含任何重复片段，各实现的记忆化全部失效 —— 那是下界，领先在下界处
+依然成立。
 
 <details>
 <summary>为什么更快？</summary>
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| 词表存储 | Arena（单次分配，缓存友好） | `HashMap<Vec<u8>>`（20 万次分配） | PyO3 背后的 Rust `HashMap` |
-| 预分词（ASCII） | 手写 ASCII 快路径，绕开正则 | 总是走正则 | 总是走正则 |
+| 预分词 | 手写扫描器同时覆盖 ASCII 与 CJK（汉字/假名/谚文、全角形式）；正则只作判准与罕见形状的兜底 | 总是走正则 | 总是走正则 |
 | 正则引擎（兜底） | `regex`（DFA，线性时间） | `fancy-regex`（回溯） | `regex` 经 PyO3 + FFI 开销 |
-| 哈希表 | 自定义开放寻址 + `FxHash` | `rustc-hash` v1 | 标准 `HashMap` |
+| 词表查找 | 按 key 长度分层：1〜2 字节直查表、3〜8 字节内联槽开放寻址、更长的带 tag 的 arena 槽 | `HashMap<Vec<u8>>`（20 万次分配） | PyO3 背后的 Rust `HashMap` |
+| 重复片段 | 线程局部直接映射记忆化，字节键 | 无 | 无 |
 | BPE 合并 | 混合：栈上线性扫描（短片段）+ 堆（长片段） | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
 | 零分配 `count()` | 有 | 无 | 无 |
 
-基准测试源码：[`benches/`](benches/)。可通过 `cargo bench` 复现。
+扫描器由属性测试钉死在正则语义上（每轮数十万条随机输入）；每套编码由
+44,518 组差分 fixture 钉死在厂商自己的分词器上。
+
+基准测试源码：[`benches/`](benches/)、[`../bench-compare/`](../bench-compare/)。
+可通过 `cargo bench` / `cargo run -p bench-compare` 复现。
 
 </details>
 
