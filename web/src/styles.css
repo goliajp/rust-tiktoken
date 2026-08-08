@@ -33,7 +33,11 @@
   --t6: #f2ecd6;
   --t7: #e6e3ef;
 
-  --serif: 'Newsreader', 'Songti SC', 'Hiragino Mincho ProN', Georgia, serif;
+  /* Archivo is a tight grotesque — engineered rather than literary; it does
+     the display work a serif used to. Plex Sans carries prose, Plex Mono
+     every number and identifier. CJK falls back to the system UI faces, not
+     Mincho: the page should read as modern in all three languages. */
+  --display: 'Archivo', 'PingFang SC', 'Hiragino Sans', 'Noto Sans CJK SC', sans-serif;
   --sans: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans', 'Noto Sans CJK SC', sans-serif;
   --mono: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
 
@@ -104,7 +108,7 @@ section {
   padding: 4rem 0;
 }
 
-/* section heading: §number in crimson, serif title */
+/* section heading: §number in crimson, tight grotesque title */
 .sechead {
   display: grid;
   grid-template-columns: 3.4rem 1fr;
@@ -127,11 +131,11 @@ section {
   padding-top: 0.45rem;
 }
 .sechead h2 {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: clamp(1.5rem, 3.2vw, 2.1rem);
-  line-height: 1.22;
-  letter-spacing: -0.008em;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(1.4rem, 3vw, 1.95rem);
+  line-height: 1.2;
+  letter-spacing: -0.022em;
 }
 .sechead .lede {
   grid-column: 2;
@@ -285,15 +289,15 @@ section {
   background: var(--red);
 }
 .frontmatter h1 {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: clamp(2.1rem, 5.2vw, 3.5rem);
-  line-height: 1.13;
-  letter-spacing: -0.018em;
-  max-width: 24ch;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(2rem, 5vw, 3.3rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  max-width: 22ch;
 }
 .frontmatter h1 em {
-  font-style: italic;
+  font-style: normal;
   color: var(--red);
 }
 .frontmatter .abstract {
@@ -667,9 +671,10 @@ textarea::placeholder {
   padding-top: 0.85rem;
 }
 .claim h3 {
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 1.12rem;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.02rem;
+  letter-spacing: -0.015em;
   margin-bottom: 0.45rem;
 }
 .claim p {
