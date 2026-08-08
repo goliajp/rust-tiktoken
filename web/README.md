@@ -10,8 +10,10 @@ switch persisted to `localStorage`.
 
 - **Vite + React + TypeScript** — no CSS framework; the design system is
   hand-written CSS in `src/styles.css`. Warm paper ground, ink black text,
-  hairline rules, crimson used structurally (section numbers, key figures,
-  links) rather than decoratively. All sans: Archivo — a tight grotesque —
+  hairline rules, GOLIA blue used structurally (section numbers, key figures,
+  links) rather than decoratively — the same `--color-blue-600` the company
+  site uses, resolved from oklch to sRGB so this page needs no colour-space
+  plumbing. All sans: Archivo — a tight grotesque —
   for headings, IBM Plex Sans for prose, IBM Plex Mono for every number and
   identifier. CJK falls back to the system UI faces (PingFang / Hiragino
   Sans), never Mincho, so the page reads as modern in all three languages.
