@@ -1,6 +1,6 @@
 [package]
 name = "tiktoken-wasm"
-version = "3.7.1"
+version = "3.8.0"
 edition = "2024"
 description = "WASM bindings for the tiktoken BPE tokenizer"
 license = "MIT OR Apache-2.0"
@@ -10,7 +10,7 @@ repository = "https://github.com/goliajp/rust-tiktoken"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tiktoken = { path = "../tiktoken", version = "3.7.1" }
+tiktoken = { path = "../tiktoken", version = "3.8.0" }
 wasm-bindgen = "^0.2"
 
 # Optimize for speed, not size: ~97% of the artifact is embedded vocabulary
