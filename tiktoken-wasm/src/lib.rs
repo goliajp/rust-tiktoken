@@ -222,6 +222,9 @@ fn parse_provider(s: &str) -> Option<tiktoken::pricing::Provider> {
         "DeepSeek" => Some(tiktoken::pricing::Provider::DeepSeek),
         "Alibaba" => Some(tiktoken::pricing::Provider::Alibaba),
         "Mistral" => Some(tiktoken::pricing::Provider::Mistral),
+        "Moonshot" => Some(tiktoken::pricing::Provider::Moonshot),
+        "Zhipu" => Some(tiktoken::pricing::Provider::Zhipu),
+        "MiniMax" => Some(tiktoken::pricing::Provider::MiniMax),
         _ => None,
     }
 }
@@ -384,6 +387,9 @@ mod tests {
         assert!(parse_provider("DeepSeek").is_some());
         assert!(parse_provider("Alibaba").is_some());
         assert!(parse_provider("Mistral").is_some());
+        assert!(parse_provider("Moonshot").is_some());
+        assert!(parse_provider("Zhipu").is_some());
+        assert!(parse_provider("MiniMax").is_some());
         assert!(parse_provider("Unknown").is_none());
     }
 }

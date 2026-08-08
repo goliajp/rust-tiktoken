@@ -1,4 +1,5 @@
-//! Per-model pricing data and cost estimation for OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
+//! Per-model pricing data and cost estimation for OpenAI, Anthropic, Google,
+//! Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, and MiniMax.
 //!
 //! Prices are in USD per 1M tokens. Updated as of 2026-08.
 //! Pricing changes frequently — verify against official docs before production billing.
@@ -21,6 +22,10 @@
 //!   `mistral-small` to the Small 4 rates ($0.15/$0.60).
 //! - **Meta**: unchanged. Meta has wound down its first-party Llama API, so
 //!   these entries remain third-party hoster rates (see the note below).
+//! - **Moonshot / Zhipu / MiniMax** (added late 2026-08): first-party rates
+//!   from platform.kimi.ai, docs.z.ai, and platform.minimax.io respectively.
+//!   Max-output limits are not published by any of the three — those entries
+//!   carry a conservative 32K placeholder.
 //!
 //! # Known gaps
 //!
@@ -73,6 +78,9 @@ pub enum Provider {
     DeepSeek,
     Alibaba,
     Mistral,
+    Moonshot,
+    Zhipu,
+    MiniMax,
 }
 
 impl std::fmt::Display for Provider {
@@ -85,6 +93,9 @@ impl std::fmt::Display for Provider {
             Self::DeepSeek => write!(f, "DeepSeek"),
             Self::Alibaba => write!(f, "Alibaba"),
             Self::Mistral => write!(f, "Mistral"),
+            Self::Moonshot => write!(f, "Moonshot"),
+            Self::Zhipu => write!(f, "Zhipu"),
+            Self::MiniMax => write!(f, "MiniMax"),
         }
     }
 }
@@ -523,7 +534,7 @@ pub fn estimate_cost(model_id: &str, input_tokens: u64, output_tokens: u64) -> O
 ///
 /// ```
 /// let models = tiktoken::pricing::all_models();
-/// assert!(models.len() >= 90);
+/// assert!(models.len() >= 100);
 /// ```
 pub fn all_models() -> &'static [Model] {
     ALL_MODELS
@@ -1823,6 +1834,170 @@ const MIXTRAL_8X7B: Model = model(
     4_096,
 );
 
+// ── Moonshot (Kimi) ─────────────────────────────────────
+// USD rates from the official Moonshot API price card (platform.kimi.ai),
+// read 2026-08-08. Max-output limits are not published on the price card;
+// entries carry a conservative 32K placeholder — verify before capacity
+// planning.
+
+/// kimi-k3 — flagship (2026-07-16). Flat rate across the full 1M context.
+const KIMI_K3_MODEL: Model = model(
+    "kimi-k3",
+    Provider::Moonshot,
+    3.00,
+    15.00,
+    Some(0.30),
+    1_048_576,
+    32_768,
+);
+
+/// kimi-k2.7-code — dedicated coding SKU.
+const KIMI_K27_CODE: Model = model(
+    "kimi-k2.7-code",
+    Provider::Moonshot,
+    0.95,
+    4.00,
+    Some(0.19),
+    262_144,
+    32_768,
+)
+.with_batch(0.57, 2.40);
+
+/// kimi-k2.6 — vision + text.
+const KIMI_K26: Model = model(
+    "kimi-k2.6",
+    Provider::Moonshot,
+    0.95,
+    4.00,
+    None,
+    262_144,
+    32_768,
+)
+.with_batch(0.57, 2.40);
+
+/// kimi-k2.5 — previous mid-tier.
+const KIMI_K25: Model = model(
+    "kimi-k2.5",
+    Provider::Moonshot,
+    0.60,
+    3.00,
+    None,
+    262_144,
+    32_768,
+)
+.with_batch(0.36, 1.80);
+
+// ── Zhipu (GLM / Z.ai) ──────────────────────────────────
+// USD rates from the official Z.ai pricing page (docs.z.ai), read 2026-08-08.
+// Context windows from the model release notes (5.2 = 1M; 4.x = 128K/200K);
+// max-output not published — 32K placeholder.
+
+/// glm-5.2 — flagship (2026-06-16, MIT open weights).
+const GLM_52: Model = model(
+    "glm-5.2",
+    Provider::Zhipu,
+    1.40,
+    4.40,
+    Some(0.26),
+    1_048_576,
+    32_768,
+);
+
+/// glm-5 — previous flagship (200K context per release notes).
+const GLM_5_MODEL: Model = model(
+    "glm-5",
+    Provider::Zhipu,
+    1.00,
+    3.20,
+    Some(0.20),
+    200_000,
+    32_768,
+);
+
+/// glm-4.7 — current 4.x mainline.
+const GLM_47: Model = model(
+    "glm-4.7",
+    Provider::Zhipu,
+    0.60,
+    2.20,
+    Some(0.11),
+    200_000,
+    32_768,
+);
+
+/// glm-4.5 — 2025 open-weights mainline.
+const GLM_45: Model = model(
+    "glm-4.5",
+    Provider::Zhipu,
+    0.60,
+    2.20,
+    Some(0.11),
+    131_072,
+    32_768,
+);
+
+/// glm-4.5-air — lightweight 4.5 SKU.
+const GLM_45_AIR: Model = model(
+    "glm-4.5-air",
+    Provider::Zhipu,
+    0.20,
+    1.10,
+    Some(0.03),
+    131_072,
+    32_768,
+);
+
+// ── MiniMax ─────────────────────────────────────────────
+// USD rates read directly from the official pay-as-you-go card
+// (platform.minimax.io/docs/guides/pricing-paygo), 2026-08-08. The M2 family
+// shares one tokenizer; `-highspeed` variants double the rate for faster
+// serving and are not modelled. Context window per the M2 release (204,800);
+// max-output not published — 32K placeholder.
+
+/// minimax-m2.7 — current mainline.
+const MINIMAX_M27: Model = model(
+    "minimax-m2.7",
+    Provider::MiniMax,
+    0.30,
+    1.20,
+    Some(0.06),
+    204_800,
+    32_768,
+);
+
+/// minimax-m2.5
+const MINIMAX_M25: Model = model(
+    "minimax-m2.5",
+    Provider::MiniMax,
+    0.30,
+    1.20,
+    Some(0.03),
+    204_800,
+    32_768,
+);
+
+/// minimax-m2.1
+const MINIMAX_M21: Model = model(
+    "minimax-m2.1",
+    Provider::MiniMax,
+    0.30,
+    1.20,
+    Some(0.03),
+    204_800,
+    32_768,
+);
+
+/// minimax-m2 — original M2 (2025-10).
+const MINIMAX_M2_MODEL: Model = model(
+    "minimax-m2",
+    Provider::MiniMax,
+    0.30,
+    1.20,
+    Some(0.03),
+    204_800,
+    32_768,
+);
+
 // ── Master list ─────────────────────────────────────────
 
 static ALL_MODELS: &[Model] = &[
@@ -1927,6 +2102,22 @@ static ALL_MODELS: &[Model] = &[
     MINISTRAL_14B,
     PIXTRAL_LARGE,
     MIXTRAL_8X7B,
+    // Moonshot
+    KIMI_K3_MODEL,
+    KIMI_K27_CODE,
+    KIMI_K26,
+    KIMI_K25,
+    // Zhipu
+    GLM_52,
+    GLM_5_MODEL,
+    GLM_47,
+    GLM_45,
+    GLM_45_AIR,
+    // MiniMax
+    MINIMAX_M27,
+    MINIMAX_M25,
+    MINIMAX_M21,
+    MINIMAX_M2_MODEL,
 ];
 
 #[cfg(test)]
