@@ -51,7 +51,9 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
     // short pieces: linear scan with stack-allocated scratch (no heap, no Vec
     // bookkeeping). This is the common case after pre-tokenization.
     if n <= LINEAR_THRESHOLD {
-        return byte_pair_merge_small(piece, vocab);
+        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
+        let plen = byte_pair_merge_small(piece, vocab, &mut parts);
+        return parts[..plen].iter().map(|&p| p as usize).collect();
     }
 
     // doubly-linked list over byte positions 0..n
@@ -68,7 +70,7 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
 
     // initialize: compute ranks for all adjacent pairs
     for i in 0..n - 1 {
-        if let Some(rank) = vocab.get(&piece[i..i + 2]) {
+        if let Some(rank) = vocab.get_pair(piece[i], piece[i + 1]) {
             rank_at[i] = rank;
             heap.push(Reverse((rank, i as u32)));
         }
@@ -151,13 +153,19 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
 /// short pieces that dominate real input.
 ///
 /// Caller guarantees `3 <= n <= LINEAR_THRESHOLD`.
+///
+/// Fills `parts` with the sub-token boundary offsets and returns how many of
+/// them are valid, so callers that only need the token *count* never allocate.
 #[allow(clippy::needless_range_loop)] // index loops mirror the Viterbi reference; clearer than iterators
-fn byte_pair_merge_small(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
+fn byte_pair_merge_small(
+    piece: &[u8],
+    vocab: &Vocab,
+    parts: &mut [u32; LINEAR_THRESHOLD + 1],
+) -> usize {
     let n = piece.len();
 
     // parts[i] = byte offset of the i-th sub-token boundary; plen entries valid.
     // ranks[i] = rank of the pair (parts[i], parts[i+2]) or u32::MAX if unmergeable.
-    let mut parts = [0u32; LINEAR_THRESHOLD + 1];
     let mut ranks = [u32::MAX; LINEAR_THRESHOLD + 1];
     for i in 0..=n {
         parts[i] = i as u32;
@@ -165,10 +173,8 @@ fn byte_pair_merge_small(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
     let mut plen = n + 1;
 
     // initialize ranks for all adjacent single-byte pairs
-    for i in 0..plen {
-        if i + 2 < plen {
-            ranks[i] = vocab.get(&piece[i..i + 2]).unwrap_or(u32::MAX);
-        }
+    for i in 0..n.saturating_sub(1) {
+        ranks[i] = vocab.get_pair(piece[i], piece[i + 1]).unwrap_or(u32::MAX);
     }
 
     loop {
@@ -213,11 +219,7 @@ fn byte_pair_merge_small(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
         }
     }
 
-    let mut result = Vec::with_capacity(plen);
-    for &p in &parts[..plen] {
-        result.push(p as usize);
-    }
-    result
+    plen
 }
 
 /// BPE-encode a piece, writing tokens directly to result.
@@ -227,8 +229,18 @@ fn byte_pair_merge_small(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
 /// Panics if a single byte or merged sub-token is missing from `vocab`.
 /// Callers must ensure the vocabulary contains all 256 single bytes.
 pub fn bpe_encode(piece: &[u8], vocab: &Vocab, result: &mut Vec<u32>) {
-    if piece.len() == 1 {
+    let n = piece.len();
+    if n == 1 {
         result.push(vocab.get(piece).expect("single byte not in vocab"));
+        return;
+    }
+    if (3..=LINEAR_THRESHOLD).contains(&n) {
+        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
+        let plen = byte_pair_merge_small(piece, vocab, &mut parts);
+        for i in 0..plen - 1 {
+            let key = &piece[parts[i] as usize..parts[i + 1] as usize];
+            result.push(vocab.get(key).expect("merged token not in vocab"));
+        }
         return;
     }
 
@@ -242,8 +254,13 @@ pub fn bpe_encode(piece: &[u8], vocab: &Vocab, result: &mut Vec<u32>) {
 
 /// Count tokens in a piece without allocating a token vector.
 pub fn bpe_count(piece: &[u8], vocab: &Vocab) -> usize {
-    if piece.len() == 1 {
+    let n = piece.len();
+    if n == 1 {
         return 1;
+    }
+    if (3..=LINEAR_THRESHOLD).contains(&n) {
+        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
+        return byte_pair_merge_small(piece, vocab, &mut parts) - 1;
     }
     byte_pair_merge(piece, vocab).len() - 1
 }

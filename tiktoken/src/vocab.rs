@@ -1,51 +1,106 @@
-//! Arena-based vocabulary storage for zero-allocation token lookup.
+//! Vocabulary storage tuned for the BPE merge's access pattern.
 //!
-//! All token byte sequences are stored contiguously in a single `Box<[u8]>` arena.
-//! Encoding lookups use an open-addressing hash table with linear probing and
-//! `FxHash` for fast, low-collision hashing. Decoding uses direct indexing by rank
-//! into a pre-built `(offset, len)` table. This design replaces ~200k individual
-//! `Vec<u8>` heap allocations with a single contiguous block.
+//! The merge loop is lookup-bound: on Unicode-dense input it performs ~2.4
+//! vocabulary probes per emitted token, 77% of them misses, and 96.7% of the
+//! keys are 8 bytes or shorter (59% are exactly 2 — the initial adjacent-pair
+//! scan). See `PERF-2026-08-08-unicode-decomposition.md`. The layout serves
+//! those classes directly:
+//!
+//! - **2-byte keys** — a direct-indexed table of 65,536 ranks. No hash, no
+//!   probe, no byte comparison; one access into 256 KB.
+//! - **1-byte keys** — a direct-indexed table of 256 ranks.
+//! - **3–8-byte keys** — open addressing with the key bytes inlined into the
+//!   16-byte slot. A probe is one memory access and one `u64` compare; a miss
+//!   terminates at the first empty slot without ever touching the arena.
+//! - **longer keys** — open addressing with an arena reference plus an 8-bit
+//!   hash tag in the slot, so a mismatched slot is rejected without loading
+//!   the arena bytes.
+//!
+//! Decoding is unchanged: direct indexing by rank into a contiguous arena.
 
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 
-/// Arena-based BPE vocabulary with open-addressing hash table.
-///
-/// All token bytes are stored contiguously in a single allocation (`arena`).
-/// Encoding uses an open-addressing hash table with linear probing and
-/// byte-content comparison on collision. Decoding uses direct indexing by rank.
+/// Longest key stored inline in a slot. Above this, the slot holds an arena
+/// offset and a hash tag instead of the bytes themselves.
+const INLINE_MAX: usize = 8;
+
+/// Rank sentinel for "absent" in the direct-indexed tables.
+const ABSENT: u32 = u32::MAX;
+
 pub struct Vocab {
+    // all token bytes, contiguous; referenced by `decoder` and by spill slots
     arena: Box<[u8]>,
-    // open-addressing hash table: each slot is (rank, offset, len) or EMPTY
-    // indexed by hash(token) & mask, linear probing on collision
+    // rank by first byte, for 1-byte keys; ABSENT if missing
+    single: Box<[u32]>,
+    // rank by (first byte << 8 | second byte), for 2-byte keys
+    pair: Box<[u32]>,
+    // open addressing, linear probing, for keys of 3+ bytes
     table: Box<[Slot]>,
     mask: usize,
-    // indexed by rank: (offset, len) for decode
+    // indexed by rank: (offset, len) into the arena, for decode
     decoder: Box<[(u32, u16)]>,
 }
 
+/// One 16-byte slot.
+///
+/// `len == 0` marks an empty slot. For `3..=INLINE_MAX`, `key` holds the token
+/// bytes little-endian, zero-padded — equality is a single integer compare.
+/// For longer keys, `key`'s low 32 bits hold the arena offset and bits 32..40
+/// an 8-bit tag from the unused high hash bits; the tag rejects most
+/// mismatched slots without an arena load.
 #[derive(Clone, Copy)]
+#[repr(C)]
 struct Slot {
+    key: u64,
     rank: u32,
-    offset: u32,
-    len: u16,
-    occupied: bool,
+    len: u32,
 }
 
-impl Slot {
-    const EMPTY: Self = Self {
-        rank: 0,
-        offset: 0,
-        len: 0,
-        occupied: false,
-    };
+const EMPTY: Slot = Slot {
+    key: 0,
+    rank: 0,
+    len: 0,
+};
+
+/// Load 3..=8 bytes as a zero-padded little-endian u64 with two overlapping
+/// word reads instead of a variable-length copy.
+#[inline]
+fn load_inline_key(bytes: &[u8]) -> u64 {
+    let len = bytes.len();
+    debug_assert!((3..=INLINE_MAX).contains(&len));
+    if len >= 4 {
+        let lo = u32::from_le_bytes(bytes[..4].try_into().unwrap()) as u64;
+        let hi = u32::from_le_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
+        // the reads overlap on 8 - len bytes; identical bits, so OR is exact
+        lo | (hi << ((len - 4) * 8))
+    } else {
+        (bytes[0] as u64) | ((bytes[1] as u64) << 8) | ((bytes[2] as u64) << 16)
+    }
+}
+
+/// Hash for inline keys: multiply–xorshift over the padded key with the
+/// length folded in (tokens may contain NUL bytes, so "ab" and "ab\0" share a
+/// padded key and must not share a bucket chain shape).
+#[inline]
+fn hash_inline(key: u64, len: usize) -> u64 {
+    let x = key.wrapping_add((len as u64).wrapping_mul(0xA24B_AED4_963E_E407));
+    let h = x.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    h ^ (h >> 32)
+}
+
+/// Hash for spill (> 8-byte) keys.
+#[inline]
+fn hash_spill(bytes: &[u8]) -> u64 {
+    let mut hasher = FxHasher::default();
+    bytes.hash(&mut hasher);
+    let h = hasher.finish();
+    h ^ (h >> 32)
 }
 
 #[inline]
-fn fx_hash(bytes: &[u8]) -> u64 {
-    let mut hasher = FxHasher::default();
-    bytes.hash(&mut hasher);
-    hasher.finish()
+fn spill_tag(hash: u64) -> u64 {
+    (hash >> 56) & 0xFF
 }
 
 impl Vocab {
@@ -54,6 +109,8 @@ impl Vocab {
         if entries.is_empty() {
             return Self {
                 arena: Box::new([]),
+                single: Box::new([]),
+                pair: Box::new([]),
                 table: Box::new([]),
                 mask: 0,
                 decoder: Box::new([]),
@@ -62,7 +119,7 @@ impl Vocab {
 
         let max_rank = entries.iter().map(|(_, r)| *r).max().unwrap_or(0);
 
-        // build arena
+        // arena + decoder hold every token regardless of lookup class
         let total_bytes: usize = entries.iter().map(|(k, _)| k.len()).sum();
         let mut arena = Vec::with_capacity(total_bytes);
         let mut items: Vec<(u32, u32, u16)> = Vec::with_capacity(entries.len());
@@ -93,30 +150,52 @@ impl Vocab {
 
         let arena = arena.into_boxed_slice();
 
-        // build hash table (load factor ~50% for good performance)
+        let mut single = vec![ABSENT; 256];
+        let mut pair = vec![ABSENT; 1 << 16];
+
+        // sized on the full entry count even though 1- and 2-byte keys never
+        // enter it — the resulting sub-50% load factor keeps probe chains short
         let table_size = (entries.len() * 2).next_power_of_two();
         let mask = table_size - 1;
-        let mut table = vec![Slot::EMPTY; table_size];
+        let mut table = vec![EMPTY; table_size];
 
         for &(rank, offset, len) in &items {
             let token = &arena[offset as usize..(offset as usize + len as usize)];
-            let mut idx = fx_hash(token) as usize & mask;
-            loop {
-                if !table[idx].occupied {
+            match token.len() {
+                0 => {}
+                1 => single[token[0] as usize] = rank,
+                2 => pair[(token[0] as usize) << 8 | token[1] as usize] = rank,
+                l if l <= INLINE_MAX => {
+                    let key = load_inline_key(token);
+                    let mut idx = hash_inline(key, l) as usize & mask;
+                    while table[idx].len != 0 {
+                        idx = (idx + 1) & mask;
+                    }
                     table[idx] = Slot {
+                        key,
                         rank,
-                        offset,
-                        len,
-                        occupied: true,
+                        len: l as u32,
                     };
-                    break;
                 }
-                idx = (idx + 1) & mask;
+                l => {
+                    let hash = hash_spill(token);
+                    let mut idx = hash as usize & mask;
+                    while table[idx].len != 0 {
+                        idx = (idx + 1) & mask;
+                    }
+                    table[idx] = Slot {
+                        key: (offset as u64) | (spill_tag(hash) << 32),
+                        rank,
+                        len: l as u32,
+                    };
+                }
             }
         }
 
         Self {
             arena,
+            single: single.into_boxed_slice(),
+            pair: pair.into_boxed_slice(),
             table: table.into_boxed_slice(),
             mask,
             decoder: decoder.into_boxed_slice(),
@@ -126,22 +205,64 @@ impl Vocab {
     /// Look up the rank for a token byte sequence.
     #[inline]
     pub(crate) fn get(&self, token: &[u8]) -> Option<u32> {
+        // empty vocab ⇔ empty table (a non-empty build always allocates it)
         if self.table.is_empty() {
             return None;
         }
-        let mut idx = fx_hash(token) as usize & self.mask;
-        loop {
-            let slot = &self.table[idx];
-            if !slot.occupied {
-                return None;
+        match token.len() {
+            0 => None,
+            1 => {
+                let rank = self.single[token[0] as usize];
+                (rank != ABSENT).then_some(rank)
             }
-            let stored =
-                &self.arena[slot.offset as usize..(slot.offset as usize + slot.len as usize)];
-            if stored == token {
-                return Some(slot.rank);
+            2 => {
+                let rank = self.pair[(token[0] as usize) << 8 | token[1] as usize];
+                (rank != ABSENT).then_some(rank)
             }
-            idx = (idx + 1) & self.mask;
+            len if len <= INLINE_MAX => {
+                let key = load_inline_key(token);
+                let mut idx = hash_inline(key, len) as usize & self.mask;
+                loop {
+                    let slot = self.table[idx];
+                    if slot.len == 0 {
+                        return None;
+                    }
+                    if slot.len == len as u32 && slot.key == key {
+                        return Some(slot.rank);
+                    }
+                    idx = (idx + 1) & self.mask;
+                }
+            }
+            len => {
+                let hash = hash_spill(token);
+                let tag = spill_tag(hash);
+                let mut idx = hash as usize & self.mask;
+                loop {
+                    let slot = self.table[idx];
+                    if slot.len == 0 {
+                        return None;
+                    }
+                    if slot.len == len as u32 && (slot.key >> 32) & 0xFF == tag {
+                        let offset = (slot.key & 0xFFFF_FFFF) as usize;
+                        if &self.arena[offset..offset + len] == token {
+                            return Some(slot.rank);
+                        }
+                    }
+                    idx = (idx + 1) & self.mask;
+                }
+            }
         }
+    }
+
+    /// Look up the rank of a 2-byte key without slicing: the merge loop's
+    /// initial adjacent-pair scan, which is the single hottest lookup class.
+    #[inline]
+    pub(crate) fn get_pair(&self, a: u8, b: u8) -> Option<u32> {
+        if self.pair.is_empty() {
+            return None;
+        }
+        let rank = self.pair[(a as usize) << 8 | b as usize];
+        (rank != ABSENT).then_some(rank)
     }
 
     /// Check if a token byte sequence exists in the vocabulary.
@@ -225,6 +346,14 @@ mod tests {
     }
 
     #[test]
+    fn test_get_pair() {
+        let vocab = Vocab::from_entries(sample_entries());
+        assert_eq!(vocab.get_pair(b'a', b'b'), Some(2));
+        assert_eq!(vocab.get_pair(b'b', b'a'), None);
+        assert_eq!(vocab.get_pair(0, 0), None);
+    }
+
+    #[test]
     fn test_decode_roundtrip() {
         let entries = sample_entries();
         let vocab = Vocab::from_entries(entries.clone());
@@ -248,6 +377,7 @@ mod tests {
         let vocab = Vocab::from_entries(vec![]);
         assert_eq!(vocab.get(b"anything"), None);
         assert!(!vocab.contains_key(b"x"));
+        assert_eq!(vocab.get_pair(b'a', b'b'), None);
     }
 
     #[test]
@@ -256,6 +386,38 @@ mod tests {
         let vocab = Vocab::from_entries(vec![(long.clone(), 99)]);
         assert_eq!(vocab.get(&long), Some(99));
         assert_eq!(vocab.decode(99), long.as_slice());
+    }
+
+    #[test]
+    fn test_inline_boundary_lengths() {
+        // exercise every routing class: 1, 2, 3, 4, 7, 8 (inline), 9 (spill)
+        let entries: Vec<(Vec<u8>, u32)> = [1usize, 2, 3, 4, 7, 8, 9]
+            .iter()
+            .enumerate()
+            .map(|(i, &l)| (vec![b'x'; l], i as u32))
+            .collect();
+        let vocab = Vocab::from_entries(entries.clone());
+        for (token, rank) in &entries {
+            assert_eq!(vocab.get(token), Some(*rank), "len={}", token.len());
+        }
+        assert_eq!(vocab.get(&[b'x'; 5]), None);
+        assert_eq!(vocab.get(&[b'x'; 10]), None);
+    }
+
+    #[test]
+    fn test_nul_padding_not_confused() {
+        // "ab" (len 2) and "ab\0" (len 3) and "ab\0\0" (len 4) share padded
+        // key bits; length must separate them in every class
+        let entries = vec![
+            (b"ab".to_vec(), 1),
+            (b"ab\0".to_vec(), 2),
+            (b"ab\0\0".to_vec(), 3),
+        ];
+        let vocab = Vocab::from_entries(entries);
+        assert_eq!(vocab.get(b"ab"), Some(1));
+        assert_eq!(vocab.get(b"ab\0"), Some(2));
+        assert_eq!(vocab.get(b"ab\0\0"), Some(3));
+        assert_eq!(vocab.get(b"ab\0\0\0"), None);
     }
 
     #[test]
