@@ -2677,6 +2677,9 @@ mod tests {
             Provider::DeepSeek,
             Provider::Alibaba,
             Provider::Mistral,
+            Provider::Moonshot,
+            Provider::Zhipu,
+            Provider::MiniMax,
         ]
         .iter()
         .map(|p| models_by_provider(*p).len())

@@ -897,13 +897,16 @@ mod tests {
 
     #[test]
     fn test_model_to_encoding_deepseek() {
-        for model in ["deepseek-v3", "DeepSeek-R1", "deepseek-chat"] {
+        // pre-V4 models keep the V3 encoding
+        for model in ["deepseek-v3", "DeepSeek-R1"] {
             assert_eq!(
                 model_to_encoding(model),
                 Some("deepseek_v3"),
                 "wrong encoding for {model}"
             );
         }
+        // the API alias moved to V4 on 2026-07-24
+        assert_eq!(model_to_encoding("deepseek-chat"), Some("deepseek_v4"));
     }
 
     #[test]
