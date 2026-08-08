@@ -71,9 +71,10 @@ node verify.mjs https://tiktoken.golia.jp   # against the live site
 ```
 
 It checks three viewports for horizontal overflow (including the code
-blocks, which wrap rather than scroll), verifies CJK line-breaking (no
-line may start with closing punctuation, and none may break inside a word,
-in either Chinese or Japanese), collects console and page
+blocks, which wrap rather than scroll), verifies CJK line-breaking three ways
+(no rendered line starts with closing punctuation, none breaks inside a word,
+and — font-independently — no break opportunity is offered where kinsoku
+forbids one), collects console and page
 errors, confirms the GOLIA mark loads, drives the playground and asserts it returns
 tokens, checks that the paired columns line up (playground panes and install
 columns, top and bottom, plus matching type metrics between the two panes),
