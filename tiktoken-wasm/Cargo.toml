@@ -13,12 +13,15 @@ crate-type = ["cdylib", "rlib"]
 tiktoken = { path = "../tiktoken", version = "3.7.1" }
 wasm-bindgen = "^0.2"
 
+# Optimize for speed, not size: ~97% of the artifact is embedded vocabulary
+# data, so `-O3` on the code section costs a few hundred KB against 11 MB —
+# while `-Os` was taxing every count()/encode() call in the browser.
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Os", "--enable-bulk-memory"]
+wasm-opt = ["-O3", "--enable-bulk-memory"]
 
 [profile.release]
 lto = true
 codegen-units = 1
-opt-level = "s"
+opt-level = 3
 strip = true
 panic = "abort"

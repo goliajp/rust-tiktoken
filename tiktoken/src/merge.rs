@@ -252,6 +252,36 @@ pub fn bpe_encode(piece: &[u8], vocab: &Vocab, result: &mut Vec<u32>) {
     }
 }
 
+/// BPE-encode a piece into a fixed buffer, returning the token count.
+///
+/// # Panics
+///
+/// Panics if `buf` is shorter than the token count (callers pass a buffer of
+/// `piece.len()`, the worst case of one token per byte) or if the vocabulary
+/// is missing a single byte or merged sub-token.
+pub fn bpe_encode_buf(piece: &[u8], vocab: &Vocab, buf: &mut [u32]) -> usize {
+    let n = piece.len();
+    if n == 1 {
+        buf[0] = vocab.get(piece).expect("single byte not in vocab");
+        return 1;
+    }
+    if (3..=LINEAR_THRESHOLD).contains(&n) {
+        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
+        let plen = byte_pair_merge_small(piece, vocab, &mut parts);
+        for i in 0..plen - 1 {
+            let key = &piece[parts[i] as usize..parts[i + 1] as usize];
+            buf[i] = vocab.get(key).expect("merged token not in vocab");
+        }
+        return plen - 1;
+    }
+    let parts = byte_pair_merge(piece, vocab);
+    for i in 0..parts.len() - 1 {
+        let key = &piece[parts[i]..parts[i + 1]];
+        buf[i] = vocab.get(key).expect("merged token not in vocab");
+    }
+    parts.len() - 1
+}
+
 /// Count tokens in a piece without allocating a token vector.
 pub fn bpe_count(piece: &[u8], vocab: &Vocab) -> usize {
     let n = piece.len();
