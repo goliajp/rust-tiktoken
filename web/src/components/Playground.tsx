@@ -33,6 +33,7 @@ export function Playground() {
   const [enc, setEnc] = useState('o200k_base')
   const [text, setText] = useState('')
   const [view, setView] = useState<'text' | 'ids'>('text')
+  const [hover, setHover] = useState<{ i: number; seg: Segment } | null>(null)
 
   useEffect(() => {
     initWasm()
@@ -92,6 +93,22 @@ export function Playground() {
 
       {state === 'ready' && (
         <>
+          {/* Full width: the metrics belong to the pair, and keeping them out
+              of the output column is what lets the two panes start level. */}
+          <div className="pg-meters">
+            <div className="meter lead">
+              <div className="v">{result.ids.length.toLocaleString()}</div>
+              <div className="k">{t('pg.tokens')}</div>
+            </div>
+            <div className="meter">
+              <div className="v">{[...text].length.toLocaleString()}</div>
+              <div className="k">{t('pg.chars')}</div>
+            </div>
+            <div className="meter">
+              <div className="v">{utf8Len(text).toLocaleString()}</div>
+              <div className="k">{t('pg.bytes')}</div>
+            </div>
+          </div>
           <div className="pg-body">
             <div className="pg-input">
               <textarea
@@ -102,28 +119,17 @@ export function Playground() {
               />
             </div>
             <div className="pg-output">
-              <div className="pg-meters">
-                <div className="meter lead">
-                  <div className="v">{result.ids.length.toLocaleString()}</div>
-                  <div className="k">{t('pg.tokens')}</div>
-                </div>
-                <div className="meter">
-                  <div className="v">{[...text].length.toLocaleString()}</div>
-                  <div className="k">{t('pg.chars')}</div>
-                </div>
-                <div className="meter">
-                  <div className="v">{utf8Len(text).toLocaleString()}</div>
-                  <div className="k">{t('pg.bytes')}</div>
-                </div>
-              </div>
-              <div className="pg-tokens">
-                {view === 'text' ? (
+              <div className="pg-tokens" onMouseLeave={() => setHover(null)}>
+                {result.segs.length === 0 ? (
+                  <div className="pg-empty">{t('pg.empty')}</div>
+                ) : view === 'text' ? (
                   result.segs.map((s, i) => (
                     <span
                       key={i}
                       className={`tok c${i % 7}`}
                       style={{ animationDelay: `${Math.min(i * 5, 300)}ms` }}
                       title={`id ${s.id}`}
+                      onMouseEnter={() => setHover({ i, seg: s })}
                     >
                       {s.text}
                     </span>
@@ -144,7 +150,14 @@ export function Playground() {
             </div>
           </div>
           <div className="pg-foot">
-            <span>{t('pg.foot')}</span>
+            {hover ? (
+              <span className="pg-hover">
+                #{hover.i + 1} · id <span className="id">{hover.seg.id}</span> ·{' '}
+                <span className="lit">{JSON.stringify(hover.seg.text).slice(1, -1)}</span>
+              </span>
+            ) : (
+              <span>{t('pg.foot')}</span>
+            )}
             <div className="viewswitch">
               <button className={view === 'text' ? 'on' : ''} onClick={() => setView('text')}>
                 {t('pg.view.text')}

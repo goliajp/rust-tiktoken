@@ -91,6 +91,11 @@ const dict: Dict = {
     zh: 'WebAssembly 模块加载失败。通常强制刷新即可恢复。',
     ja: 'WebAssembly モジュールの読み込みに失敗しました。強制リロードで解消することが多いです。',
   },
+  'pg.empty': {
+    en: 'Tokens appear here as you type.',
+    zh: '输入后，token 会显示在这里。',
+    ja: '入力すると、ここにトークンが表示されます。',
+  },
   'pg.foot': {
     en: 'Executed locally in this browser',
     zh: '在本浏览器内本地执行',

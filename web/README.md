@@ -62,9 +62,10 @@ node verify.mjs https://tiktoken.golia.jp   # against the live site
 
 It checks three viewports for horizontal overflow (including the code
 blocks, which wrap rather than scroll), collects console and page
-errors, confirms the GOLIA mark loads, drives the playground and asserts it
-returns tokens, and confirms the light treatment survives a dark
-`prefers-color-scheme`. This is worth running: the overflow check caught a
+errors, confirms the GOLIA mark loads, drives the playground and asserts it returns
+tokens, checks that the paired columns line up (playground panes and install
+columns, top and bottom, plus matching type metrics between the two panes),
+and confirms the light treatment survives a dark `prefers-color-scheme`. This is worth running: the overflow check caught a
 real bug (grid items default to `min-width: auto`, so a long package name in
 a code block header was widening the page on mobile).
 
