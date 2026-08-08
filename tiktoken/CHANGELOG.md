@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.7.1] - 2026-08-08
+
+### Changed
+- Dependencies: `base64` `^0.22` → `^0.23`, `ruzstd` `^0.8` → `^0.9`
+  (dependabot #10 / #8). Vocabulary decompression and parsing verified on the
+  new versions: full oracle suites plus the reference differential corpora —
+  167,849 comparisons across all 16 fixture-covered encodings, 0 divergences.
+- CI: `actions/checkout` v6 → v7, `actions/setup-node` v6 → v7,
+  `taiki-e/install-action` pinned to v2.85.4 (dependabot #4 / #9 / #7).
+
+### Credit
+- The 3.6.0 newline-splitting fix was first reported **and first patched** by
+  @morluto (issue #5, PR #6). The shipped implementation arrived independently
+  with the same core approach; the report and patch are what got it found —
+  recording the credit here as it was missing from the 3.6.0 entry.
+
+
 ## [3.7.0] - 2026-08-08
 
 ### Added
