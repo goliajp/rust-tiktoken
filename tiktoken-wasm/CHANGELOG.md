@@ -5,6 +5,12 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.1] - 2026-08-08
+
+Dependency refresh in lockstep with `tiktoken` 3.7.1 (`base64` 0.23, `ruzstd`
+0.9); no behavior change — vocabulary loading re-verified against the full
+reference differential corpora on the new versions.
+
 ## [3.7.0] - 2026-08-08
 
 Inherits `tiktoken` 3.7.0 — see the [crate changelog](../tiktoken/CHANGELOG.md).
