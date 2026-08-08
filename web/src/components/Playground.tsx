@@ -12,7 +12,17 @@ Sequences of characters commonly found next to each other may be grouped: 123456
 Emoji are split into their underlying bytes: 🤚🏾`
 
 // Encodings we surface first in the picker; the rest follow alphabetically.
-const FEATURED = ['o200k_base', 'cl100k_base', 'kimi_k3', 'glm5', 'deepseek_v4', 'qwen2', 'minimax_m2', 'llama3', 'mistral_v3']
+const FEATURED = [
+  'o200k_base',
+  'cl100k_base',
+  'kimi_k3',
+  'glm5',
+  'deepseek_v4',
+  'qwen2',
+  'minimax_m2',
+  'llama3',
+  'mistral_v3',
+]
 
 type WasmState = 'loading' | 'ready' | 'error'
 
@@ -46,14 +56,21 @@ export function Playground() {
   }, [state, enc, text])
 
   return (
-    <div className="playground" id="playground">
+    <div className="playground">
       <div className="pg-head">
-        <span className="title">{t('pg.title')}</span>
+        <span className="cap">
+          {t('pg.cap')} <b>{enc}</b>
+        </span>
         <div className="pg-controls">
-          <button className="cb-copy" onClick={() => setText(EXAMPLE)} style={{ fontSize: '0.78rem' }}>
+          <button className="linkbtn" onClick={() => setText(EXAMPLE)}>
             {t('pg.example')}
           </button>
-          <select value={enc} onChange={(e) => setEnc(e.target.value)} disabled={state !== 'ready'} aria-label="encoding">
+          <select
+            value={enc}
+            onChange={(e) => setEnc(e.target.value)}
+            disabled={state !== 'ready'}
+            aria-label="encoding"
+          >
             {(names.length ? names : [enc]).map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -86,17 +103,17 @@ export function Playground() {
             </div>
             <div className="pg-output">
               <div className="pg-meters">
-                <div className="meter">
-                  <div className="n">{result.ids.length.toLocaleString()}</div>
-                  <div className="l">{t('pg.tokens')}</div>
+                <div className="meter lead">
+                  <div className="v">{result.ids.length.toLocaleString()}</div>
+                  <div className="k">{t('pg.tokens')}</div>
                 </div>
                 <div className="meter">
-                  <div className="n">{[...text].length.toLocaleString()}</div>
-                  <div className="l">{t('pg.chars')}</div>
+                  <div className="v">{[...text].length.toLocaleString()}</div>
+                  <div className="k">{t('pg.chars')}</div>
                 </div>
                 <div className="meter">
-                  <div className="n">{utf8Len(text).toLocaleString()}</div>
-                  <div className="l">{t('pg.bytes')}</div>
+                  <div className="v">{utf8Len(text).toLocaleString()}</div>
+                  <div className="k">{t('pg.bytes')}</div>
                 </div>
               </div>
               <div className="pg-tokens">
@@ -105,7 +122,7 @@ export function Playground() {
                     <span
                       key={i}
                       className={`tok c${i % 7}`}
-                      style={{ animationDelay: `${Math.min(i * 6, 400)}ms` }}
+                      style={{ animationDelay: `${Math.min(i * 5, 300)}ms` }}
                       title={`id ${s.id}`}
                     >
                       {s.text}
@@ -113,12 +130,14 @@ export function Playground() {
                   ))
                 ) : (
                   <div className="pg-ids">
-                    [{result.ids.map((id, i) => (
+                    [
+                    {result.ids.map((id, i) => (
                       <span key={i}>
                         {i > 0 && ', '}
                         <b>{id}</b>
                       </span>
-                    ))}]
+                    ))}
+                    ]
                   </div>
                 )}
               </div>

@@ -1,5 +1,9 @@
 // Trilingual dictionary + a tiny hook. No i18n library: three locales, one
 // page, a flat key space — a Record and a context are the whole machinery.
+//
+// Register: this is a research-project page, so the copy states what was
+// measured and how, and avoids marketing superlatives that the repository
+// cannot back with a number.
 
 import { createContext, useContext } from 'react'
 
@@ -23,143 +27,168 @@ export function detectLang(): Lang {
 type Dict = Record<string, { en: string; zh: string; ja: string }>
 
 const dict: Dict = {
-  // top nav
-  'nav.playground': { en: 'Playground', zh: '在线体验', ja: 'プレイグラウンド' },
-  'nav.encodings': { en: 'Encodings', zh: '编码支持', ja: 'エンコーディング' },
-  'nav.performance': { en: 'Performance', zh: '性能', ja: 'パフォーマンス' },
-  'nav.install': { en: 'Install', zh: '安装', ja: 'インストール' },
+  // masthead
+  'brand.lab': { en: 'Golia Lab', zh: 'Golia Lab', ja: 'Golia Lab' },
+  'nav.playground': { en: 'Playground', zh: '在线试用', ja: 'プレイグラウンド' },
+  'nav.encodings': { en: 'Encodings', zh: '编码', ja: 'エンコーディング' },
+  'nav.performance': { en: 'Performance', zh: '性能', ja: '性能' },
+  'nav.install': { en: 'Install', zh: '安装', ja: '導入' },
 
-  // hero
-  'hero.title.pre': { en: 'The fastest Rust BPE tokenizer, ', zh: '最快的 Rust BPE 分词器，', ja: '最速の Rust 製 BPE トークナイザー。' },
-  'hero.title.accent': { en: 'running right here in your browser.', zh: '就在你的浏览器里运行。', ja: 'いま、このブラウザ上で動いています。' },
-  'hero.sub': {
-    en: 'Drop-in compatible with OpenAI tiktoken, byte-exact against every reference tokenizer it reimplements — verified over 167,000+ differential comparisons. 17 encodings across 8 vendors, embedded vocabularies, zero C dependencies.',
-    zh: '与 OpenAI tiktoken 完全兼容，对每一个重实现的参考分词器做到字节级一致 —— 经 167,000+ 次差分对照验证。17 套编码、8 家厂商、词表内嵌、零 C 依赖。',
-    ja: 'OpenAI tiktoken と完全互換。再実装したすべての参照トークナイザーとバイト単位で一致 — 167,000 回超の差分照合で検証済み。17 エンコーディング・8 ベンダー・語彙内蔵・C 依存ゼロ。',
+  // front matter
+  'front.eyebrow': {
+    en: 'A Golia Lab project · Open source',
+    zh: 'Golia Lab 研究项目 · 开源',
+    ja: 'Golia Lab のプロジェクト · オープンソース',
   },
-  'hero.stat.speed': { en: 'vs tiktoken-rs (ASCII)', zh: '对比 tiktoken-rs（ASCII）', ja: 'tiktoken-rs 比（ASCII）' },
-  'hero.stat.encodings': { en: 'encodings', zh: '套编码', ja: 'エンコーディング' },
-  'hero.stat.models': { en: 'models priced', zh: '个模型价格', ja: 'モデル料金対応' },
-  'hero.stat.short': { en: 'short-text encode', zh: '短文本编码', ja: '短文エンコード' },
-  'hero.cta.github': { en: 'GitHub', zh: 'GitHub', ja: 'GitHub' },
-  'hero.cta.crates': { en: 'crates.io', zh: 'crates.io', ja: 'crates.io' },
-  'hero.cta.npm': { en: 'npm', zh: 'npm', ja: 'npm' },
-  'hero.cta.try': { en: 'Try it below ↓', zh: '在下方直接体验 ↓', ja: 'すぐ下で試す ↓' },
+  'front.title.a': { en: 'A ', zh: '一个与参考实现', ja: '参照実装と' },
+  'front.title.b': { en: 'byte-exact', zh: '逐字节一致', ja: 'バイト単位で一致する' },
+  'front.title.c': { en: ' BPE tokenizer, written in Rust.', zh: '的 BPE 分词器，用 Rust 实现。', ja: ' BPE トークナイザー、Rust 実装。' },
+  'front.abstract': {
+    en: 'Tokenization decides what a language model actually reads, and a tokenizer that is merely close is a silent source of error. This implementation reproduces 17 encodings from 8 vendors and is checked against each vendor’s own tokenizer over adversarial differential corpora — currently 167,849 comparisons with no divergence. It is also, as a consequence of how it is built, considerably faster than the alternatives.',
+    zh: '分词决定了语言模型真正读到的内容，而一个「差不多对」的分词器是一种静默的错误来源。本实现复刻了 8 家厂商的 17 套编码，并使用对抗性差分语料逐一对照各厂商自己的分词器 —— 目前 167,849 次对照，零分歧。同时，由于其实现方式，它也显著快于现有方案。',
+    ja: 'トークン化は言語モデルが実際に読む内容を決めます。「ほぼ正しい」トークナイザーは、静かな誤りの源です。本実装は 8 ベンダー 17 エンコーディングを再現し、敵対的差分コーパスで各ベンダー自身のトークナイザーと照合しています — 現在 167,849 回の比較で相違ゼロ。またその実装方式の帰結として、既存の選択肢より大幅に高速です。',
+  },
+  'front.fig.comparisons': {
+    en: 'differential comparisons, 0 divergences',
+    zh: '次差分对照，0 分歧',
+    ja: '回の差分照合、相違ゼロ',
+  },
+  'front.fig.encodings': { en: 'encodings, 8 vendors', zh: '套编码，8 家厂商', ja: 'エンコーディング・8 ベンダー' },
+  'front.fig.short': { en: 'to encode a short string', zh: '短字符串编码耗时', ja: '短い文字列のエンコード' },
+  'front.fig.speed': { en: 'vs tiktoken-rs on ASCII', zh: 'ASCII 文本对比 tiktoken-rs', ja: 'ASCII で tiktoken-rs 比' },
+  'front.cta.try': { en: 'Run it in your browser ↓', zh: '在浏览器中运行 ↓', ja: 'ブラウザで実行 ↓' },
 
-  // playground
-  'pg.tag': { en: 'Live playground', zh: '在线体验', ja: 'ライブ・プレイグラウンド' },
-  'pg.heading': { en: 'Tokenize anything, locally', zh: '任意文本，本地分词', ja: 'どんなテキストも、ローカルで' },
+  // §1 playground
+  'pg.heading': {
+    en: 'Run the tokenizer, here, on your own text',
+    zh: '就在此处，用你自己的文本运行分词器',
+    ja: 'このページで、自分のテキストを分かち書きする',
+  },
   'pg.blurb': {
-    en: 'This is the actual Rust crate compiled to WebAssembly — the same code that runs 15–40x faster than tiktoken-rs — executing in your browser. Nothing you type leaves this page.',
-    zh: '这就是编译成 WebAssembly 的 Rust crate 本体 —— 与比 tiktoken-rs 快 15–40 倍的是同一份代码 —— 直接在你的浏览器里执行。你输入的内容不会离开这个页面。',
-    ja: 'これは WebAssembly にコンパイルされた Rust クレートそのもの — tiktoken-rs より 15〜40 倍速いのと同じコード — がブラウザ内で実行されています。入力したテキストがこのページの外に出ることはありません。',
+    en: 'The Rust crate compiled to WebAssembly and executed by this page. Every encoding listed below is available; nothing you type is sent anywhere.',
+    zh: '这是编译为 WebAssembly 并由本页面直接执行的 Rust crate。下表所有编码均可选用；你输入的内容不会发送到任何地方。',
+    ja: 'WebAssembly にコンパイルされた Rust クレートを、このページが直接実行しています。下表のすべてのエンコーディングが利用可能で、入力内容はどこにも送信されません。',
   },
-  'pg.title': { en: 'wasm tokenizer', zh: 'wasm 分词器', ja: 'wasm トークナイザー' },
+  'pg.cap': { en: 'Encoding', zh: '编码', ja: 'エンコーディング' },
   'pg.placeholder': {
-    en: 'Type or paste text here — English, 中文, 日本語, code, emoji 🚀 …',
-    zh: '在这里输入或粘贴文本 —— 中文、English、日本語、代码、emoji 🚀 ……',
-    ja: 'ここにテキストを入力・貼り付け — 日本語、English、中文、コード、絵文字 🚀 …',
+    en: 'Type or paste text — English, 中文, 日本語, source code, emoji …',
+    zh: '输入或粘贴文本 —— 中文、English、日本語、源代码、emoji ……',
+    ja: 'テキストを入力・貼り付け — 日本語、English、中文、ソースコード、絵文字 …',
   },
-  'pg.example': {
-    en: 'Try the example',
-    zh: '填入示例',
-    ja: 'サンプルを入力',
-  },
-  'pg.tokens': { en: 'tokens', zh: 'tokens', ja: 'トークン' },
-  'pg.chars': { en: 'characters', zh: '字符', ja: '文字' },
-  'pg.bytes': { en: 'utf-8 bytes', zh: 'UTF-8 字节', ja: 'UTF-8 バイト' },
-  'pg.view.text': { en: 'text', zh: '文本', ja: 'テキスト' },
-  'pg.view.ids': { en: 'token ids', zh: 'token ID', ja: 'トークン ID' },
+  'pg.example': { en: 'Load sample text', zh: '载入示例文本', ja: 'サンプルを読み込む' },
+  'pg.tokens': { en: 'tokens', zh: 'token 数', ja: 'トークン数' },
+  'pg.chars': { en: 'characters', zh: '字符数', ja: '文字数' },
+  'pg.bytes': { en: 'UTF-8 bytes', zh: 'UTF-8 字节', ja: 'UTF-8 バイト' },
+  'pg.view.text': { en: 'Segments', zh: '分段', ja: '分割' },
+  'pg.view.ids': { en: 'Token IDs', zh: 'Token ID', ja: 'トークン ID' },
   'pg.loading': {
-    en: 'Loading the WebAssembly module — 17 embedded vocabularies make it ~11 MB, worth the wait…',
-    zh: '正在加载 WebAssembly 模块 —— 内嵌 17 套词表共约 11 MB，值得等待……',
-    ja: 'WebAssembly モジュールを読み込み中 — 17 の内蔵語彙で約 11 MB。少々お待ちください…',
+    en: 'Loading the WebAssembly module — it carries all 17 vocabularies, about 11 MB',
+    zh: '正在加载 WebAssembly 模块 —— 其中内嵌全部 17 套词表，约 11 MB',
+    ja: 'WebAssembly モジュールを読み込み中 — 17 の語彙をすべて内蔵、約 11 MB',
   },
   'pg.error': {
-    en: 'Failed to load the wasm module. Check the console, or try a hard refresh.',
-    zh: 'wasm 模块加载失败。请查看控制台，或强制刷新重试。',
-    ja: 'wasm モジュールの読み込みに失敗しました。コンソールを確認するか、強制リロードしてください。',
+    en: 'The WebAssembly module failed to load. A hard refresh usually resolves it.',
+    zh: 'WebAssembly 模块加载失败。通常强制刷新即可恢复。',
+    ja: 'WebAssembly モジュールの読み込みに失敗しました。強制リロードで解消することが多いです。',
   },
   'pg.foot': {
-    en: 'runs entirely in-browser · nothing is uploaded',
-    zh: '完全在浏览器内运行 · 不上传任何内容',
-    ja: 'すべてブラウザ内で実行 · 何もアップロードされません',
+    en: 'Executed locally in this browser',
+    zh: '在本浏览器内本地执行',
+    ja: 'このブラウザ内でローカル実行',
+  },
+  'pg.caption.label': { en: 'Figure 1.', zh: '图 1.', ja: '図 1.' },
+  'pg.caption': {
+    en: 'Each shaded run is one token; hover a segment to read its id. A token whose bytes are not valid UTF-8 on their own — the halves of an emoji, for instance — displays as a replacement character, though its id is exact.',
+    zh: '每一个底色片段即一个 token，悬停可查看其 id。若某个 token 的字节本身不是合法 UTF-8（例如 emoji 被拆开的一半），则显示为替换字符，但其 id 是精确的。',
+    ja: '網掛けされた各区間が 1 トークンです。ホバーすると id を表示します。単独では正しい UTF-8 にならないトークン（絵文字の断片など）は置換文字として表示されますが、id は正確です。',
   },
 
-  // features
-  'feat.tag': { en: 'Why this one', zh: '为什么选它', ja: 'この実装を選ぶ理由' },
-  'feat.heading': { en: 'Correct first. Then very, very fast.', zh: '先做到正确，再做到非常非常快。', ja: 'まず正確に。それから、圧倒的に速く。' },
-  'feat.exact.h': { en: 'Byte-exact', zh: '字节级一致', ja: 'バイト単位で一致' },
+  // §2 method
+  'feat.heading': {
+    en: 'Correctness is established by differential testing, not by assertion',
+    zh: '正确性由差分测试确立，而非声称',
+    ja: '正しさは主張ではなく、差分テストによって確立する',
+  },
+  'feat.exact.h': { en: 'Checked against the reference', zh: '对照参考实现校验', ja: '参照実装との照合' },
   'feat.exact.p': {
-    en: 'Every encoding is verified against its reference implementation — Python tiktoken for the OpenAI family, the official HuggingFace or vendor tokenizers for the rest — over adversarial differential corpora. 167,849 comparisons, 0 divergences.',
-    zh: '每套编码都对照其参考实现验证 —— OpenAI 系对照 Python tiktoken，其余对照官方 HuggingFace / 厂商分词器 —— 使用对抗性差分语料。167,849 次对照，0 分歧。',
-    ja: 'すべてのエンコーディングを参照実装と照合 — OpenAI 系は Python tiktoken、その他は公式 HuggingFace / ベンダーのトークナイザー — 敵対的差分コーパスで検証。167,849 回の比較、相違ゼロ。',
+    en: 'The OpenAI encodings are compared against Python tiktoken; the rest against each vendor’s own HuggingFace tokenizer, or in Kimi’s case the vocabulary Moonshot ships. Corpora deliberately target the axes where these patterns disagree — whitespace runs, newline boundaries, digits, CJK, slashes.',
+    zh: 'OpenAI 系编码对照 Python tiktoken；其余对照各厂商自己的 HuggingFace 分词器 —— Kimi 则对照 Moonshot 自身发布的词表。语料刻意针对这些 pattern 产生分歧的位置：空白串、换行边界、数字、CJK、斜杠。',
+    ja: 'OpenAI 系は Python tiktoken と、その他は各ベンダー自身の HuggingFace トークナイザー（Kimi は Moonshot 配布の語彙）と比較します。コーパスは、これらのパターンが食い違う軸 — 空白列・改行境界・数字・CJK・スラッシュ — を意図的に突きます。',
   },
-  'feat.fast.h': { en: 'ASCII fast path', zh: 'ASCII 快速路径', ja: 'ASCII ファストパス' },
+  'feat.fast.h': { en: 'A hand-written ASCII path', zh: '手写的 ASCII 路径', ja: '手書きの ASCII パス' },
   'feat.fast.p': {
-    en: 'A hand-written scanner resolves common ASCII pieces without touching the regex engine, and a hybrid stack-based BPE merge avoids allocation for word-sized pieces. Result: 43 ns to encode a short string on Apple Silicon.',
-    zh: '手写扫描器不经过正则引擎直接解析常见 ASCII 片段，混合式栈上 BPE 合并让词级片段零分配。结果：Apple Silicon 上短文本编码仅 43 ns。',
-    ja: '手書きスキャナが正規表現エンジンを介さず一般的な ASCII 片を解決し、ハイブリッドなスタックベース BPE マージが単語サイズの片をゼロアロケーションで処理。結果、Apple Silicon で短文のエンコードは 43 ns。',
+    en: 'Common ASCII pieces are resolved by a scanner that never enters the regex engine, and word-sized pieces merge on the stack without allocating. The regex remains the authority: property tests assert the two paths agree for arbitrary input.',
+    zh: '常见的 ASCII 片段由一个从不进入正则引擎的扫描器解析，词级片段在栈上合并、不做分配。正则仍是权威：属性测试断言两条路径对任意输入结果一致。',
+    ja: '一般的な ASCII 片は、正規表現エンジンに入らないスキャナが解決し、単語サイズの片はスタック上でアロケーションなしにマージされます。正規表現が正解であり続けます — プロパティテストが任意入力で両経路の一致を保証します。',
   },
-  'feat.everywhere.h': { en: 'Everywhere', zh: '随处可用', ja: 'どこでも動く' },
+  'feat.everywhere.h': { en: 'One implementation, two artefacts', zh: '同一实现，两种产物', ja: '一つの実装、二つの成果物' },
   'feat.everywhere.p': {
-    en: 'Pure Rust with zero C dependencies, vocabularies zstd-compressed and embedded at compile time. Ships as a crate and as a wasm npm package — this very page is the npm package running unmodified.',
-    zh: '纯 Rust、零 C 依赖，词表经 zstd 压缩在编译期内嵌。以 crate 和 wasm npm 包双形态发布 —— 你眼前这个页面就是那个 npm 包原样运行的样子。',
-    ja: '純 Rust・C 依存ゼロ。語彙は zstd 圧縮でコンパイル時に埋め込み。クレートと wasm npm パッケージの両形態で配布 — このページ自体が、その npm パッケージが無改変で動いている姿です。',
+    en: 'Pure Rust with no C dependencies and vocabularies embedded at compile time, published both as a crate and as a WebAssembly package. The playground above is that package, unmodified.',
+    zh: '纯 Rust、无 C 依赖，词表在编译期内嵌；以 crate 与 WebAssembly 包两种形态发布。上方的试用区就是该包本身，未经改动。',
+    ja: '純 Rust・C 依存なし、語彙はコンパイル時に埋め込み。クレートと WebAssembly パッケージの両方で公開しています。上のプレイグラウンドは、そのパッケージそのものです。',
   },
 
-  // encodings
-  'enc.tag': { en: 'Encodings', zh: '编码支持', ja: 'エンコーディング' },
-  'enc.heading': { en: '17 encodings, 8 vendors', zh: '17 套编码，8 家厂商', ja: '17 エンコーディング・8 ベンダー' },
+  // §3 encodings
+  'enc.heading': { en: 'Supported encodings', zh: '支持的编码', ja: '対応エンコーディング' },
   'enc.blurb': {
-    en: 'From GPT-2 to GPT-5.6, and first-class coverage of the open-weights ecosystem — including Kimi, GLM, MiniMax, DeepSeek V4, Qwen and Llama. Vendor-shared vocabularies (Kimi K2/K3, DeepSeek V3/V4) are deduplicated internally.',
-    zh: '从 GPT-2 到 GPT-5.6，并对开源权重生态一等公民级支持 —— 包括 Kimi、GLM、MiniMax、DeepSeek V4、Qwen 与 Llama。同厂共享词表（Kimi K2/K3、DeepSeek V3/V4）在内部去重。',
-    ja: 'GPT-2 から GPT-5.6 まで。さらにオープンウェイト系 — Kimi・GLM・MiniMax・DeepSeek V4・Qwen・Llama — をファーストクラスでカバー。ベンダー内で共有される語彙（Kimi K2/K3、DeepSeek V3/V4）は内部で重複排除されます。',
+    en: 'From GPT-2 through GPT-5.6, alongside the open-weights models that most implementations omit — Kimi, GLM, MiniMax, DeepSeek V4, Qwen, Llama and Mistral.',
+    zh: '从 GPT-2 到 GPT-5.6，并覆盖多数实现所忽略的开源权重模型 —— Kimi、GLM、MiniMax、DeepSeek V4、Qwen、Llama 与 Mistral。',
+    ja: 'GPT-2 から GPT-5.6 まで。加えて、多くの実装が省略するオープンウェイト系 — Kimi・GLM・MiniMax・DeepSeek V4・Qwen・Llama・Mistral — も対象です。',
   },
   'enc.col.encoding': { en: 'Encoding', zh: '编码', ja: 'エンコーディング' },
   'enc.col.vendor': { en: 'Vendor', zh: '厂商', ja: 'ベンダー' },
   'enc.col.models': { en: 'Models', zh: '模型', ja: 'モデル' },
-  'enc.col.vocab': { en: 'Vocab', zh: '词表', ja: '語彙数' },
+  'enc.col.vocab': { en: 'Vocabulary', zh: '词表规模', ja: '語彙数' },
+  'enc.caption.label': { en: 'Table 1.', zh: '表 1.', ja: '表 1.' },
+  'enc.caption': {
+    en: 'Where a vendor ships one vocabulary across generations — Kimi K2 and K3, DeepSeek V3 and V4 — the data is stored once and the entries differ only in their special-token tables.',
+    zh: '若某厂商跨代共用同一词表 —— 如 Kimi K2 与 K3、DeepSeek V3 与 V4 —— 数据仅存储一份，各条目之间只有特殊 token 表不同。',
+    ja: 'ベンダーが世代をまたいで同一の語彙を用いる場合（Kimi K2 と K3、DeepSeek V3 と V4）、データは一度だけ保持し、エントリ間の差は特殊トークン表のみです。',
+  },
 
-  // performance
-  'perf.tag': { en: 'Performance', zh: '性能', ja: 'パフォーマンス' },
-  'perf.heading': { en: 'Measured, not promised', zh: '实测数字，不是承诺', ja: '約束ではなく、実測' },
+  // §4 performance
+  'perf.heading': { en: 'Measured performance', zh: '实测性能', ja: '実測性能' },
   'perf.blurb': {
-    en: 'cl100k_base encode on an Apple M4 Mac mini, single-threaded, criterion n=100. Token output verified identical across all three implementations. Full benchmark tables live in the repository README.',
-    zh: 'Apple M4 Mac mini 上的 cl100k_base 编码，单线程，criterion n=100。三个实现的 token 输出经验证完全一致。完整基准表见仓库 README。',
-    ja: 'Apple M4 Mac mini での cl100k_base エンコード。シングルスレッド、criterion n=100。3 実装のトークン出力が同一であることを検証済み。完全なベンチマーク表はリポジトリの README に。',
+    en: 'Encoding with cl100k_base on an Apple M4 Mac mini, single-threaded, criterion with n = 100. Token output was verified identical across all three implementations before timing them.',
+    zh: 'Apple M4 Mac mini 上使用 cl100k_base 编码，单线程，criterion n = 100。计时前已验证三个实现的 token 输出完全一致。',
+    ja: 'Apple M4 Mac mini 上で cl100k_base によるエンコード。シングルスレッド、criterion n = 100。計測前に 3 実装のトークン出力が同一であることを確認しています。',
   },
   'perf.col.input': { en: 'Input', zh: '输入', ja: '入力' },
   'perf.col.python': { en: 'Python tiktoken', zh: 'Python tiktoken', ja: 'Python tiktoken' },
   'perf.col.rs': { en: 'tiktoken-rs', zh: 'tiktoken-rs', ja: 'tiktoken-rs' },
-  'perf.col.ours': { en: 'this crate', zh: '本 crate', ja: '本クレート' },
-  'perf.col.speedup': { en: 'speedup', zh: '加速比', ja: '高速化率' },
+  'perf.col.ours': { en: 'This implementation', zh: '本实现', ja: '本実装' },
+  'perf.col.speedup': { en: 'Speedup', zh: '加速比', ja: '高速化率' },
+  'perf.caption.label': { en: 'Table 2.', zh: '表 2.', ja: '表 2.' },
+  'perf.caption': {
+    en: 'Speedup is stated against tiktoken-rs. Unicode-heavy input gains least, which is expected: it falls through to the regex engine, and that path was never the target of the optimisation.',
+    zh: '加速比以 tiktoken-rs 为基准。Unicode 密集的输入提升最小，这符合预期 —— 该情形会回落到正则引擎，而这条路径本就不是优化目标。',
+    ja: '高速化率は tiktoken-rs を基準としています。Unicode 主体の入力で伸びが最も小さいのは想定どおりで、その場合は正規表現エンジンに委ねられ、そこは最適化の対象ではありません。',
+  },
 
-  // install
-  'inst.tag': { en: 'Install & use', zh: '安装与使用', ja: 'インストールと使用' },
-  'inst.heading': { en: 'Two lines to tokens', zh: '两行代码得到 token', ja: '2 行でトークンに' },
+  // §5 install
+  'inst.heading': { en: 'Installation', zh: '安装', ja: '導入' },
   'inst.rust.blurb': {
-    en: 'In Rust — encodings are cached globally, so repeated lookups are free:',
-    zh: 'Rust 侧 —— 编码实例全局缓存，重复获取零成本：',
-    ja: 'Rust では — エンコーディングはグローバルにキャッシュされ、再取得はコストゼロ：',
+    en: 'In Rust. Encodings are cached globally, so repeated lookups cost nothing.',
+    zh: 'Rust 侧。编码实例全局缓存，重复获取没有开销。',
+    ja: 'Rust の場合。エンコーディングはグローバルにキャッシュされ、再取得のコストはありません。',
   },
   'inst.js.blurb': {
-    en: 'In the browser or Node.js via the wasm package (the one running on this page):',
-    zh: '浏览器或 Node.js 侧用 wasm 包（本页面正在运行的就是它）：',
-    ja: 'ブラウザ / Node.js では wasm パッケージで（このページで動いているものと同じ）：',
+    en: 'In the browser or Node.js, through the WebAssembly package used on this page.',
+    zh: '浏览器或 Node.js 侧，使用本页面所用的 WebAssembly 包。',
+    ja: 'ブラウザまたは Node.js で、本ページが使用している WebAssembly パッケージ経由。',
   },
   'inst.docs': {
-    en: 'Full API docs: docs.rs for Rust, the package README for JavaScript/TypeScript. Cost estimation for 107 models across 10 providers is included in both.',
-    zh: '完整 API 文档：Rust 见 docs.rs，JavaScript/TypeScript 见包内 README。两侧都内置了 10 家厂商 107 个模型的成本估算。',
-    ja: '完全な API ドキュメント：Rust は docs.rs、JavaScript/TypeScript はパッケージの README へ。両方に 10 プロバイダ・107 モデルのコスト見積もりを内蔵。',
+    en: 'Both distributions also carry cost estimation for 107 models across 10 providers. Full API reference:',
+    zh: '两种分发形态均内置 10 家厂商 107 个模型的成本估算。完整 API 参考：',
+    ja: 'いずれの配布形態にも、10 プロバイダ・107 モデルのコスト見積もりを同梱しています。完全な API リファレンス：',
   },
 
-  // footer
-  'foot.license': { en: 'MIT OR Apache-2.0 · GOLIA Inc.', zh: 'MIT OR Apache-2.0 · GOLIA株式会社', ja: 'MIT OR Apache-2.0 · GOLIA株式会社' },
-  'foot.tagline': {
-    en: 'tokens measured in nanoseconds',
-    zh: '以纳秒计量 token',
-    ja: 'ナノ秒で測るトークン',
+  // colophon
+  'foot.org': { en: 'Golia Lab · GOLIA K.K.', zh: 'Golia Lab · GOLIA株式会社', ja: 'Golia Lab · GOLIA株式会社' },
+  'foot.license': {
+    en: 'Released under MIT OR Apache-2.0.',
+    zh: '以 MIT OR Apache-2.0 双许可发布。',
+    ja: 'MIT OR Apache-2.0 のデュアルライセンスで公開。',
   },
 }
 
