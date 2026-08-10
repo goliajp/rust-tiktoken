@@ -84,7 +84,7 @@ JavaScript 分词器。
 
 ```toml
 [dependencies]
-tiktoken = "3"
+tiktoken = "3.8"
 
 # 可选：大文本多线程编码
 tiktoken = { version = "3", features = ["parallel"] }

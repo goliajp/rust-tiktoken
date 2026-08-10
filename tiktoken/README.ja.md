@@ -85,7 +85,7 @@ JavaScript トークナイザーと比較。
 
 ```toml
 [dependencies]
-tiktoken = "3"
+tiktoken = "3.8"
 
 # オプション: 大規模テキストのマルチスレッドエンコード
 tiktoken = { version = "3", features = ["parallel"] }

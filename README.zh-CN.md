@@ -7,6 +7,8 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md) · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** —— 浏览器在线体验
 
+> **从 3.5.x 升级？** 3.6.0 与 3.8.0 修正了偏离参考实现的 token id —— 缓存的 token 计数与已存储的 id 序列需要重新计算。详见 [CHANGELOG](tiktoken/CHANGELOG.md#upgrading-from-35x--token-id-changes)。
+
 最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 5〜49 倍**，**浏览器内比 gpt-tokenizer 快 2〜4 倍** —— 中日文散文同样领先。
 
 ## 本 workspace 的 crate

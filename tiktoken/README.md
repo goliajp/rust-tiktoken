@@ -85,7 +85,7 @@ Benchmark source: [`benches/`](benches/), [`../bench-compare/`](../bench-compare
 
 ```toml
 [dependencies]
-tiktoken = "3"
+tiktoken = "3.8"
 
 # optional: multi-threaded encoding for large texts
 tiktoken = { version = "3", features = ["parallel"] }
