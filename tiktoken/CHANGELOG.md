@@ -1,5 +1,29 @@
 # Changelog
 
+## Upgrading from 3.5.x — token id changes
+
+Versions 3.6.0 and 3.8.0 change token ids for some inputs. That is the point
+of the fixes — the previous ids diverged from the reference tokenizers — but
+any cached token counts or stored id sequences produced by 3.5.1 or earlier
+should be recomputed after upgrading. Affected:
+
+- newline-containing text on `cl100k_base` / `o200k_base` / `o200k_harmony` /
+  `llama3` / `mistral_v3` / `qwen2` / `deepseek_v3` (3.6.0)
+- **any text**, for models whose `model_to_encoding` resolution changed:
+  `davinci-codex` (`r50k_base` → `p50k_base`), `code-davinci-edit-001`
+  (`p50k_base` → `p50k_edit`), and ten first-generation `text-search-*` /
+  `text-similarity-*` / `code-search-*` models that previously returned
+  `None` (3.6.0)
+- `mistral_v3` text where a punctuation run is followed by a newline and a
+  slash — the encoding now uses Tekken's own pattern; its other differences
+  from cl100k's are masked by the vocabulary (3.6.0)
+- whitespace runs before digits and CJK on `deepseek_v3` (3.6.0)
+- punctuation followed by a newline and a slash on `o200k_base` /
+  `o200k_harmony` — `".\n/"` is one token (118550), previously two (3.8.0)
+
+Each change is detailed, with its differential-test evidence, in the version
+entries below.
+
 ## [3.8.2] - 2026-08-09
 
 ### Docs
