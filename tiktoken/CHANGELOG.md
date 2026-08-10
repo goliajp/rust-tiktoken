@@ -24,6 +24,17 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [3.8.3] - 2026-08-10
+
+### Docs
+- The CHANGELOG now opens with an "Upgrading from 3.5.x — token id changes"
+  section consolidating every id-affecting change in 3.6.0 and 3.8.0 — only
+  one of the five carried a warning before. The quickstart this crate renders
+  on crates.io pinned `tiktoken = "3"`, the exact spelling that rides a
+  `cargo update` across all of those changes with no signal; it now pins
+  `"3.8"`, and the top-level READMEs carry a one-line upgrade notice in all
+  three languages. No code changes.
+
 ## [3.8.2] - 2026-08-09
 
 ### Docs
