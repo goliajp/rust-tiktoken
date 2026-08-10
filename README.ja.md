@@ -7,6 +7,8 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語** · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** — ブラウザで試す
 
+> **3.5.x からのアップグレード：** 3.6.0 と 3.8.0 は参照実装から乖離していたトークン id を修正しました。キャッシュ済みのトークン数や保存済み id 列は再計算してください。詳細は [CHANGELOG](tiktoken/CHANGELOG.md#upgrading-from-35x--token-id-changes)。
+
 最速の Rust BPE トークナイザーと、その WebAssembly バインディング。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）もサポート。手書きスキャナが ASCII と CJK の両方を扱い、キー長で階層化した語彙と断片の丸ごとメモ化により、**ネイティブで tiktoken-rs の 5〜49 倍**、**ブラウザ内で gpt-tokenizer の 2〜4 倍** 高速——日本語・中国語の文章でも優位です。
 
 ## このワークスペースの crate
