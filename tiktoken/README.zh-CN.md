@@ -12,11 +12,11 @@
 
 ## 特性
 
-- **多厂商**：11 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
+- **多厂商**：17 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
 - **高性能**：手写扫描器覆盖 ASCII 与 CJK（绕开正则）、词表按 key 长度分层、重复片段整片记忆、混合 BPE 合并
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
 - **费用估算**：覆盖 10 家厂商共 107 个模型
-- **体积紧凑**：ruzstd 压缩词表数据，编译期嵌入
+- **体积紧凑**：17 份词表共 5.1 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据
 - **零分配计数**：`count()` 不分配 token 向量
 
 ## 性能
@@ -84,11 +84,29 @@ JavaScript 分词器。
 
 ```toml
 [dependencies]
-tiktoken = "3.8"
+tiktoken = "4"
 
 # 可选：大文本多线程编码
-tiktoken = { version = "3", features = ["parallel"] }
+tiktoken = { version = "4", features = ["parallel"] }
 ```
+
+### 选择词表
+
+17 种编码默认全开（5.1 MB 词表数据）。关掉默认特性、只点名用到的，二进制里就只带这些：
+
+```toml
+# 只要 GPT-4o / GPT-5 —— 词表数据 815 KB 而非 5.1 MB
+tiktoken = { version = "4", default-features = false, features = ["vocab-o200k_base"] }
+
+# 或者按厂商整组
+tiktoken = { version = "4", default-features = false, features = ["vocab-openai"] }
+```
+
+实测 `examples/count_tokens`（release）：全词表 6,480,912 字节，仅 `vocab-cl100k_base` 2,226,704 字节。
+
+没编进来的编码就是不存在：`list_encodings()` 不列出它，`get_encoding()` 返回 `None`。`pricing` 表与词表无关，所以只做费用估算时可以一个 `vocab-*` 都不开。
+
+厂商组：`vocab-openai`、`vocab-meta`、`vocab-deepseek`、`vocab-qwen`、`vocab-mistral`、`vocab-moonshot`、`vocab-zhipu`、`vocab-minimax`，以及默认的 `vocabs-all`。逐词表的 feature 见下表。
 
 ## 快速开始
 
@@ -110,25 +128,27 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 ## 支持的编码
 
-| 编码 | 厂商 | 适用模型 |
-|---|---|---|
-| `o200k_base` | OpenAI | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
-| `o200k_harmony` | OpenAI | gpt-oss（harmony 对话格式） |
-| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
-| `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
-| `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
-| `r50k_base` | OpenAI | GPT-3 时代：davinci, curie, babbage, ada |
-| `gpt2` | OpenAI | GPT-2（`r50k_base` 的别名） |
-| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
-| `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
-| `deepseek_v4` | DeepSeek | DeepSeek V4 Pro / Flash（V3 词表 + V4 特殊 token） |
-| `qwen2` | 阿里巴巴 | Qwen 2.5, Qwen 3 |
-| `mistral_v3` | Mistral | Mistral, Mixtral（Tekken 分词器） |
-| `kimi_k2` | Moonshot | Kimi K2 / K2.5 / K2.6 |
-| `kimi_k3` | Moonshot | Kimi K3（K2 词表 + K3 特殊 token） |
-| `glm4` | 智谱 | GLM-4.5 / 4.6 / 4.7 |
-| `glm5` | 智谱 | GLM-5 / 5.2 |
-| `minimax_m2` | MiniMax | MiniMax M2 / M2.1 / M2.5 / M2.7 |
+`数据`列是该编码的 feature 给二进制增加的词表字节。共用同一份数据文件的编码第二次不再计费；标 `+ 基座` 的三个是秩对齐扩展，只存自己的尾部。
+
+| 编码 | 厂商 | Feature | 数据 | 适用模型 |
+|---|---|---|---|---|
+| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
+| `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony 对话格式） |
+| `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
+| `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + 基座 | text-davinci-002/003, code-davinci-*, code-cushman-* |
+| `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*, code-davinci-edit-* |
+| `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 时代：davinci, curie, babbage, ada |
+| `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` 的别名） |
+| `llama3` | Meta | `vocab-llama3` | 111 KB + 基座 | Llama 3, 3.1, 3.2, 3.3, 4 |
+| `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3, R1 |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash（V3 词表 + V4 特殊 token） |
+| `qwen2` | 阿里巴巴 | `vocab-qwen2` | 564 KB | Qwen 2.5, Qwen 3 |
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral（Tekken 分词器） |
+| `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
+| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3（K2 词表 + K3 特殊 token） |
+| `glm4` | 智谱 | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
+| `glm5` | 智谱 | `vocab-glm5` | 6 KB + 基座 | GLM-5 / 5.2 |
+| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 |
 
 ## API
 

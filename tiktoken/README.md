@@ -16,7 +16,7 @@ The fastest Rust BPE tokenizer — 5–49x faster than tiktoken-rs natively (15�
 - **Fast**: hand-written pre-tokenizer for ASCII and CJK (bypasses the regex), key-size-layered vocabulary, whole-piece memoisation, hybrid BPE merge
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
 - **Pricing**: cost estimation for 107 models across 10 providers
-- **Compact**: ruzstd-compressed vocabulary data embedded at compile time
+- **Compact**: all 17 vocabularies embedded in 5.1 MB, and opt-out per vocabulary — a cl100k-only build carries 373 KB of data
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
 ## Performance
@@ -85,11 +85,37 @@ Benchmark source: [`benches/`](benches/), [`../bench-compare/`](../bench-compare
 
 ```toml
 [dependencies]
-tiktoken = "3.8"
+tiktoken = "4"
 
 # optional: multi-threaded encoding for large texts
-tiktoken = { version = "3", features = ["parallel"] }
+tiktoken = { version = "4", features = ["parallel"] }
 ```
+
+### Picking vocabularies
+
+All 17 encodings are on by default (5.1 MB of vocabulary data). Turn off the
+defaults and name what you use to carry only that:
+
+```toml
+# GPT-4o / GPT-5 only — 815 KB of vocabulary data instead of 5.1 MB
+tiktoken = { version = "4", default-features = false, features = ["vocab-o200k_base"] }
+
+# a whole vendor
+tiktoken = { version = "4", default-features = false, features = ["vocab-openai"] }
+```
+
+Measured on `examples/count_tokens` (release): 6,480,912 bytes with every
+vocabulary, 2,226,704 with `vocab-cl100k_base` alone.
+
+An encoding whose vocabulary is not compiled in is simply absent —
+`list_encodings()` does not list it and `get_encoding()` returns `None`. The
+`pricing` tables are independent of vocabularies, so a build with no `vocab-*`
+feature at all is valid if you only need cost estimation.
+
+Vendor groups: `vocab-openai`, `vocab-meta`, `vocab-deepseek`, `vocab-qwen`,
+`vocab-mistral`, `vocab-moonshot`, `vocab-zhipu`, `vocab-minimax`, and
+`vocabs-all` (the default). Per-vocabulary features are listed in the table
+below.
 
 ## Quick Start
 
@@ -111,26 +137,29 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 ## Supported Encodings
 
-| Encoding | Provider | Models |
-|---|---|---|
-| `o200k_base` | OpenAI | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
-| `o200k_harmony` | OpenAI | gpt-oss (harmony chat format) |
-| `cl100k_base` | OpenAI | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
-| `p50k_base` | OpenAI | text-davinci-002/003, code-davinci-*, code-cushman-* |
-| `p50k_edit` | OpenAI | text-davinci-edit-*, code-davinci-edit-* |
-| `r50k_base` | OpenAI | GPT-3 era: davinci, curie, babbage, ada |
-| `gpt2` | OpenAI | GPT-2 (alias for `r50k_base`) |
-| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
-| `llama3` | Meta | Llama 3, 3.1, 3.2, 3.3, 4 |
-| `deepseek_v3` | DeepSeek | DeepSeek V3, R1 |
-| `deepseek_v4` | DeepSeek | DeepSeek V4 Pro / Flash (V3 vocab + V4 special tokens) |
-| `qwen2` | Alibaba | Qwen 2.5, Qwen 3 |
-| `mistral_v3` | Mistral | Mistral, Mixtral (Tekken tokenizer) |
-| `kimi_k2` | Moonshot | Kimi K2 / K2.5 / K2.6 |
-| `kimi_k3` | Moonshot | Kimi K3 (K2 vocab + K3 special tokens) |
-| `glm4` | Zhipu | GLM-4.5 / 4.6 / 4.7 |
-| `glm5` | Zhipu | GLM-5 / 5.2 |
-| `minimax_m2` | MiniMax | MiniMax M2 / M2.1 / M2.5 / M2.7 |
+`Data` is the vocabulary bytes the encoding's feature adds to your binary.
+Vocabularies that share a data file cost nothing the second time, and the three
+marked `+ base` are rank-aligned extensions storing only their tail.
+
+| Encoding | Provider | Feature | Data | Models |
+|---|---|---|---|---|
+| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
+| `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss (harmony chat format) |
+| `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
+| `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + base | text-davinci-002/003, code-davinci-*, code-cushman-* |
+| `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*, code-davinci-edit-* |
+| `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 era: davinci, curie, babbage, ada |
+| `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2 (alias for `r50k_base`) |
+| `llama3` | Meta | `vocab-llama3` | 111 KB + base | Llama 3, 3.1, 3.2, 3.3, 4 |
+| `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3, R1 |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash (V3 vocab + V4 special tokens) |
+| `qwen2` | Alibaba | `vocab-qwen2` | 564 KB | Qwen 2.5, Qwen 3 |
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral (Tekken tokenizer) |
+| `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
+| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 (K2 vocab + K3 special tokens) |
+| `glm4` | Zhipu | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
+| `glm5` | Zhipu | `vocab-glm5` | 6 KB + base | GLM-5 / 5.2 |
+| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 |
 
 ## API
 

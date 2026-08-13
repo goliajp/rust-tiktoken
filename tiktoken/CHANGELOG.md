@@ -24,6 +24,86 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [4.0.0] - 2026-08-13
+
+Token ids, encodings and the public API are unchanged. The major bump is for
+one thing only: **vocabularies now live behind default-on features**, so a
+build that sets `default-features = false` no longer gets them implicitly.
+
+### Changed — vocabulary data format
+
+The published crate had reached 99.5% of the crates.io 10 MB package cap
+(10,437,850 of 10,485,760 bytes), 98.9% of it vocabulary data, so the next
+vocabulary would not have fit ([#11]). Three things in that data were being
+paid for and not used:
+
+- **base64** inflated the token bytes 33% and hid byte-level repeats from zstd;
+- the **rank column** stored, on every line, a number equal to the line index;
+- **llama3, glm5 and p50k_base are exact rank-aligned extensions** of
+  cl100k_base, glm4 and r50k_base — token `i` of the base is token `i` of the
+  derived vocabulary, so the shared prefix was stored twice.
+
+The new `TKV1` format (documented at `encoding::parse_tkv`) drops the first two
+and stores only the tail for the third case. The body is regrouped by token
+length, which is free — the length block is read first, so the decoder already
+knows which class each token comes from — and compresses better. Loading a
+derived vocabulary costs nothing extra: those leading entries have to be built
+either way.
+
+| | 3.8.3 | 4.0.0 | |
+|:--|--:|--:|--:|
+| vocabulary payload | 10,325,280 | 5,148,835 | −50% |
+| `.crate` | 10,437,850 | 5,269,038 | 99.5% → **50.2%** of the cap |
+| `llama3` | 812,087 | 111,451 | −86% |
+| `glm5` | 964,049 | 6,119 | −99% |
+| `p50k_base` | 308,133 | 55 | −100% |
+
+Measured alternatives that did not earn their place: a higher zstd level (the
+files were already at `-19`-equivalent; `-22 --ultra --long` won 2 bytes),
+trained or cross-vocabulary zstd dictionaries (larger, or coupling unrelated
+families), front-coding a lexicographically sorted vocabulary (the rank
+permutation costs more than it saves), BPE merge-pair encoding (3.7% better for
+much more machinery), and brotli or xz for the payload (7% better for a new
+decoder dependency, or 5x slower to decode).
+
+The `<base64> <rank>` files remain in the repository as `tests/vocab-oracle/`,
+excluded from the package. New `vocab_oracle` tests decode every shipped frame
+chain and diff it against them entry by entry, so the compact form cannot drift
+from the reference; verified by mutation (a body written in rank order instead
+of grouped by length is caught). `base64` is no longer needed to load a
+vocabulary and drops to a dev-dependency.
+
+### Added — per-vocabulary features
+
+Every vocabulary now has a `vocab-*` feature, with per-vendor groups
+(`vocab-openai`, `vocab-zhipu`, …) and `vocabs-all`, which `default` enables.
+A build that names only what it uses carries only that data:
+
+```toml
+tiktoken = { version = "4", default-features = false, features = ["vocab-o200k_base"] }
+```
+
+An encoding whose vocabulary is not compiled in disappears from
+`list_encodings()`, and `get_encoding()` returns `None` for it — both already
+report at run time, so no signature changed. `vocab-llama3`, `vocab-glm5` and
+`vocab-p50k_base` enable the base they extend, since they share its data file.
+A build with no vocabulary at all is supported: the `pricing` tables stand on
+their own.
+
+Measured on `examples/count_tokens`, release, all defaults vs
+`vocab-cl100k_base` alone: **6,480,912 → 2,226,704 bytes**.
+
+### Breaking
+
+- `default` is now `["vocabs-all"]` rather than empty. A dependency written as
+  `default-features = false` used to get every vocabulary anyway; it now gets
+  none until it names them. The failure is a compile error against the missing
+  `encoding::*` constructor, or `get_encoding()` returning `None` — not silent.
+- No token ids, encoding behaviour, or function signatures changed. `4.0.0` is
+  a drop-in upgrade for every dependency that uses the default features.
+
+[#11]: https://github.com/goliajp/rust-tiktoken/issues/11
+
 ## [3.8.3] - 2026-08-10
 
 ### Docs
