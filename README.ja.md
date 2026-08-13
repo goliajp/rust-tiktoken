@@ -17,7 +17,7 @@
 
 | パス | Crate / Package | 説明 | バージョン |
 |:-----|:----------------|:-----|:-----------|
-| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE トークナイザー — 17 エンコーディング、107 モデル、各社料金 | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
+| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE トークナイザー — 17 エンコーディング、116 モデル、各社料金 | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`tiktoken-wasm`](https://crates.io/crates/tiktoken-wasm) (Rust) | 上記の WASM バインディング crate | [![crates.io](https://img.shields.io/crates/v/tiktoken-wasm.svg?style=flat-square)](https://crates.io/crates/tiktoken-wasm) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) (npm) | 同じものを `wasm-pack` で npm へ公開 | [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm.svg?style=flat-square)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) |
 
@@ -26,7 +26,7 @@
 ## 特長
 
 - **手書きの事前トークナイザーが ASCII と CJK を処理** — 英字・数字・記号・短縮形に加え、漢字・かな・ハングル・全角形も正規表現エンジンを使わずに解決。正解はあくまで正規表現側（プロパティテストで等価を担保）で、稀な形状のフォールバックも正規表現が受け持ちます。
-- **17 エンコーディング・107 モデル・10 プロバイダ** — OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen、Mistral、Kimi K2/K3、GLM-4/5、MiniMax M2。さらに USD のコスト見積もり（料金は Anthropic・Google も含む）。
+- **17 エンコーディング・116 モデル・11 プロバイダ** — OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen、Mistral、Kimi K2/K3、GLM-4/5、MiniMax M2。さらに USD のコスト見積もり（料金は Anthropic・Google も含む）。
 - **軽量・移植性** — 17 語彙を合計 5.1 MB で埋め込み、語彙ごとにオプトアウト可能（cl100k のみなら 373 KB）、キー長で階層化した語彙と断片のメモ化、線形/ヒープのハイブリッド BPE マージ、オプションの rayon 並列、ゼロアロケーションの `count()`、C 依存ゼロの純 Rust、自己完結の wasm ビルド。
 
 API・対応モデル表・ベンチマークは各 crate の README を参照：**[`tiktoken/`](tiktoken/README.md)** ·  **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。

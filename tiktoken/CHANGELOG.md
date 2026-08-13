@@ -24,6 +24,26 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [4.1.2] - 2026-08-13
+
+Documentation only. No code changes.
+
+### Fixed
+
+- **The model and provider counts were stale everywhere they appear** — every
+  README (root, crate, wasm; all three languages) and the site said "107 models
+  across 10 providers". 4.1.0 and 4.1.1 took that to **116 models across 11
+  providers**, and the number is quoted on the crates.io page of the very
+  release that made it wrong.
+- The wasm per-provider table gained its Voyage row and Google's count moved
+  12 → 13. `modelsByProvider`'s documented provider list had been missing
+  Moonshot, Zhipu and MiniMax since before this release; it now lists all
+  eleven.
+- `resolve_model` shipped in 4.1.0 with no mention in any README. The pricing
+  example now shows it, and `tests/readme_pricing.rs` compiles that example so
+  it cannot rot again — README code is not doctested, which is how the
+  `estimateCost` docs drifted in the first place.
+
 ## [4.1.1] - 2026-08-13
 
 ### Added
