@@ -24,6 +24,45 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [4.1.0] - 2026-08-13
+
+### Added
+
+- **`pricing::resolve_model`** — look up a model by the id its API actually
+  accepts, not only by the id this table is keyed by. `get_model` is an exact
+  match, and the two spellings differ in three systematic ways:
+
+  - **Dot versus dash.** The table writes a generation with a dot
+    (`claude-haiku-4.5`); the API addresses it with a dash
+    (`claude-haiku-4-5`).
+  - **Release dates.** `claude-sonnet-4-20250514`, `gpt-4o-2024-08-06`.
+  - **Platform decoration.** Bedrock prefixes the vendor and, for cross-region
+    inference, the region (`us.anthropic.claude-opus-4-5`) and suffixes a
+    version (`-v1:0`); Vertex separates a dated snapshot with `@`
+    (`claude-opus-4-5@20251101`).
+
+  Every one of those priced at `None` before, silently — the failure mode of a
+  cost estimator that returns `Option`. Each difference is mechanical, so this
+  normalizes rather than carrying an alias per model per snapshot date, which
+  would grow without bound and still miss the next snapshot.
+
+  `Resolved` reports which table id was reached and whether normalization was
+  needed (`Match::Exact` / `Match::Normalized { as_id }`), so a caller can log
+  the model names it is passing that the table does not spell that way.
+
+  Two invariants are asserted over the whole table, because a normalizing
+  lookup is only safe if it cannot cross entries: every table id resolves to
+  itself as `Match::Exact`, and no two entries share a normalized form.
+
+### Changed
+
+- **`pricing::estimate_cost` now resolves ids** rather than requiring an exact
+  match, so the API spellings above price correctly. Callers that need strict
+  behavior should use `get_model`, which is unchanged. Nothing that resolved
+  before resolves differently — candidates are tried most-literal first.
+- **`getModelInfo` (wasm) resolves ids the same way** `estimateCost` does. The
+  returned `id` is the table's own spelling.
+
 ## [4.0.1] - 2026-08-13
 
 ### Fixed
