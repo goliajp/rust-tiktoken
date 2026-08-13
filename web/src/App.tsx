@@ -23,7 +23,7 @@ const LINKS = [
   { label: 'docs.rs', href: DOCSRS, icon: <Brand name="DocsRs" /> },
 ]
 
-const RUST_SNIPPET = `// Cargo.toml → tiktoken = "3"
+const RUST_SNIPPET = `// Cargo.toml → tiktoken = "4"
 
 let enc = tiktoken::get_encoding("o200k_base").unwrap();
 let ids = enc.encode("hello world");  // [24912, 2375]
