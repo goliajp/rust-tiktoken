@@ -34,28 +34,46 @@ mod vocab;
 
 pub use bpe::CoreBpe;
 
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 
+#[cfg(feature = "vocab-cl100k_base")]
 static CL100K_BASE: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-o200k_base")]
 static O200K_BASE: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-o200k_base")]
 static O200K_HARMONY: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-p50k_base")]
 static P50K_BASE: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-p50k_base")]
 static P50K_EDIT: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-r50k_base")]
 static R50K_BASE: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-llama3")]
 static LLAMA3: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-deepseek_v3")]
 static DEEPSEEK_V3: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-qwen2")]
 static QWEN2: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-mistral_v3")]
 static MISTRAL_V3: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-kimi_k2")]
 static KIMI_K2: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-kimi_k2")]
 static KIMI_K3: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-glm4")]
 static GLM4: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-glm5")]
 static GLM5: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-minimax_m2")]
 static MINIMAX_M2: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-deepseek_v3")]
 static DEEPSEEK_V4: OnceLock<CoreBpe> = OnceLock::new();
 
 /// All available encoding names.
 ///
 /// Returns the list of encoding names that can be passed to [`get_encoding`].
+/// With the default features that is all 17; a build that names only some
+/// `vocab-*` features lists only those.
 ///
 /// # Examples
 ///
@@ -69,26 +87,40 @@ static DEEPSEEK_V4: OnceLock<CoreBpe> = OnceLock::new();
 /// assert_eq!(names.len(), 17);
 /// ```
 pub fn list_encodings() -> &'static [&'static str] {
-    &[
-        "cl100k_base",
-        "o200k_base",
-        "o200k_harmony",
-        "p50k_base",
-        "p50k_edit",
-        "r50k_base",
-        "gpt2",
-        "llama3",
-        "deepseek_v3",
-        "deepseek_v4",
-        "qwen2",
-        "mistral_v3",
-        "kimi_k2",
-        "kimi_k3",
-        "glm4",
-        "glm5",
-        "minimax_m2",
-    ]
+    &ENCODING_NAMES
 }
+
+/// Registry order, filtered to the vocabularies this build carries.
+#[allow(clippy::vec_init_then_push)] // the pushes are cfg-gated
+static ENCODING_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    #[allow(unused_mut)]
+    let mut names: Vec<&'static str> = Vec::new();
+    #[cfg(feature = "vocab-cl100k_base")]
+    names.push("cl100k_base");
+    #[cfg(feature = "vocab-o200k_base")]
+    names.extend_from_slice(&["o200k_base", "o200k_harmony"]);
+    #[cfg(feature = "vocab-p50k_base")]
+    names.extend_from_slice(&["p50k_base", "p50k_edit"]);
+    #[cfg(feature = "vocab-r50k_base")]
+    names.extend_from_slice(&["r50k_base", "gpt2"]);
+    #[cfg(feature = "vocab-llama3")]
+    names.push("llama3");
+    #[cfg(feature = "vocab-deepseek_v3")]
+    names.extend_from_slice(&["deepseek_v3", "deepseek_v4"]);
+    #[cfg(feature = "vocab-qwen2")]
+    names.push("qwen2");
+    #[cfg(feature = "vocab-mistral_v3")]
+    names.push("mistral_v3");
+    #[cfg(feature = "vocab-kimi_k2")]
+    names.extend_from_slice(&["kimi_k2", "kimi_k3"]);
+    #[cfg(feature = "vocab-glm4")]
+    names.push("glm4");
+    #[cfg(feature = "vocab-glm5")]
+    names.push("glm5");
+    #[cfg(feature = "vocab-minimax_m2")]
+    names.push("minimax_m2");
+    names
+});
 
 /// Get a cached tokenizer by encoding name.
 ///
@@ -105,22 +137,38 @@ pub fn list_encodings() -> &'static [&'static str] {
 /// Note: `gpt2` is a name-level alias for `r50k_base`; both return the same cached instance.
 pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
     match name {
+        #[cfg(feature = "vocab-cl100k_base")]
         "cl100k_base" => Some(CL100K_BASE.get_or_init(encoding::cl100k_base)),
+        #[cfg(feature = "vocab-o200k_base")]
         "o200k_base" => Some(O200K_BASE.get_or_init(encoding::o200k_base)),
+        #[cfg(feature = "vocab-o200k_base")]
         "o200k_harmony" => Some(O200K_HARMONY.get_or_init(encoding::o200k_harmony)),
+        #[cfg(feature = "vocab-p50k_base")]
         "p50k_base" => Some(P50K_BASE.get_or_init(encoding::p50k_base)),
+        #[cfg(feature = "vocab-p50k_base")]
         "p50k_edit" => Some(P50K_EDIT.get_or_init(encoding::p50k_edit)),
         // gpt2 shares r50k_base's cache slot — same vocab, same regex, same special token.
+        #[cfg(feature = "vocab-r50k_base")]
         "r50k_base" | "gpt2" => Some(R50K_BASE.get_or_init(encoding::r50k_base)),
+        #[cfg(feature = "vocab-llama3")]
         "llama3" => Some(LLAMA3.get_or_init(encoding::llama3)),
+        #[cfg(feature = "vocab-deepseek_v3")]
         "deepseek_v3" => Some(DEEPSEEK_V3.get_or_init(encoding::deepseek_v3)),
+        #[cfg(feature = "vocab-deepseek_v3")]
         "deepseek_v4" => Some(DEEPSEEK_V4.get_or_init(encoding::deepseek_v4)),
+        #[cfg(feature = "vocab-qwen2")]
         "qwen2" => Some(QWEN2.get_or_init(encoding::qwen2)),
+        #[cfg(feature = "vocab-mistral_v3")]
         "mistral_v3" => Some(MISTRAL_V3.get_or_init(encoding::mistral_v3)),
+        #[cfg(feature = "vocab-kimi_k2")]
         "kimi_k2" => Some(KIMI_K2.get_or_init(encoding::kimi_k2)),
+        #[cfg(feature = "vocab-kimi_k2")]
         "kimi_k3" => Some(KIMI_K3.get_or_init(encoding::kimi_k3)),
+        #[cfg(feature = "vocab-glm4")]
         "glm4" => Some(GLM4.get_or_init(encoding::glm4)),
+        #[cfg(feature = "vocab-glm5")]
         "glm5" => Some(GLM5.get_or_init(encoding::glm5)),
+        #[cfg(feature = "vocab-minimax_m2")]
         "minimax_m2" => Some(MINIMAX_M2.get_or_init(encoding::minimax_m2)),
         _ => None,
     }
@@ -312,6 +360,57 @@ const MODEL_PREFIX_ENCODINGS: &[(&str, &str)] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // feature matrix — these hold for any set of `vocab-*` features, and catch a
+    // name gated on one feature whose `get_encoding` arm is gated on another.
+    // The rest of the suite assumes the default (every vocabulary).
+
+    /// Every name the registry knows about, regardless of what this build carries.
+    const EVERY_ENCODING: &[&str] = &[
+        "cl100k_base",
+        "o200k_base",
+        "o200k_harmony",
+        "p50k_base",
+        "p50k_edit",
+        "r50k_base",
+        "gpt2",
+        "llama3",
+        "deepseek_v3",
+        "deepseek_v4",
+        "qwen2",
+        "mistral_v3",
+        "kimi_k2",
+        "kimi_k3",
+        "glm4",
+        "glm5",
+        "minimax_m2",
+    ];
+
+    #[test]
+    fn features_listed_encodings_are_constructible() {
+        for name in list_encodings() {
+            assert!(
+                EVERY_ENCODING.contains(name),
+                "{name} listed but not a known encoding"
+            );
+            assert!(
+                get_encoding(name).is_some(),
+                "{name} listed but get_encoding returned None"
+            );
+        }
+    }
+
+    #[test]
+    fn features_unlisted_encodings_are_absent() {
+        for &name in EVERY_ENCODING {
+            if !list_encodings().contains(&name) {
+                assert!(
+                    get_encoding(name).is_none(),
+                    "{name} is not listed but get_encoding returned Some"
+                );
+            }
+        }
+    }
 
     // encoding lookup
 

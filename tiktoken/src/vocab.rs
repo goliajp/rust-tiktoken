@@ -439,6 +439,7 @@ mod tests {
         assert_eq!(vocab.try_decode(99), None);
     }
 
+    #[cfg(feature = "vocab-cl100k_base")]
     #[test]
     fn test_matches_hashmap_cl100k() {
         let hashmap = crate::encoding::parse_tiktoken_data_for_test();

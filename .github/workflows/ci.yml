@@ -30,6 +30,25 @@ jobs:
       - run: cargo test --workspace --all-targets
       - run: cargo test --workspace --doc
 
+  features:
+    name: vocabulary feature matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # no vocabulary at all is a supported build (pricing tables only)
+      - run: cargo build -p tiktoken --no-default-features
+      # one vocabulary on its own, one that pulls in the base it extends, and a
+      # mixed pair. `features_*` checks list_encodings()/get_encoding() agree;
+      # `vocab_oracle` decodes whatever data the build carries and diffs it
+      # against tests/vocab-oracle/.
+      - run: cargo test -p tiktoken --lib --no-default-features --features vocab-o200k_base -- features_ vocab_oracle
+      - run: cargo test -p tiktoken --lib --no-default-features --features vocab-glm5 -- features_ vocab_oracle
+      - run: cargo test -p tiktoken --lib --no-default-features --features vocab-llama3 -- features_ vocab_oracle
+      - run: cargo test -p tiktoken --lib --no-default-features --features vocab-p50k_base -- features_ vocab_oracle
+      - run: cargo test -p tiktoken --lib --no-default-features --features vocab-kimi_k2,vocab-deepseek_v3 -- features_ vocab_oracle
+
   lint:
     name: fmt + clippy (lib strict)
     runs-on: ubuntu-latest

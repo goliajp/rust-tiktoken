@@ -1,6 +1,6 @@
 [package]
 name = "tiktoken-wasm"
-version = "3.8.3"
+version = "4.0.0"
 edition = "2024"
 description = "WASM bindings for the tiktoken BPE tokenizer"
 license = "MIT OR Apache-2.0"
@@ -10,11 +10,37 @@ repository = "https://github.com/goliajp/rust-tiktoken"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tiktoken = { path = "../tiktoken", version = "3.8.3" }
+tiktoken = { path = "../tiktoken", version = "4.0.0", default-features = false }
 wasm-bindgen = "^0.2"
 
-# Optimize for speed, not size: ~97% of the artifact is embedded vocabulary
-# data, so `-O3` on the code section costs a few hundred KB against 11 MB —
+# Forwarded from `tiktoken` so a wasm build can carry only the vocabularies it
+# needs. The published npm package is built with the default (all of them).
+[features]
+default = ["vocabs-all"]
+vocabs-all = ["tiktoken/vocabs-all"]
+vocab-openai = ["tiktoken/vocab-openai"]
+vocab-meta = ["tiktoken/vocab-meta"]
+vocab-deepseek = ["tiktoken/vocab-deepseek"]
+vocab-qwen = ["tiktoken/vocab-qwen"]
+vocab-mistral = ["tiktoken/vocab-mistral"]
+vocab-moonshot = ["tiktoken/vocab-moonshot"]
+vocab-zhipu = ["tiktoken/vocab-zhipu"]
+vocab-minimax = ["tiktoken/vocab-minimax"]
+vocab-cl100k_base = ["tiktoken/vocab-cl100k_base"]
+vocab-o200k_base = ["tiktoken/vocab-o200k_base"]
+vocab-r50k_base = ["tiktoken/vocab-r50k_base"]
+vocab-p50k_base = ["tiktoken/vocab-p50k_base"]
+vocab-llama3 = ["tiktoken/vocab-llama3"]
+vocab-deepseek_v3 = ["tiktoken/vocab-deepseek_v3"]
+vocab-qwen2 = ["tiktoken/vocab-qwen2"]
+vocab-mistral_v3 = ["tiktoken/vocab-mistral_v3"]
+vocab-kimi_k2 = ["tiktoken/vocab-kimi_k2"]
+vocab-glm4 = ["tiktoken/vocab-glm4"]
+vocab-glm5 = ["tiktoken/vocab-glm5"]
+vocab-minimax_m2 = ["tiktoken/vocab-minimax_m2"]
+
+# Optimize for speed, not size: ~90% of the artifact is embedded vocabulary
+# data, so `-O3` on the code section costs a few hundred KB against 6 MB —
 # while `-Os` was taxing every count()/encode() call in the browser.
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = ["-O3", "--enable-bulk-memory"]

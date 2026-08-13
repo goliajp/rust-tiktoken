@@ -437,6 +437,7 @@ mod tests {
         assert_eq!(byte_pair_merge(b"abc", &vocab), vec![0, 1, 2, 3]);
     }
 
+    #[cfg(feature = "vocab-cl100k_base")]
     #[test]
     fn test_matches_v2_on_real_vocab() {
         let hashmap = crate::encoding::parse_tiktoken_data_for_test();
