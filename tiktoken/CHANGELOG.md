@@ -54,6 +54,15 @@ entries below.
   lookup is only safe if it cannot cross entries: every table id resolves to
   itself as `Match::Exact`, and no two entries share a normalized form.
 
+- **`gemini-embedding-001`** — $0.15 / 1M input tokens, 2,048-token input
+  limit, the successor to the deprecated `text-embedding-004` already in the
+  table. Sourced from ai.google.dev pricing and embeddings docs, 2026-08.
+
+  Embedding models from Voyage, Cohere and Jina remain absent: each needs a
+  new `Provider` variant, and `Provider` is not `#[non_exhaustive]`, so adding
+  one breaks downstream exhaustive matches. That is a 5.0 change — or a 5.0
+  that marks the enum `#[non_exhaustive]` so the vendor after them is additive.
+
 ### Changed
 
 - **`pricing::estimate_cost` now resolves ids** rather than requiring an exact
