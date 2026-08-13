@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Convert a HuggingFace ByteLevel-BPE tokenizer into a `.tiktoken.zst` vocab.
+"""Convert a HuggingFace ByteLevel-BPE tokenizer into a `.tiktoken.zst` oracle.
 
-This is how the HF-sourced vocab files in this directory are produced (llama3,
-qwen2, deepseek_v3, mistral_v3, and the 2026-08 additions glm4 / glm5 /
-minimax_m2). Kimi needs no conversion — Moonshot ships a native tiktoken
-`tiktoken.model`, which only needs zstd compression.
+This is how the HF-sourced vocabularies are produced (llama3, qwen2,
+deepseek_v3, mistral_v3, and the 2026-08 additions glm4 / glm5 / minimax_m2).
+Kimi needs no conversion — Moonshot ships a native tiktoken `tiktoken.model`,
+which only needs zstd compression.
+
+Output lands in `tests/vocab-oracle/`, which is the reference form and is *not*
+part of the published package. Run `build_tkv.py` afterwards to produce the
+`.tkv.zst` file this crate actually embeds; the `vocab_oracle` tests in
+`src/encoding.rs` diff the two so the compact form can never drift from the
+reference.
 
 The HF `tokenizer.json` stores its vocabulary as GPT-2 byte-unicode mapped
 strings; each entry is reverse-mapped to raw bytes and written as the tiktoken
@@ -20,6 +26,7 @@ differentially compared against the HF tokenizer over the parity corpus
 Usage:
     pip install tokenizers tiktoken zstandard
     python tiktoken/src/encodings/convert_hf_vocab.py glm4 glm5 minimax_m2
+    python tiktoken/src/encodings/build_tkv.py    glm4 glm5 minimax_m2
 """
 
 import base64
@@ -31,8 +38,9 @@ import tiktoken as pytiktoken
 import zstandard
 from tokenizers import Tokenizer
 
-OUT_DIR = pathlib.Path(__file__).resolve().parent
-sys.path.insert(0, str(OUT_DIR.parent.parent / "tests"))
+TESTS_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "tests"
+OUT_DIR = TESTS_DIR / "vocab-oracle"
+sys.path.insert(0, str(TESTS_DIR))
 from canonical_corpus import corpus  # noqa: E402
 
 # encoding name -> (reference repo, expected base vocab size, split regex for

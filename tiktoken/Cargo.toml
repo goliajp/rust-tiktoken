@@ -21,13 +21,14 @@ default = []
 parallel = ["rayon"]
 
 [dependencies]
-base64 = "^0.23"
 rayon = { version = "^1", optional = true }
 regex = "^1"
 rustc-hash = "^2"
 ruzstd = "^0.9"
 
 [dev-dependencies]
+# only for reading the `tests/vocab-oracle/*.tiktoken.zst` reference files
+base64 = "^0.23"
 criterion = { version = "^0.8", features = ["html_reports"] }
 proptest = "^1"
 serde = { version = "1", features = ["derive"] }

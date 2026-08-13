@@ -1,31 +1,51 @@
 //! Encoding definitions and data parsing for tiktoken-compatible BPE vocabularies.
 //!
 //! Each encoding consists of:
-//! - A `.tiktoken.zst` data file (zstd-compressed, base64-encoded token → rank lines, embedded at compile time)
+//! - A `.tkv.zst` data file (see [`parse_tkv`] for the format), embedded at compile time
 //! - A regex pattern that splits input text into pieces before BPE processing
 //! - A set of special tokens (e.g. `<|endoftext|>`) with designated token ids
 //!
 //! Pattern source: <https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py>
 
-use base64::Engine;
 use rustc_hash::FxHashMap;
 
 use crate::bpe::CoreBpe;
 use crate::pretokenize::{FastPath, WhitespaceRules};
 
-// embedded encoding data files — zstd-compressed, decompressed on first use via OnceLock in lib.rs
-const CL100K_BASE_DATA: &[u8] = include_bytes!("encodings/cl100k_base.tiktoken.zst");
-const O200K_BASE_DATA: &[u8] = include_bytes!("encodings/o200k_base.tiktoken.zst");
-const P50K_BASE_DATA: &[u8] = include_bytes!("encodings/p50k_base.tiktoken.zst");
-const R50K_BASE_DATA: &[u8] = include_bytes!("encodings/r50k_base.tiktoken.zst");
-const LLAMA3_DATA: &[u8] = include_bytes!("encodings/llama3.tiktoken.zst");
-const DEEPSEEK_V3_DATA: &[u8] = include_bytes!("encodings/deepseek_v3.tiktoken.zst");
-const QWEN2_DATA: &[u8] = include_bytes!("encodings/qwen2.tiktoken.zst");
-const MISTRAL_V3_DATA: &[u8] = include_bytes!("encodings/mistral_v3.tiktoken.zst");
-const KIMI_K2_DATA: &[u8] = include_bytes!("encodings/kimi_k2.tiktoken.zst");
-const GLM4_DATA: &[u8] = include_bytes!("encodings/glm4.tiktoken.zst");
-const GLM5_DATA: &[u8] = include_bytes!("encodings/glm5.tiktoken.zst");
-const MINIMAX_M2_DATA: &[u8] = include_bytes!("encodings/minimax_m2.tiktoken.zst");
+// Embedded vocabulary frames, decompressed on first use via the OnceLocks in
+// lib.rs. Built from the `tests/vocab-oracle/*.tiktoken.zst` reference files by
+// `src/encodings/build_tkv.py`; the `vocab_oracle` tests below diff the two.
+const CL100K_BASE_TKV: &[u8] = include_bytes!("encodings/cl100k_base.tkv.zst");
+const O200K_BASE_TKV: &[u8] = include_bytes!("encodings/o200k_base.tkv.zst");
+const R50K_BASE_TKV: &[u8] = include_bytes!("encodings/r50k_base.tkv.zst");
+const DEEPSEEK_V3_TKV: &[u8] = include_bytes!("encodings/deepseek_v3.tkv.zst");
+const QWEN2_TKV: &[u8] = include_bytes!("encodings/qwen2.tkv.zst");
+const MISTRAL_V3_TKV: &[u8] = include_bytes!("encodings/mistral_v3.tkv.zst");
+const KIMI_K2_TKV: &[u8] = include_bytes!("encodings/kimi_k2.tkv.zst");
+const GLM4_TKV: &[u8] = include_bytes!("encodings/glm4.tkv.zst");
+const MINIMAX_M2_TKV: &[u8] = include_bytes!("encodings/minimax_m2.tkv.zst");
+
+// Three vocabularies are exact rank-aligned extensions of another one: every
+// token at rank `i` of the base is the token at rank `i` of the derived
+// vocabulary. Their files hold only the tail, so the shared prefix is stored
+// once. Reconstructing them costs nothing extra at run time — those leading
+// entries have to be built either way.
+const LLAMA3_TAIL_TKV: &[u8] = include_bytes!("encodings/llama3.tkv.zst");
+const GLM5_TAIL_TKV: &[u8] = include_bytes!("encodings/glm5.tkv.zst");
+const P50K_BASE_TAIL_TKV: &[u8] = include_bytes!("encodings/p50k_base.tkv.zst");
+
+pub(crate) const CL100K_BASE_CHAIN: &[&[u8]] = &[CL100K_BASE_TKV];
+pub(crate) const O200K_BASE_CHAIN: &[&[u8]] = &[O200K_BASE_TKV];
+pub(crate) const R50K_BASE_CHAIN: &[&[u8]] = &[R50K_BASE_TKV];
+pub(crate) const DEEPSEEK_V3_CHAIN: &[&[u8]] = &[DEEPSEEK_V3_TKV];
+pub(crate) const QWEN2_CHAIN: &[&[u8]] = &[QWEN2_TKV];
+pub(crate) const MISTRAL_V3_CHAIN: &[&[u8]] = &[MISTRAL_V3_TKV];
+pub(crate) const KIMI_K2_CHAIN: &[&[u8]] = &[KIMI_K2_TKV];
+pub(crate) const GLM4_CHAIN: &[&[u8]] = &[GLM4_TKV];
+pub(crate) const MINIMAX_M2_CHAIN: &[&[u8]] = &[MINIMAX_M2_TKV];
+pub(crate) const LLAMA3_CHAIN: &[&[u8]] = &[CL100K_BASE_TKV, LLAMA3_TAIL_TKV];
+pub(crate) const GLM5_CHAIN: &[&[u8]] = &[GLM4_TKV, GLM5_TAIL_TKV];
+pub(crate) const P50K_BASE_CHAIN: &[&[u8]] = &[R50K_BASE_TKV, P50K_BASE_TAIL_TKV];
 
 // cl100k pattern: handles English contractions, Unicode letters/numbers, punctuation, whitespace.
 // original tiktoken uses `\s+(?!\S)|\s+` but we use plain `\s+` and emulate the negative
@@ -127,43 +147,87 @@ pub(crate) const MISTRAL_V3_PATTERN: &str = concat!(
     r"|\s+",
 );
 
-/// Parse a zstd-compressed `.tiktoken` file into a rank map.
+/// Parse a chain of zstd-compressed `.tkv.zst` frames into a rank map.
 ///
-/// The compressed data is first decompressed, then parsed line by line.
-/// Each line is: `<base64-encoded token bytes> <integer rank>`
-/// The rank determines merge priority in the BPE algorithm (lower = merged first).
-pub(crate) fn parse_tiktoken_data(compressed: &[u8]) -> FxHashMap<Vec<u8>, u32> {
-    let mut decoder =
-        ruzstd::decoding::StreamingDecoder::new(compressed).expect("zstd decompression failed");
-    let mut data = Vec::new();
-    std::io::Read::read_to_end(&mut decoder, &mut data).expect("zstd decompression failed");
-    parse_tiktoken_lines(&data)
+/// A chain is one frame for a self-contained vocabulary, or a base frame
+/// followed by a tail frame for one of the three rank-aligned extensions
+/// (llama3 over cl100k_base, glm5 over glm4, p50k_base over r50k_base).
+///
+/// Frame layout, after zstd decompression:
+///
+/// ```text
+/// "TKV1"      4 B    magic
+/// n_tokens    4 B    u32 LE
+/// rank0       4 B    u32 LE   rank of this frame's first token
+/// lengths     varint x n_tokens, in rank order
+/// body        token bytes, grouped by length class (ascending),
+///             each class in rank order
+/// ```
+///
+/// Ranks are consecutive within a frame, so the rank of the `i`-th token is
+/// `rank0 + i` and no rank column is stored. The body is grouped by length
+/// rather than laid out in rank order because the length block is read first
+/// and already says which class each token comes from — the regrouping is free
+/// and compresses better. Files are produced by `src/encodings/build_tkv.py`.
+///
+/// The data is embedded at compile time, so malformed input is a build defect,
+/// not a runtime condition: this panics rather than returning an error.
+pub(crate) fn parse_tkv(chain: &[&[u8]]) -> FxHashMap<Vec<u8>, u32> {
+    let mut ranks = FxHashMap::default();
+    for frame in chain {
+        let mut decoder =
+            ruzstd::decoding::StreamingDecoder::new(*frame).expect("zstd decompression failed");
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut decoder, &mut data).expect("zstd decompression failed");
+        insert_frame(&data, &mut ranks);
+    }
+    ranks
 }
 
-/// Parse raw (uncompressed) `.tiktoken` lines into a rank map.
-fn parse_tiktoken_lines(data: &[u8]) -> FxHashMap<Vec<u8>, u32> {
-    let engine = base64::engine::general_purpose::STANDARD;
-    let content = std::str::from_utf8(data).expect("tiktoken data must be valid UTF-8");
+/// Decode one decompressed TKV1 frame into `ranks`.
+fn insert_frame(data: &[u8], ranks: &mut FxHashMap<Vec<u8>, u32>) {
+    assert_eq!(&data[..4], b"TKV1", "bad vocabulary frame magic");
+    let n_tokens = u32::from_le_bytes(data[4..8].try_into().unwrap()) as usize;
+    let rank0 = u32::from_le_bytes(data[8..12].try_into().unwrap());
 
-    let mut ranks = FxHashMap::default();
-    ranks.reserve(data.len() / 20); // rough estimate: ~20 bytes per line
-
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
+    let mut pos = 12;
+    let mut lengths = Vec::with_capacity(n_tokens);
+    let mut max_len = 0usize;
+    for _ in 0..n_tokens {
+        let mut len = 0usize;
+        let mut shift = 0;
+        loop {
+            let byte = data[pos];
+            pos += 1;
+            len |= ((byte & 0x7F) as usize) << shift;
+            if byte & 0x80 == 0 {
+                break;
+            }
+            shift += 7;
         }
-        let mut parts = line.splitn(2, ' ');
-        let token_b64 = parts.next().expect("missing token");
-        let rank_str = parts.next().expect("missing rank");
-        let token_bytes = engine
-            .decode(token_b64)
-            .expect("invalid base64 in tiktoken data");
-        let rank: u32 = rank_str.parse().expect("invalid rank in tiktoken data");
-        ranks.insert(token_bytes, rank);
+        max_len = max_len.max(len);
+        lengths.push(len);
     }
 
-    ranks
+    // where each length class starts in the body
+    let mut cursors = vec![0usize; max_len + 1];
+    for &len in &lengths {
+        cursors[len] += 1;
+    }
+    let mut at = pos;
+    for (len, cursor) in cursors.iter_mut().enumerate() {
+        let count = *cursor;
+        *cursor = at;
+        at += len * count;
+    }
+    assert_eq!(at, data.len(), "vocabulary frame body length mismatch");
+
+    ranks.reserve(n_tokens);
+    for (i, &len) in lengths.iter().enumerate() {
+        let start = cursors[len];
+        cursors[len] = start + len;
+        ranks.insert(data[start..start + len].to_vec(), rank0 + i as u32);
+    }
 }
 
 /// Build a special token map from `(text, id)` pairs.
@@ -177,7 +241,7 @@ fn special_tokens(pairs: &[(&str, u32)]) -> FxHashMap<Vec<u8>, u32> {
 /// Construct the cl100k_base encoding (GPT-4, GPT-3.5 Turbo, embeddings).
 /// Vocabulary size: 100,256 regular tokens + 5 special tokens.
 pub fn cl100k_base() -> CoreBpe {
-    let encoder = parse_tiktoken_data(CL100K_BASE_DATA);
+    let encoder = parse_tkv(CL100K_BASE_CHAIN);
     let special = special_tokens(&[
         ("<|endoftext|>", 100257),
         ("<|fim_prefix|>", 100258),
@@ -197,7 +261,7 @@ pub fn cl100k_base() -> CoreBpe {
 /// Construct the p50k_base encoding (text-davinci-002/003, code-davinci, code-cushman).
 /// Vocabulary size: 50,256 regular tokens + 1 special token.
 pub fn p50k_base() -> CoreBpe {
-    let encoder = parse_tiktoken_data(P50K_BASE_DATA);
+    let encoder = parse_tkv(P50K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
     CoreBpe::new(
         encoder,
@@ -211,7 +275,7 @@ pub fn p50k_base() -> CoreBpe {
 /// Construct the p50k_edit encoding (text-davinci-edit, code-davinci-edit).
 /// Same merge ranks as p50k_base but with additional FIM (fill-in-middle) special tokens.
 pub fn p50k_edit() -> CoreBpe {
-    let encoder = parse_tiktoken_data(P50K_BASE_DATA);
+    let encoder = parse_tkv(P50K_BASE_CHAIN);
     let special = special_tokens(&[
         ("<|endoftext|>", 50256),
         ("<|fim_prefix|>", 50281),
@@ -230,7 +294,7 @@ pub fn p50k_edit() -> CoreBpe {
 /// Construct the o200k_base encoding (GPT-4o, o1, o3, o4-mini).
 /// Vocabulary size: 199,998 regular tokens + 2 special tokens.
 pub fn o200k_base() -> CoreBpe {
-    let encoder = parse_tiktoken_data(O200K_BASE_DATA);
+    let encoder = parse_tkv(O200K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 199999), ("<|endofprompt|>", 200018)]);
     CoreBpe::new(
         encoder,
@@ -250,7 +314,7 @@ pub fn o200k_base() -> CoreBpe {
 /// Note: `<|reserved_200018|>` shadows `<|endofprompt|>` from o200k_base
 /// at the same id; this mirrors the upstream Python implementation.
 pub fn o200k_harmony() -> CoreBpe {
-    let encoder = parse_tiktoken_data(O200K_BASE_DATA);
+    let encoder = parse_tkv(O200K_BASE_CHAIN);
     let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
     for (name, id) in [
         ("<|startoftext|>", 199998_u32),
@@ -287,7 +351,7 @@ pub fn o200k_harmony() -> CoreBpe {
 /// Vocabulary size: 50,256 regular tokens + 1 special token.
 /// Uses the same merge ranks and regex pattern as p50k_base.
 pub fn r50k_base() -> CoreBpe {
-    let encoder = parse_tiktoken_data(R50K_BASE_DATA);
+    let encoder = parse_tkv(R50K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
     CoreBpe::new(
         encoder,
@@ -311,7 +375,7 @@ pub fn gpt2() -> CoreBpe {
 /// Construct the llama3 encoding (Llama 3 / 3.1 / 3.2 / 3.3).
 /// Vocabulary size: 128,000 regular tokens + 256 special tokens.
 pub fn llama3() -> CoreBpe {
-    let encoder = parse_tiktoken_data(LLAMA3_DATA);
+    let encoder = parse_tkv(LLAMA3_CHAIN);
     let special = special_tokens(&[
         ("<|begin_of_text|>", 128000),
         ("<|end_of_text|>", 128001),
@@ -340,7 +404,7 @@ pub fn llama3() -> CoreBpe {
 /// Note the named tokens mostly use fullwidth pipes (`｜`, U+FF5C), not ASCII
 /// `|`; `<|EOT|>` is the one exception and really is ASCII.
 pub fn deepseek_v3() -> CoreBpe {
-    let encoder = parse_tiktoken_data(DEEPSEEK_V3_DATA);
+    let encoder = parse_tkv(DEEPSEEK_V3_CHAIN);
     CoreBpe::new(
         encoder,
         deepseek_v3_special_tokens(),
@@ -384,7 +448,7 @@ fn deepseek_v3_special_tokens() -> FxHashMap<Vec<u8>, u32> {
 /// Vocabulary size: 151,643 regular tokens + 22 added tokens (ids
 /// 151643..=151664, covering the chat, vision, tool-call and FIM markers).
 pub fn qwen2() -> CoreBpe {
-    let encoder = parse_tiktoken_data(QWEN2_DATA);
+    let encoder = parse_tkv(QWEN2_CHAIN);
     let special = special_tokens(&[
         ("<|endoftext|>", 151643),
         ("<|im_start|>", 151644),
@@ -421,7 +485,7 @@ pub fn qwen2() -> CoreBpe {
 /// Construct the mistral_v3 encoding (Mistral, Mixtral with Tekken tokenizer).
 /// Vocabulary size: 131,072 regular tokens + 1000 special tokens.
 pub fn mistral_v3() -> CoreBpe {
-    let encoder = parse_tiktoken_data(MISTRAL_V3_DATA);
+    let encoder = parse_tkv(MISTRAL_V3_CHAIN);
     let special = special_tokens(&[
         ("<unk>", 0),
         ("<s>", 1),
@@ -457,7 +521,7 @@ pub fn mistral_v3() -> CoreBpe {
 /// markup markers, vision/grounding tags) plus 415 multimodal span
 /// placeholders (`<|place_holder_mm_span_0021|>`..=`_0435|>`).
 pub fn deepseek_v4() -> CoreBpe {
-    let encoder = parse_tiktoken_data(DEEPSEEK_V3_DATA);
+    let encoder = parse_tkv(DEEPSEEK_V3_CHAIN);
     let mut special = deepseek_v3_special_tokens();
     for (name, id) in [
         ("<｜begin▁of▁repo▁name｜>", 128815_u32),
@@ -536,7 +600,7 @@ pub fn deepseek_v4() -> CoreBpe {
 ///
 /// Construct the kimi_k2 encoding (Kimi K2 / K2.5 / K2.6, Moonshot).
 pub fn kimi_k2() -> CoreBpe {
-    let encoder = parse_tiktoken_data(KIMI_K2_DATA);
+    let encoder = parse_tkv(KIMI_K2_CHAIN);
     let special = special_tokens(&[
         ("[BOS]", 163584),
         ("[EOS]", 163585),
@@ -570,7 +634,7 @@ pub fn kimi_k2() -> CoreBpe {
 /// Shares [`kimi_k2`]'s merge ranks and regex; only the special-token table
 /// differs (K3 renames the chat markers and adds media tokens).
 pub fn kimi_k3() -> CoreBpe {
-    let encoder = parse_tiktoken_data(KIMI_K2_DATA);
+    let encoder = parse_tkv(KIMI_K2_CHAIN);
     let special = special_tokens(&[
         ("[BOS]", 163584),
         ("[EOS]", 163585),
@@ -649,7 +713,7 @@ fn glm_special_tokens(base: u32) -> FxHashMap<Vec<u8>, u32> {
 /// Construct the glm4 encoding (Zhipu GLM-4.5 / 4.6 / 4.7).
 /// Vocabulary size: 151,329 regular tokens + 36 special tokens.
 pub fn glm4() -> CoreBpe {
-    let encoder = parse_tiktoken_data(GLM4_DATA);
+    let encoder = parse_tkv(GLM4_CHAIN);
     CoreBpe::new(
         encoder,
         glm_special_tokens(151_329),
@@ -663,7 +727,7 @@ pub fn glm4() -> CoreBpe {
 /// Vocabulary size: 154,820 regular tokens + 36 special tokens
 /// (independently trained merges — not an extension of glm4's).
 pub fn glm5() -> CoreBpe {
-    let encoder = parse_tiktoken_data(GLM5_DATA);
+    let encoder = parse_tkv(GLM5_CHAIN);
     CoreBpe::new(
         encoder,
         glm_special_tokens(154_820),
@@ -677,7 +741,7 @@ pub fn glm5() -> CoreBpe {
 /// Vocabulary size: 200,000 regular tokens + 54 special tokens
 /// (byte-identical tokenizer across the whole M2 family).
 pub fn minimax_m2() -> CoreBpe {
-    let encoder = parse_tiktoken_data(MINIMAX_M2_DATA);
+    let encoder = parse_tkv(MINIMAX_M2_CHAIN);
     let special = special_tokens(&[
         ("]!p~[", 200000),
         ("<fim_prefix>", 200001),
@@ -746,5 +810,95 @@ pub fn minimax_m2() -> CoreBpe {
 /// Expose cl100k rank map for internal tests (e.g. Vocab equivalence)
 #[cfg(test)]
 pub(crate) fn parse_tiktoken_data_for_test() -> FxHashMap<Vec<u8>, u32> {
-    parse_tiktoken_data(CL100K_BASE_DATA)
+    parse_tkv(CL100K_BASE_CHAIN)
+}
+
+/// Differential guard for the shipped vocabulary data.
+///
+/// The `.tkv.zst` files are a compact re-encoding of the `.tiktoken.zst`
+/// reference files under `tests/vocab-oracle/` (base64 token + explicit rank,
+/// one per line — the form upstream publishes). Those references stay in the
+/// repository and out of the published package, so a re-encoding bug cannot
+/// hide: every shipped frame chain is decoded here and diffed against them,
+/// entry by entry.
+#[cfg(test)]
+mod vocab_oracle {
+    use super::*;
+    use base64::Engine;
+
+    /// Every shipped vocabulary, as (name, frame chain).
+    const CHAINS: &[(&str, &[&[u8]])] = &[
+        ("cl100k_base", CL100K_BASE_CHAIN),
+        ("o200k_base", O200K_BASE_CHAIN),
+        ("r50k_base", R50K_BASE_CHAIN),
+        ("p50k_base", P50K_BASE_CHAIN),
+        ("llama3", LLAMA3_CHAIN),
+        ("deepseek_v3", DEEPSEEK_V3_CHAIN),
+        ("qwen2", QWEN2_CHAIN),
+        ("mistral_v3", MISTRAL_V3_CHAIN),
+        ("kimi_k2", KIMI_K2_CHAIN),
+        ("glm4", GLM4_CHAIN),
+        ("glm5", GLM5_CHAIN),
+        ("minimax_m2", MINIMAX_M2_CHAIN),
+    ];
+
+    /// Parse `tests/vocab-oracle/<name>.tiktoken.zst`: one
+    /// `<base64(token bytes)> <rank>` line per entry.
+    fn oracle(name: &str) -> FxHashMap<Vec<u8>, u32> {
+        let path = format!(
+            "{}/tests/vocab-oracle/{name}.tiktoken.zst",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let compressed = std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+        let mut decoder = ruzstd::decoding::StreamingDecoder::new(compressed.as_slice()).unwrap();
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(&mut decoder, &mut data).unwrap();
+
+        let engine = base64::engine::general_purpose::STANDARD;
+        let text = std::str::from_utf8(&data).unwrap();
+        let mut ranks = FxHashMap::default();
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            let (token, rank) = line.trim().split_once(' ').expect("malformed oracle line");
+            ranks.insert(engine.decode(token).unwrap(), rank.parse().unwrap());
+        }
+        ranks
+    }
+
+    #[test]
+    fn shipped_vocabularies_match_the_oracle() {
+        for &(name, chain) in CHAINS {
+            let shipped = parse_tkv(chain);
+            let reference = oracle(name);
+            assert_eq!(
+                shipped.len(),
+                reference.len(),
+                "[{name}] token count: {} shipped vs {} in oracle",
+                shipped.len(),
+                reference.len()
+            );
+            for (token, rank) in &reference {
+                assert_eq!(
+                    shipped.get(token),
+                    Some(rank),
+                    "[{name}] rank {rank} token {token:?} missing or misranked"
+                );
+            }
+        }
+    }
+
+    /// The three derived vocabularies must stay exact rank-aligned extensions of
+    /// their base — the property that lets their files hold only the tail.
+    #[test]
+    fn derived_vocabularies_extend_their_base() {
+        for (derived, base) in [
+            ("llama3", "cl100k_base"),
+            ("glm5", "glm4"),
+            ("p50k_base", "r50k_base"),
+        ] {
+            let derived = oracle(derived);
+            for (token, rank) in oracle(base) {
+                assert_eq!(derived.get(&token), Some(&rank), "token {token:?}");
+            }
+        }
+    }
 }

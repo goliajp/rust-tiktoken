@@ -16,3 +16,4 @@ tiktoken-wasm/pkg/
 # local
 .env.local
 tiktoken/tests/__pycache__/
+tiktoken/src/encodings/__pycache__/
