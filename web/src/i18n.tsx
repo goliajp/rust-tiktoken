@@ -190,9 +190,9 @@ const dict: Dict = {
     ja: 'ブラウザまたは Node.js の場合 — このページと同じ WebAssembly パッケージを使います。',
   },
   'inst.docs': {
-    en: 'Both also carry cost estimation for 107 models across 10 providers. Full API reference:',
-    zh: '两者都内置 10 家厂商 107 个模型的成本估算。完整 API 文档：',
-    ja: 'いずれにも 10 プロバイダ・107 モデルのコスト見積もりを同梱しています。API リファレンス：',
+    en: 'Both also carry cost estimation for 116 models across 11 providers. Full API reference:',
+    zh: '两者都内置 11 家厂商 116 个模型的成本估算。完整 API 文档：',
+    ja: 'いずれにも 11 プロバイダ・116 モデルのコスト見積もりを同梱しています。API リファレンス：',
   },
 
   // colophon
