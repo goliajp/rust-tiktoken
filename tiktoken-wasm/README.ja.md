@@ -171,19 +171,23 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-USD で API コストを見積もり。10 プロバイダ 107 モデル対応。
+USD で API コストを見積もり。11 プロバイダ 116 モデル対応。
 
 ### `getModelInfo(modelId): ModelInfo`
 
 完全型付きのモデルメタデータを取得。
 
+id は `estimateCost` と同じ方法で解決されるため、各社 API の表記
+(`claude-haiku-4-5`、`anthropic.claude-opus-5`)でも該当モデルを返します。
+返る `id` は本表自身の表記です。
+
 ### `allModels(): ModelInfo[]`
 
-サポート 107 モデルすべてを価格情報付きで列挙。
+サポート 116 モデルすべてを価格情報付きで列挙。
 
 ### `modelsByProvider(provider): ModelInfo[]`
 
-プロバイダでモデルを絞り込み: `"OpenAI"`、`"Anthropic"`、`"Google"`、`"Meta"`、`"DeepSeek"`、`"Alibaba"`、`"Mistral"`。
+プロバイダでモデルを絞り込み: `"OpenAI"`、`"Anthropic"`、`"Google"`、`"Meta"`、`"DeepSeek"`、`"Alibaba"`、`"Mistral"`、`"Moonshot"`、`"Zhipu"`、`"MiniMax"`、`"Voyage"`。
 
 ### `ModelInfo`
 
