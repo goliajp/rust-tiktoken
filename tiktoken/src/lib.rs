@@ -24,6 +24,26 @@
 //! assert_eq!(count, 2);
 //! ```
 
+// Whatever a build leaves out, the machinery for it is still compiled and now
+// unreachable: an omitted vocabulary's split pattern and special-token table,
+// and with no vocabulary at all the TKV1 decoder, the merge loop and the piece
+// cache as well. That is what the vocabulary features do, not a defect in
+// them, but rustc cannot tell the difference — 13 warnings for a single
+// vocabulary, 27 for none.
+//
+// Registry dependencies have their lints capped, so this never reached anyone
+// using the published crate; a path or workspace dependency — what every
+// contributor and every monorepo consumer has — saw all of them.
+//
+// Deliberately a blanket allow rather than a `cfg` on each of the twelve
+// items. Gating them individually means guessing a condition per constant, and
+// a condition guessed too narrowly is not a warning but a build failure in
+// some feature combination CI does not enumerate — 2^12 of them exist. The
+// signal given up is code that is dead in *every* configuration, and the full
+// build still catches that; it is the one CI lints strictly and the one nearly
+// everyone ships.
+#![cfg_attr(not(feature = "vocabs-all"), allow(dead_code, unused_imports))]
+
 mod bpe;
 pub mod encoding;
 mod merge;
