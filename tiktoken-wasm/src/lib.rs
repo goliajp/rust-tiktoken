@@ -192,7 +192,8 @@ pub fn all_models() -> Vec<ModelInfo> {
 
 /// List models filtered by provider name.
 ///
-/// Provider names: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"DeepSeek"`, `"Alibaba"`, `"Mistral"`.
+/// Provider names: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"DeepSeek"`,
+/// `"Alibaba"`, `"Mistral"`, `"Moonshot"`, `"Zhipu"`, `"MiniMax"`, `"Voyage"`.
 /// Returns an empty array for unknown providers.
 #[wasm_bindgen(js_name = modelsByProvider)]
 pub fn models_by_provider(provider: &str) -> Vec<ModelInfo> {
@@ -230,6 +231,7 @@ fn parse_provider(s: &str) -> Option<tiktoken::pricing::Provider> {
         "Moonshot" => Some(tiktoken::pricing::Provider::Moonshot),
         "Zhipu" => Some(tiktoken::pricing::Provider::Zhipu),
         "MiniMax" => Some(tiktoken::pricing::Provider::MiniMax),
+        "Voyage" => Some(tiktoken::pricing::Provider::Voyage),
         _ => None,
     }
 }
