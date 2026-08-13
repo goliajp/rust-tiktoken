@@ -1672,6 +1672,21 @@ const GEMINI_EMBED: Model = model(
     0,
 );
 
+/// gemini-embedding-001 — the current Gemini embedding model, and the successor
+/// to the deprecated `text-embedding-004` above.
+///
+/// $0.15 / 1M input tokens (paid tier), 2,048-token input limit, per
+/// ai.google.dev/gemini-api/docs/pricing and .../docs/embeddings, 2026-08.
+const GEMINI_EMBEDDING_001: Model = model(
+    "gemini-embedding-001",
+    Provider::Google,
+    0.15,
+    0.0,
+    None,
+    2_048,
+    0,
+);
+
 // ── Meta (Llama via hosted APIs) ──────────────────────────
 // Meta does not sell API access directly. Each model is pinned to a specific
 // hoster's current serverless inference price as of 2026-06; the source URL
@@ -2260,6 +2275,7 @@ static ALL_MODELS: &[Model] = &[
     GEMINI_15_PRO,
     GEMINI_15_FLASH,
     GEMINI_EMBED,
+    GEMINI_EMBEDDING_001,
     // Meta
     META_LLAMA_4_SCOUT,
     META_LLAMA_4_MAVERICK,
@@ -3012,5 +3028,14 @@ mod tests {
         let table = estimate_cost("claude-haiku-4.5", 1_000, 1_000).unwrap();
         let api = estimate_cost("claude-haiku-4-5", 1_000, 1_000).unwrap();
         assert_eq!(table, api);
+    }
+
+    #[test]
+    fn gemini_embedding_001_prices() {
+        let m = get_model("gemini-embedding-001").unwrap();
+        assert_eq!(m.provider, Provider::Google);
+        assert_eq!(m.context_window, 2_048);
+        // $0.15 / 1M input tokens
+        assert!((estimate_cost("gemini-embedding-001", 1_000_000, 0).unwrap() - 0.15).abs() < 1e-9);
     }
 }
