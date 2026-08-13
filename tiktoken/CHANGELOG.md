@@ -24,6 +24,42 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [4.1.1] - 2026-08-13
+
+### Added
+
+- **Voyage AI embeddings** — `voyage-4-large`, `voyage-4`, `voyage-4-lite`,
+  `voyage-code-4`, `voyage-3-large`, `voyage-3.5`, `voyage-3.5-lite`,
+  `voyage-code-3`. Prices and the shared 32,000-token context are from
+  docs.voyageai.com pricing and embeddings docs, 2026-08.
+
+  This is what closes the gap 4.1.0 opened: an embeddings caller could get a
+  cost for OpenAI and Google and nothing at all for anyone else.
+
+### Changed
+
+- **`Provider` is now `#[non_exhaustive]`, and gained a `Voyage` variant.**
+
+  Adding a variant to an exhaustive public enum is a source-breaking change,
+  and normally waits for a major. It is here in a patch deliberately: the enum
+  is a list of vendors that grows with the table, so leaving it exhaustive
+  makes every routine data refresh a breaking release. Taking that cost once,
+  now, is cheaper than taking it at every vendor.
+
+  **If you `match` on `Provider` without a `_` arm, add one.** Nothing else in
+  the API changed, and matching by `Display` or filtering with
+  `models_by_provider` is unaffected.
+
+### Not included
+
+- Cohere, Jina and Mistral embeddings. Their per-token prices are not published
+  on a vendor page this could be sourced from — Cohere's pricing page lists
+  Model Vault rates only, Jina's embeddings page quotes no per-token figure,
+  and Mistral's model docs carry no pricing. Third-party aggregators agree on
+  numbers for some of them, but a wrong rate in this table bills someone
+  wrongly and silently, which is worse than a `None`. They go in when a vendor
+  page can back them.
+
 ## [4.1.0] - 2026-08-13
 
 ### Added
