@@ -5,6 +5,20 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-08-13
+
+Version lockstep with `tiktoken` 4.0.1. The JavaScript API, the token ids and
+the published artifact are all unchanged — the default build carries every
+vocabulary, and that is the one on npm.
+
+### Fixed
+- **A build that selects a subset of vocabularies no longer emits dead-code
+  warnings.** The `vocab-*` features exist so a wasm bundle can carry only what
+  it needs, but taking that path surfaced 13 warnings out of `tiktoken` for the
+  vocabularies left behind — measured on
+  `--no-default-features --features vocab-o200k_base`, now 0. Nothing about the
+  default build changes; see the `tiktoken` 4.0.1 entry for why.
+
 ## [4.0.0] - 2026-08-13
 
 Version lockstep with `tiktoken` 4.0.0. The JavaScript API is unchanged — same
