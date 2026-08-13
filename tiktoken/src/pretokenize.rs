@@ -1431,8 +1431,23 @@ mod tests {
     // ASCII fast-path equivalence: the cl100k fast path (now built into
     // RegexPreTokenizer) must produce byte-for-byte identical pieces to the
     // pure-regex reference for ANY input.
+    /// How many random cases each property sweep generates.
+    ///
+    /// The committed `proptest-regressions/` seeds replay before any random
+    /// case, so every input that ever failed is still checked at any setting —
+    /// what this scales is how much *new* ground a run covers. The default is a
+    /// smoke sample so a push is answered in minutes; the full sweep is a
+    /// release gate, run with `PROPTEST_CASES=20000` (see the Release section
+    /// of the top-level README).
+    fn proptest_cases() -> u32 {
+        std::env::var("PROPTEST_CASES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(512)
+    }
+
     proptest::proptest! {
-        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(20000))]
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(proptest_cases()))]
 
         #[test]
         fn prop_cl100k_fast_matches_regex(text in ".*") {

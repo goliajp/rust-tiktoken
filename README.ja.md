@@ -87,6 +87,9 @@ wasm-pack build --target web --release --scope goliapkg
 `tiktoken` と `tiktoken-wasm` はバージョンを同期し、git-flow で一緒にリリースします（PR なし）：
 
 ```bash
+# リリースゲート: 完全なプロパティスイープ（約 35 分。CI はサンプルのみ）
+PROPTEST_CASES=25000 cargo test --workspace --all-targets
+
 git flow release start X.Y.Z
 # バージョンを X.Y.Z に更新: tiktoken/Cargo.toml、tiktoken-wasm/Cargo.toml
 #（およびその tiktoken パス依存）。両方の CHANGELOG を確定。
@@ -95,6 +98,8 @@ git tag -a tiktoken-wasm-vX.Y.Z vX.Y.Z^{commit} -m "tiktoken-wasm X.Y.Z"
 git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
 # タグ `v*` が tiktoken crate を、`tiktoken-wasm-v*` が wasm crate + npm を公開
 ```
+
+23 個のプリトークナイザ用と 12 個のラウンドトリップ用のプロパティテストが、手書きスキャナを正規表現エンジンに対して固定しています。`PROPTEST_CASES` は 1 回の実行が新たに踏む範囲を決めるもので、`proptest-regressions/` のシードはどの設定でもランダムケースより先に再生されるため、過去に失敗した入力は常に再確認されます。
 
 ## ライセンス
 

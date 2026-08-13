@@ -27,6 +27,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --workspace --all-targets
+      # The property sweeps take their case count from PROPTEST_CASES and
+      # default to a smoke sample. The committed proptest-regressions seeds
+      # replay before any random case either way, so every input that ever
+      # failed is still checked here; the full 20k/25k sweep is a release gate
+      # run locally (see the Release section of the README). Left at the
+      # default this job is minutes, not hours.
       - run: cargo test --workspace --all-targets
       - run: cargo test --workspace --doc
 
