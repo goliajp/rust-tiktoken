@@ -15,7 +15,7 @@ The fastest Rust BPE tokenizer — 5–49x faster than tiktoken-rs natively (15�
 - **Multi-provider**: 17 encodings across 8 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, MiniMax)
 - **Fast**: hand-written pre-tokenizer for ASCII and CJK (bypasses the regex), key-size-layered vocabulary, whole-piece memoisation, hybrid BPE merge
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
-- **Pricing**: cost estimation for 107 models across 10 providers
+- **Pricing**: cost estimation for 116 models across 11 providers
 - **Compact**: all 17 vocabularies embedded in 5.1 MB, and opt-out per vocabulary — a cl100k-only build carries 373 KB of data
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
@@ -215,9 +215,19 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 
 // list all models for a provider
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
+
+// ids as the provider APIs spell them — dashes where this table uses a dot,
+// release-date suffixes, Bedrock and Vertex decoration — resolve too
+let r = pricing::resolve_model("us.anthropic.claude-opus-5").unwrap();
+assert_eq!(r.model.id, "claude-opus-5");
+assert!(matches!(r.matched, pricing::Match::Normalized { .. }));
+
+// `estimate_cost` goes through the same resolution; `get_model` stays exact
+assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_some());
 ```
 
-Supports 107 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, and Mistral.
+Supports 116 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba,
+Mistral, Moonshot, Zhipu, MiniMax and Voyage.
 
 ## WebAssembly
 
