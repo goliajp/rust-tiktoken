@@ -87,6 +87,9 @@ wasm-pack build --target web --release --scope goliapkg
 `tiktoken` and `tiktoken-wasm` are versioned in lockstep and released together via git-flow (no PRs):
 
 ```bash
+# release gate: the full property sweep (~35 minutes; CI runs a smoke sample)
+PROPTEST_CASES=25000 cargo test --workspace --all-targets
+
 git flow release start X.Y.Z
 # bump versions to X.Y.Z: tiktoken/Cargo.toml, tiktoken-wasm/Cargo.toml
 # (and its tiktoken path-dep); finalize both CHANGELOGs
@@ -95,6 +98,11 @@ git tag -a tiktoken-wasm-vX.Y.Z vX.Y.Z^{commit} -m "tiktoken-wasm X.Y.Z"
 git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
 # tag `v*` publishes the tiktoken crate; `tiktoken-wasm-v*` publishes the wasm crate + npm
 ```
+
+The 23 pre-tokenizer and 12 round-trip property tests pin the hand-written
+scanners against the regex engine. `PROPTEST_CASES` sets how much new ground
+each run covers; the seeds in `proptest-regressions/` replay before any random
+case at every setting, so past failures are always re-checked.
 
 ## License
 
