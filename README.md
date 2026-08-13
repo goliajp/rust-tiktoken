@@ -8,6 +8,8 @@
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** — live in-browser playground
 
 > **Upgrading from 3.5.x?** 3.6.0 and 3.8.0 corrected token ids that diverged from the reference tokenizers — recompute cached counts and stored id sequences. Details: [CHANGELOG](tiktoken/CHANGELOG.md#upgrading-from-35x--token-id-changes).
+>
+> **Upgrading to 4.0?** Token ids and the API are unchanged. The one break: vocabularies now live behind default-on `vocab-*` features, so a dependency written as `default-features = false` must name the ones it uses.
 
 The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **5–49x faster than tiktoken-rs** natively and **2–4x faster than gpt-tokenizer in the browser** — CJK prose included.
 

@@ -180,9 +180,9 @@ const dict: Dict = {
   // install
   'inst.heading': { en: 'Installation', zh: '安装', ja: '導入' },
   'inst.rust.blurb': {
-    en: 'In Rust — encodings are cached globally, so looking one up again costs nothing.',
-    zh: 'Rust —— 编码实例全局缓存，重复取用没有开销。',
-    ja: 'Rust の場合 — エンコーディングはグローバルにキャッシュされ、取り直してもコストはかかりません。',
+    en: 'In Rust — encodings are cached globally, so looking one up again costs nothing. All 17 ship by default; name only the vocabularies you use and the rest stay out of your binary.',
+    zh: 'Rust —— 编码实例全局缓存，重复取用没有开销。17 套词表默认全带；只点名用到的，其余不会进你的二进制。',
+    ja: 'Rust の場合 — エンコーディングはグローバルにキャッシュされ、取り直してもコストはかかりません。既定では 17 語彙すべてを同梱しますが、使うものだけを指定すれば残りはバイナリに入りません。',
   },
   'inst.js.blurb': {
     en: 'In the browser or Node.js, through the same WebAssembly package this page uses.',
