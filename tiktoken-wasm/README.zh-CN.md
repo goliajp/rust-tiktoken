@@ -171,19 +171,22 @@ module.exports = {
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-按美元估算 API 成本。覆盖 10 家厂商 107 个模型。
+按美元估算 API 成本。覆盖 11 家厂商 116 个模型。
 
 ### `getModelInfo(modelId): ModelInfo`
 
 拿完整 TypeScript 类型的模型元数据。
 
+id 的解析方式与 `estimateCost` 一致:按各家 API 实际写法传入(`claude-haiku-4-5`、
+`anthropic.claude-opus-5`)也能命中,返回的 `id` 是本表自己的写法。
+
 ### `allModels(): ModelInfo[]`
 
-列出全部 107 个支持模型及其价格信息。
+列出全部 116 个支持模型及其价格信息。
 
 ### `modelsByProvider(provider): ModelInfo[]`
 
-按厂商过滤模型：`"OpenAI"`、`"Anthropic"`、`"Google"`、`"Meta"`、`"DeepSeek"`、`"Alibaba"`、`"Mistral"`。
+按厂商过滤模型：`"OpenAI"`、`"Anthropic"`、`"Google"`、`"Meta"`、`"DeepSeek"`、`"Alibaba"`、`"Mistral"`、`"Moonshot"`、`"Zhipu"`、`"MiniMax"`、`"Voyage"`。
 
 ### `ModelInfo`
 

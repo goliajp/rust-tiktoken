@@ -15,7 +15,7 @@
 - **マルチプロバイダ**: 8 社 17 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral、Moonshot、Zhipu、MiniMax）
 - **高速**: 手書きスキャナが ASCII と CJK を処理（正規表現をバイパス）、キー長で階層化した語彙、断片の丸ごとメモ化、ハイブリッド BPE マージ
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
-- **料金見積もり**: 10 プロバイダ 107 モデルのコスト推定
+- **料金見積もり**: 11 プロバイダ 116 モデルのコスト推定
 - **コンパクト**: 17 語彙で合計 5.1 MB を埋め込み、語彙ごとにオプトアウト可能 — cl100k のみのビルドなら 373 KB
 - **ゼロアロケーションカウント**: `count()` パスはトークンベクタを割り当てません
 
@@ -187,9 +187,19 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 
 // プロバイダ別のモデル一覧
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
+
+// 各社 API が実際に受け付ける表記も解決します — 本表はドット、API はハイフン、
+// リリース日サフィックス、Bedrock / Vertex の装飾
+let r = pricing::resolve_model("us.anthropic.claude-opus-5").unwrap();
+assert_eq!(r.model.id, "claude-opus-5");
+assert!(matches!(r.matched, pricing::Match::Normalized { .. }));
+
+// `estimate_cost` は同じ解決を通ります。`get_model` は完全一致のままです
+assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_some());
 ```
 
-OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral の 107 モデルに対応。
+OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral、Moonshot、Zhipu、
+MiniMax、Voyage の 116 モデルに対応。
 
 ## WebAssembly
 
