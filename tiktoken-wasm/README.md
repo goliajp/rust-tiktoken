@@ -23,7 +23,7 @@ wasm-pack build --target web --release
 
 Output is in `pkg/` — a complete npm-ready package containing:
 - `tiktoken_wasm.js` — ES module with WASM loader
-- `tiktoken_wasm_bg.wasm` — compiled WASM binary (6.27 MB, 5.55 MB gzipped, all 17 vocabularies)
+- `tiktoken_wasm_bg.wasm` — compiled WASM binary (6.28 MB, 5.55 MB gzipped, all 17 vocabularies)
 
 Building it yourself, `--no-default-features --features vocab-o200k_base` (or
 any other `vocab-*` / vendor group forwarded from `tiktoken`) drops that to
