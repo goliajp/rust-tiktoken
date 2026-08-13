@@ -24,6 +24,90 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [4.1.1] - 2026-08-13
+
+### Added
+
+- **Voyage AI embeddings** — `voyage-4-large`, `voyage-4`, `voyage-4-lite`,
+  `voyage-code-4`, `voyage-3-large`, `voyage-3.5`, `voyage-3.5-lite`,
+  `voyage-code-3`. Prices and the shared 32,000-token context are from
+  docs.voyageai.com pricing and embeddings docs, 2026-08.
+
+  This is what closes the gap 4.1.0 opened: an embeddings caller could get a
+  cost for OpenAI and Google and nothing at all for anyone else.
+
+### Changed
+
+- **`Provider` is now `#[non_exhaustive]`, and gained a `Voyage` variant.**
+
+  Adding a variant to an exhaustive public enum is a source-breaking change,
+  and normally waits for a major. It is here in a patch deliberately: the enum
+  is a list of vendors that grows with the table, so leaving it exhaustive
+  makes every routine data refresh a breaking release. Taking that cost once,
+  now, is cheaper than taking it at every vendor.
+
+  **If you `match` on `Provider` without a `_` arm, add one.** Nothing else in
+  the API changed, and matching by `Display` or filtering with
+  `models_by_provider` is unaffected.
+
+### Not included
+
+- Cohere, Jina and Mistral embeddings. Their per-token prices are not published
+  on a vendor page this could be sourced from — Cohere's pricing page lists
+  Model Vault rates only, Jina's embeddings page quotes no per-token figure,
+  and Mistral's model docs carry no pricing. Third-party aggregators agree on
+  numbers for some of them, but a wrong rate in this table bills someone
+  wrongly and silently, which is worse than a `None`. They go in when a vendor
+  page can back them.
+
+## [4.1.0] - 2026-08-13
+
+### Added
+
+- **`pricing::resolve_model`** — look up a model by the id its API actually
+  accepts, not only by the id this table is keyed by. `get_model` is an exact
+  match, and the two spellings differ in three systematic ways:
+
+  - **Dot versus dash.** The table writes a generation with a dot
+    (`claude-haiku-4.5`); the API addresses it with a dash
+    (`claude-haiku-4-5`).
+  - **Release dates.** `claude-sonnet-4-20250514`, `gpt-4o-2024-08-06`.
+  - **Platform decoration.** Bedrock prefixes the vendor and, for cross-region
+    inference, the region (`us.anthropic.claude-opus-4-5`) and suffixes a
+    version (`-v1:0`); Vertex separates a dated snapshot with `@`
+    (`claude-opus-4-5@20251101`).
+
+  Every one of those priced at `None` before, silently — the failure mode of a
+  cost estimator that returns `Option`. Each difference is mechanical, so this
+  normalizes rather than carrying an alias per model per snapshot date, which
+  would grow without bound and still miss the next snapshot.
+
+  `Resolved` reports which table id was reached and whether normalization was
+  needed (`Match::Exact` / `Match::Normalized { as_id }`), so a caller can log
+  the model names it is passing that the table does not spell that way.
+
+  Two invariants are asserted over the whole table, because a normalizing
+  lookup is only safe if it cannot cross entries: every table id resolves to
+  itself as `Match::Exact`, and no two entries share a normalized form.
+
+- **`gemini-embedding-001`** — $0.15 / 1M input tokens, 2,048-token input
+  limit, the successor to the deprecated `text-embedding-004` already in the
+  table. Sourced from ai.google.dev pricing and embeddings docs, 2026-08.
+
+  Embedding models from Voyage, Cohere and Jina remain absent: each needs a
+  new `Provider` variant, and `Provider` is not `#[non_exhaustive]`, so adding
+  one breaks downstream exhaustive matches. That is a 5.0 change — or a 5.0
+  that marks the enum `#[non_exhaustive]` so the vendor after them is additive.
+
+### Changed
+
+- **`pricing::estimate_cost` now resolves ids** rather than requiring an exact
+  match, so the API spellings above price correctly. Callers that need strict
+  behavior should use `get_model`, which is unchanged. Nothing that resolved
+  before resolves differently — candidates are tried most-literal first.
+- **`getModelInfo` (wasm) resolves ids the same way** `estimateCost` does. The
+  returned `id` is the table's own spelling.
+
 ## [4.0.1] - 2026-08-13
 
 ### Fixed
