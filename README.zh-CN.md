@@ -87,6 +87,9 @@ wasm-pack build --target web --release --scope goliapkg
 `tiktoken` 与 `tiktoken-wasm` 版本同步，通过 git-flow 一起发布（不走 PR）：
 
 ```bash
+# 发布闸门：完整属性扫描（约 35 分钟；CI 只跑抽样）
+PROPTEST_CASES=25000 cargo test --workspace --all-targets
+
 git flow release start X.Y.Z
 # 把版本升到 X.Y.Z：tiktoken/Cargo.toml、tiktoken-wasm/Cargo.toml
 #（及其 tiktoken path 依赖）；确定两个 CHANGELOG。
@@ -95,6 +98,8 @@ git tag -a tiktoken-wasm-vX.Y.Z vX.Y.Z^{commit} -m "tiktoken-wasm X.Y.Z"
 git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
 # tag `v*` 发布 tiktoken crate；`tiktoken-wasm-v*` 发布 wasm crate + npm
 ```
+
+23 个预分词属性测试与 12 个往返属性测试，把手写扫描器钉在正则引擎上。`PROPTEST_CASES` 决定每次运行开拓多少新地面；`proptest-regressions/` 里的种子在任何设置下都会先于随机用例重放，所以历史失败输入始终在查。
 
 ## 许可证
 

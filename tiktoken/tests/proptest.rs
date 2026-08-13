@@ -30,8 +30,23 @@ const ENCODINGS: &[&str] = &[
     "mistral_v3",
 ];
 
+/// How many random cases each property sweep generates.
+///
+/// The committed `proptest.proptest-regressions` seeds replay before any random
+/// case, so every input that ever failed is still checked at any setting — what
+/// this scales is how much *new* ground a run covers. The default is a smoke
+/// sample so a push is answered in minutes; the full sweep is a release gate,
+/// run with `PROPTEST_CASES=25000` (see the Release section of the top-level
+/// README).
+fn proptest_cases() -> u32 {
+    std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(512)
+}
+
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(25000))]
+    #![proptest_config(ProptestConfig::with_cases(proptest_cases()))]
 
     #[test]
     fn roundtrip_cl100k(text in text_strategy()) {
