@@ -15,7 +15,7 @@
 - **多厂商**：17 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
 - **高性能**：手写扫描器覆盖 ASCII 与 CJK（绕开正则）、词表按 key 长度分层、重复片段整片记忆、混合 BPE 合并
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
-- **费用估算**：覆盖 10 家厂商共 107 个模型
+- **费用估算**：覆盖 11 家厂商共 116 个模型
 - **体积紧凑**：17 份词表共 5.1 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据
 - **零分配计数**：`count()` 不分配 token 向量
 
@@ -204,9 +204,19 @@ let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
 
 // 按厂商列出所有模型
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);
+
+// 各家 API 实际使用的 id 写法也能解析 —— 本表用点、API 用短横线,带发布日期后缀,
+// 以及 Bedrock / Vertex 的平台装饰
+let r = pricing::resolve_model("us.anthropic.claude-opus-5").unwrap();
+assert_eq!(r.model.id, "claude-opus-5");
+assert!(matches!(r.matched, pricing::Match::Normalized { .. }));
+
+// `estimate_cost` 走同一套解析;`get_model` 保持精确匹配
+assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_some());
 ```
 
-支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral 共 107 个模型。
+支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、
+智谱、MiniMax、Voyage 共 116 个模型。
 
 ## WebAssembly
 

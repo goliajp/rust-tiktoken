@@ -173,19 +173,23 @@ Map a model name to its encoding name without loading the encoding.
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-Estimate API cost in USD. Supports 107 models across 10 providers.
+Estimate API cost in USD. Supports 116 models across 11 providers.
 
 ### `getModelInfo(modelId): ModelInfo`
 
 Get model metadata with full TypeScript typing.
 
+The id is resolved the way `estimateCost` resolves it, so a model addressed as
+its API spells it (`claude-haiku-4-5`, `anthropic.claude-opus-5`) returns that
+model. The returned `id` is this table's own spelling.
+
 ### `allModels(): ModelInfo[]`
 
-List all 107 supported models with pricing info.
+List all 116 supported models with pricing info.
 
 ### `modelsByProvider(provider): ModelInfo[]`
 
-Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"DeepSeek"`, `"Alibaba"`, `"Mistral"`.
+Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"DeepSeek"`, `"Alibaba"`, `"Mistral"`, `"Moonshot"`, `"Zhipu"`, `"MiniMax"`, `"Voyage"`.
 
 ### `ModelInfo`
 
@@ -201,14 +205,14 @@ Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"De
 
 ## Supported Models (pricing)
 
-`estimateCost` / `getModelInfo` / `allModels` cover **107 models across 10
+`estimateCost` / `getModelInfo` / `allModels` cover **116 models across 11
 providers** (2026-08 pricing). Per provider, newest first:
 
 | Provider | Models | Latest entries |
 |----------|-------:|----------------|
 | OpenAI | 34 | gpt-5.6-sol/terra/luna, gpt-5.5(-pro), gpt-5.4(-mini/nano/pro), gpt-5.2(-pro), gpt-5.1, gpt-5(-mini/nano/pro), gpt-4.1, gpt-4o, o1/o3/o4-mini, … |
 | Anthropic | 17 | claude-fable-5, claude-mythos-5, claude-opus-5, claude-sonnet-5, claude-opus-4.8/4.7/4.6, claude-haiku-4.5, … |
-| Google | 12 | gemini-3.1-pro-preview, gemini-3.6/3.5-flash, gemini-2.5-pro/flash, … |
+| Google | 13 | gemini-3.1-pro-preview, gemini-3.6/3.5-flash, gemini-2.5-pro/flash, … |
 | Mistral | 12 | mistral-large/medium/small, codestral, devstral, ministral, pixtral-large, … |
 | Alibaba | 9 | qwen3.8-max, qwen3.5-plus, qwen3-max/plus/coder, qwen2.5-72b, … |
 | Meta | 6 | llama-4-scout/maverick, llama-3.3-70b, llama-3.1-405b/70b/8b |
@@ -216,6 +220,7 @@ providers** (2026-08 pricing). Per provider, newest first:
 | DeepSeek | 4 | deepseek-v4-pro, deepseek-v4-flash, deepseek-v3, deepseek-r1 |
 | MiniMax | 4 | minimax-m2.7, minimax-m2.5, minimax-m2.1, minimax-m2 |
 | Moonshot | 4 | kimi-k3, kimi-k2.7-code, kimi-k2.6, kimi-k2.5 |
+| Voyage | 8 | voyage-4-large/4/4-lite/code-4, voyage-3-large, voyage-3.5(-lite), voyage-code-3 (embeddings) |
 
 The authoritative list is the code: call `allModels()` at runtime, or see
 [docs.rs](https://docs.rs/tiktoken/latest/tiktoken/pricing/index.html).
