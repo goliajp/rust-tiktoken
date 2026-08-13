@@ -14,7 +14,7 @@ categories = ["text-processing", "algorithms"]
 # differential tests stay in the repository but are excluded from the published
 # package: ~15 MB of reference data used only to validate this crate against
 # upstream tokenizers, against a 10 MB crates.io package cap.
-exclude = ["tests/", "examples/react-app/", "PERF-*.md"]
+exclude = ["tests/", "examples/react-app/", "PERF-*.md", "SIZE-*.md"]
 
 [features]
 default = ["vocabs-all"]
