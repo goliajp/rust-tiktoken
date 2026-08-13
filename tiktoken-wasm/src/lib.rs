@@ -166,12 +166,17 @@ pub fn estimate_cost(
 /// Returns a typed object with: `id`, `provider`, `inputPer1m`, `outputPer1m`,
 /// `cachedInputPer1m`, `contextWindow`, `maxOutput`.
 ///
+/// The id is resolved the same way `estimateCost` resolves it, so a model
+/// addressed the way its API spells it (`claude-haiku-4-5`,
+/// `anthropic.claude-opus-5`) returns that model's entry. The returned `id` is
+/// the table's own spelling.
+///
 /// Throws `Error` for unknown model ids.
 #[wasm_bindgen(js_name = getModelInfo)]
 pub fn get_model_info(model_id: &str) -> Result<ModelInfo, JsError> {
-    let model = tiktoken::pricing::get_model(model_id)
+    let resolved = tiktoken::pricing::resolve_model(model_id)
         .ok_or_else(|| JsError::new(&format!("unknown model: {model_id}")))?;
-    Ok(convert_model(model))
+    Ok(convert_model(resolved.model))
 }
 
 /// List all supported models with pricing info.
