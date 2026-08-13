@@ -92,9 +92,9 @@ const dict: Dict = {
   'pg.view.text': { en: 'Segments', zh: '分段', ja: '分割' },
   'pg.view.ids': { en: 'Token IDs', zh: 'Token ID', ja: 'トークン ID' },
   'pg.loading': {
-    en: 'Loading the WebAssembly module — 17 vocabularies, about 11 MB',
-    zh: '正在加载 WebAssembly 模块 —— 内含 17 套词表，约 11 MB',
-    ja: 'WebAssembly モジュールを読み込み中 — 17 の語彙を内蔵、約 11 MB',
+    en: 'Loading the WebAssembly module — 17 vocabularies, about 6 MB',
+    zh: '正在加载 WebAssembly 模块 —— 内含 17 套词表，约 6 MB',
+    ja: 'WebAssembly モジュールを読み込み中 — 17 の語彙を内蔵、約 6 MB',
   },
   'pg.error': {
     en: 'The WebAssembly module failed to load — a hard refresh usually fixes it',
