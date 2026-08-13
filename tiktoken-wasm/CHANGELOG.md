@@ -19,12 +19,11 @@ package.
 
   | | 3.8.3 | 4.0.0 |
   |:--|--:|--:|
-  | `tiktoken_wasm_bg.wasm` | 11,449,576 | 6,267,165 |
-  | gzipped, over the wire | 10,727,163 | 5,546,760 |
+  | `tiktoken_wasm_bg.wasm` | 11,449,576 | 6,277,462 |
+  | gzipped, over the wire | 10,727,163 | 5,550,867 |
 
-  Both measured with the same `wasm-pack build --target web --release` on the
-  same machine. The remaining ~1.1 MB that is not vocabulary data is code and
-  the pricing tables.
+  Both are the published npm artifact. The remaining ~1.1 MB that is not
+  vocabulary data is code and the pricing tables.
 
 ### Added
 - **`vocab-*` features, forwarded from `tiktoken`.** Building this crate
