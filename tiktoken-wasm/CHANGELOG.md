@@ -5,6 +5,40 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-08-13
+
+Version lockstep with `tiktoken` 4.0.0. The JavaScript API is unchanged — same
+functions, same signatures, same token ids, still every encoding in one
+package.
+
+### Changed
+- **The artifact is 45% smaller.** `tiktoken` 4.0.0 re-encodes its vocabulary
+  data (base64 and the redundant rank column dropped; llama3, glm5 and
+  p50k_base stored as tails of the vocabularies they extend), and ~90% of this
+  package is that data.
+
+  | | 3.8.3 | 4.0.0 |
+  |:--|--:|--:|
+  | `tiktoken_wasm_bg.wasm` | 11,449,576 | 6,267,165 |
+  | gzipped, over the wire | 10,727,163 | 5,546,760 |
+
+  Both measured with the same `wasm-pack build --target web --release` on the
+  same machine. The remaining ~1.1 MB that is not vocabulary data is code and
+  the pricing tables.
+
+### Added
+- **`vocab-*` features, forwarded from `tiktoken`.** Building this crate
+  yourself, you can carry only the vocabularies you need:
+
+  ```sh
+  wasm-pack build --target web --release -- \
+      --no-default-features --features vocab-o200k_base
+  ```
+
+  measures 1,917,753 bytes (1,202,806 gzipped) — an 8.9x smaller download than
+  3.8.3 for a page that only counts GPT-4o/GPT-5 tokens. The published npm
+  package continues to carry all 17 vocabularies.
+
 ## [3.8.3] - 2026-08-10
 
 Version lockstep with `tiktoken` 3.8.3 (token-id upgrade documentation on the
