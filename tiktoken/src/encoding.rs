@@ -15,36 +15,64 @@ use crate::pretokenize::{FastPath, WhitespaceRules};
 // Embedded vocabulary frames, decompressed on first use via the OnceLocks in
 // lib.rs. Built from the `tests/vocab-oracle/*.tiktoken.zst` reference files by
 // `src/encodings/build_tkv.py`; the `vocab_oracle` tests below diff the two.
+//
+// Each file is gated on its `vocab-*` feature so that a build only carries the
+// vocabularies it names — see the feature table in Cargo.toml.
+#[cfg(feature = "vocab-cl100k_base")]
 const CL100K_BASE_TKV: &[u8] = include_bytes!("encodings/cl100k_base.tkv.zst");
+#[cfg(feature = "vocab-o200k_base")]
 const O200K_BASE_TKV: &[u8] = include_bytes!("encodings/o200k_base.tkv.zst");
+#[cfg(feature = "vocab-r50k_base")]
 const R50K_BASE_TKV: &[u8] = include_bytes!("encodings/r50k_base.tkv.zst");
+#[cfg(feature = "vocab-deepseek_v3")]
 const DEEPSEEK_V3_TKV: &[u8] = include_bytes!("encodings/deepseek_v3.tkv.zst");
+#[cfg(feature = "vocab-qwen2")]
 const QWEN2_TKV: &[u8] = include_bytes!("encodings/qwen2.tkv.zst");
+#[cfg(feature = "vocab-mistral_v3")]
 const MISTRAL_V3_TKV: &[u8] = include_bytes!("encodings/mistral_v3.tkv.zst");
+#[cfg(feature = "vocab-kimi_k2")]
 const KIMI_K2_TKV: &[u8] = include_bytes!("encodings/kimi_k2.tkv.zst");
+#[cfg(feature = "vocab-glm4")]
 const GLM4_TKV: &[u8] = include_bytes!("encodings/glm4.tkv.zst");
+#[cfg(feature = "vocab-minimax_m2")]
 const MINIMAX_M2_TKV: &[u8] = include_bytes!("encodings/minimax_m2.tkv.zst");
 
 // Three vocabularies are exact rank-aligned extensions of another one: every
 // token at rank `i` of the base is the token at rank `i` of the derived
 // vocabulary. Their files hold only the tail, so the shared prefix is stored
 // once. Reconstructing them costs nothing extra at run time — those leading
-// entries have to be built either way.
+// entries have to be built either way. Their features pull in the base's
+// feature, which is why the chains below can reference it unconditionally.
+#[cfg(feature = "vocab-llama3")]
 const LLAMA3_TAIL_TKV: &[u8] = include_bytes!("encodings/llama3.tkv.zst");
+#[cfg(feature = "vocab-glm5")]
 const GLM5_TAIL_TKV: &[u8] = include_bytes!("encodings/glm5.tkv.zst");
+#[cfg(feature = "vocab-p50k_base")]
 const P50K_BASE_TAIL_TKV: &[u8] = include_bytes!("encodings/p50k_base.tkv.zst");
 
+#[cfg(feature = "vocab-cl100k_base")]
 pub(crate) const CL100K_BASE_CHAIN: &[&[u8]] = &[CL100K_BASE_TKV];
+#[cfg(feature = "vocab-o200k_base")]
 pub(crate) const O200K_BASE_CHAIN: &[&[u8]] = &[O200K_BASE_TKV];
+#[cfg(feature = "vocab-r50k_base")]
 pub(crate) const R50K_BASE_CHAIN: &[&[u8]] = &[R50K_BASE_TKV];
+#[cfg(feature = "vocab-deepseek_v3")]
 pub(crate) const DEEPSEEK_V3_CHAIN: &[&[u8]] = &[DEEPSEEK_V3_TKV];
+#[cfg(feature = "vocab-qwen2")]
 pub(crate) const QWEN2_CHAIN: &[&[u8]] = &[QWEN2_TKV];
+#[cfg(feature = "vocab-mistral_v3")]
 pub(crate) const MISTRAL_V3_CHAIN: &[&[u8]] = &[MISTRAL_V3_TKV];
+#[cfg(feature = "vocab-kimi_k2")]
 pub(crate) const KIMI_K2_CHAIN: &[&[u8]] = &[KIMI_K2_TKV];
+#[cfg(feature = "vocab-glm4")]
 pub(crate) const GLM4_CHAIN: &[&[u8]] = &[GLM4_TKV];
+#[cfg(feature = "vocab-minimax_m2")]
 pub(crate) const MINIMAX_M2_CHAIN: &[&[u8]] = &[MINIMAX_M2_TKV];
+#[cfg(feature = "vocab-llama3")]
 pub(crate) const LLAMA3_CHAIN: &[&[u8]] = &[CL100K_BASE_TKV, LLAMA3_TAIL_TKV];
+#[cfg(feature = "vocab-glm5")]
 pub(crate) const GLM5_CHAIN: &[&[u8]] = &[GLM4_TKV, GLM5_TAIL_TKV];
+#[cfg(feature = "vocab-p50k_base")]
 pub(crate) const P50K_BASE_CHAIN: &[&[u8]] = &[R50K_BASE_TKV, P50K_BASE_TAIL_TKV];
 
 // cl100k pattern: handles English contractions, Unicode letters/numbers, punctuation, whitespace.
@@ -240,6 +268,7 @@ fn special_tokens(pairs: &[(&str, u32)]) -> FxHashMap<Vec<u8>, u32> {
 
 /// Construct the cl100k_base encoding (GPT-4, GPT-3.5 Turbo, embeddings).
 /// Vocabulary size: 100,256 regular tokens + 5 special tokens.
+#[cfg(feature = "vocab-cl100k_base")]
 pub fn cl100k_base() -> CoreBpe {
     let encoder = parse_tkv(CL100K_BASE_CHAIN);
     let special = special_tokens(&[
@@ -260,6 +289,7 @@ pub fn cl100k_base() -> CoreBpe {
 
 /// Construct the p50k_base encoding (text-davinci-002/003, code-davinci, code-cushman).
 /// Vocabulary size: 50,256 regular tokens + 1 special token.
+#[cfg(feature = "vocab-p50k_base")]
 pub fn p50k_base() -> CoreBpe {
     let encoder = parse_tkv(P50K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
@@ -274,6 +304,7 @@ pub fn p50k_base() -> CoreBpe {
 
 /// Construct the p50k_edit encoding (text-davinci-edit, code-davinci-edit).
 /// Same merge ranks as p50k_base but with additional FIM (fill-in-middle) special tokens.
+#[cfg(feature = "vocab-p50k_base")]
 pub fn p50k_edit() -> CoreBpe {
     let encoder = parse_tkv(P50K_BASE_CHAIN);
     let special = special_tokens(&[
@@ -293,6 +324,7 @@ pub fn p50k_edit() -> CoreBpe {
 
 /// Construct the o200k_base encoding (GPT-4o, o1, o3, o4-mini).
 /// Vocabulary size: 199,998 regular tokens + 2 special tokens.
+#[cfg(feature = "vocab-o200k_base")]
 pub fn o200k_base() -> CoreBpe {
     let encoder = parse_tkv(O200K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 199999), ("<|endofprompt|>", 200018)]);
@@ -313,6 +345,7 @@ pub fn o200k_base() -> CoreBpe {
 ///
 /// Note: `<|reserved_200018|>` shadows `<|endofprompt|>` from o200k_base
 /// at the same id; this mirrors the upstream Python implementation.
+#[cfg(feature = "vocab-o200k_base")]
 pub fn o200k_harmony() -> CoreBpe {
     let encoder = parse_tkv(O200K_BASE_CHAIN);
     let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
@@ -350,6 +383,7 @@ pub fn o200k_harmony() -> CoreBpe {
 /// Construct the r50k_base encoding (GPT-3 era: davinci, curie, babbage, ada).
 /// Vocabulary size: 50,256 regular tokens + 1 special token.
 /// Uses the same merge ranks and regex pattern as p50k_base.
+#[cfg(feature = "vocab-r50k_base")]
 pub fn r50k_base() -> CoreBpe {
     let encoder = parse_tkv(R50K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
@@ -368,12 +402,14 @@ pub fn r50k_base() -> CoreBpe {
 /// single special token (`<|endoftext|>` at 50256). Exposed as a distinct
 /// name for parity with upstream `openai/tiktoken`; the runtime shares
 /// `r50k_base`'s cached instance.
+#[cfg(feature = "vocab-r50k_base")]
 pub fn gpt2() -> CoreBpe {
     r50k_base()
 }
 
 /// Construct the llama3 encoding (Llama 3 / 3.1 / 3.2 / 3.3).
 /// Vocabulary size: 128,000 regular tokens + 256 special tokens.
+#[cfg(feature = "vocab-llama3")]
 pub fn llama3() -> CoreBpe {
     let encoder = parse_tkv(LLAMA3_CHAIN);
     let special = special_tokens(&[
@@ -403,6 +439,7 @@ pub fn llama3() -> CoreBpe {
 ///
 /// Note the named tokens mostly use fullwidth pipes (`｜`, U+FF5C), not ASCII
 /// `|`; `<|EOT|>` is the one exception and really is ASCII.
+#[cfg(feature = "vocab-deepseek_v3")]
 pub fn deepseek_v3() -> CoreBpe {
     let encoder = parse_tkv(DEEPSEEK_V3_CHAIN);
     CoreBpe::new(
@@ -447,6 +484,7 @@ fn deepseek_v3_special_tokens() -> FxHashMap<Vec<u8>, u32> {
 /// Construct the qwen2 encoding (Qwen 2.5 / 3).
 /// Vocabulary size: 151,643 regular tokens + 22 added tokens (ids
 /// 151643..=151664, covering the chat, vision, tool-call and FIM markers).
+#[cfg(feature = "vocab-qwen2")]
 pub fn qwen2() -> CoreBpe {
     let encoder = parse_tkv(QWEN2_CHAIN);
     let special = special_tokens(&[
@@ -484,6 +522,7 @@ pub fn qwen2() -> CoreBpe {
 
 /// Construct the mistral_v3 encoding (Mistral, Mixtral with Tekken tokenizer).
 /// Vocabulary size: 131,072 regular tokens + 1000 special tokens.
+#[cfg(feature = "vocab-mistral_v3")]
 pub fn mistral_v3() -> CoreBpe {
     let encoder = parse_tkv(MISTRAL_V3_CHAIN);
     let special = special_tokens(&[
@@ -520,6 +559,7 @@ pub fn mistral_v3() -> CoreBpe {
 /// V3's 818 entries to 1,283 — 50 new named tokens (`<think>`, the DSML
 /// markup markers, vision/grounding tags) plus 415 multimodal span
 /// placeholders (`<|place_holder_mm_span_0021|>`..=`_0435|>`).
+#[cfg(feature = "vocab-deepseek_v3")]
 pub fn deepseek_v4() -> CoreBpe {
     let encoder = parse_tkv(DEEPSEEK_V3_CHAIN);
     let mut special = deepseek_v3_special_tokens();
@@ -599,6 +639,7 @@ pub fn deepseek_v4() -> CoreBpe {
 /// special-token ids in the 163584..163839 reserved range.
 ///
 /// Construct the kimi_k2 encoding (Kimi K2 / K2.5 / K2.6, Moonshot).
+#[cfg(feature = "vocab-kimi_k2")]
 pub fn kimi_k2() -> CoreBpe {
     let encoder = parse_tkv(KIMI_K2_CHAIN);
     let special = special_tokens(&[
@@ -633,6 +674,7 @@ pub fn kimi_k2() -> CoreBpe {
 ///
 /// Shares [`kimi_k2`]'s merge ranks and regex; only the special-token table
 /// differs (K3 renames the chat markers and adds media tokens).
+#[cfg(feature = "vocab-kimi_k2")]
 pub fn kimi_k3() -> CoreBpe {
     let encoder = parse_tkv(KIMI_K2_CHAIN);
     let special = special_tokens(&[
@@ -712,6 +754,7 @@ fn glm_special_tokens(base: u32) -> FxHashMap<Vec<u8>, u32> {
 
 /// Construct the glm4 encoding (Zhipu GLM-4.5 / 4.6 / 4.7).
 /// Vocabulary size: 151,329 regular tokens + 36 special tokens.
+#[cfg(feature = "vocab-glm4")]
 pub fn glm4() -> CoreBpe {
     let encoder = parse_tkv(GLM4_CHAIN);
     CoreBpe::new(
@@ -726,6 +769,7 @@ pub fn glm4() -> CoreBpe {
 /// Construct the glm5 encoding (Zhipu GLM-5 / 5.2).
 /// Vocabulary size: 154,820 regular tokens + 36 special tokens
 /// (independently trained merges — not an extension of glm4's).
+#[cfg(feature = "vocab-glm5")]
 pub fn glm5() -> CoreBpe {
     let encoder = parse_tkv(GLM5_CHAIN);
     CoreBpe::new(
@@ -740,6 +784,7 @@ pub fn glm5() -> CoreBpe {
 /// Construct the minimax_m2 encoding (MiniMax M2 / M2.1 / M2.5 / M2.7).
 /// Vocabulary size: 200,000 regular tokens + 54 special tokens
 /// (byte-identical tokenizer across the whole M2 family).
+#[cfg(feature = "vocab-minimax_m2")]
 pub fn minimax_m2() -> CoreBpe {
     let encoder = parse_tkv(MINIMAX_M2_CHAIN);
     let special = special_tokens(&[
@@ -808,7 +853,7 @@ pub fn minimax_m2() -> CoreBpe {
 }
 
 /// Expose cl100k rank map for internal tests (e.g. Vocab equivalence)
-#[cfg(test)]
+#[cfg(all(test, feature = "vocab-cl100k_base"))]
 pub(crate) fn parse_tiktoken_data_for_test() -> FxHashMap<Vec<u8>, u32> {
     parse_tkv(CL100K_BASE_CHAIN)
 }
@@ -826,21 +871,38 @@ mod vocab_oracle {
     use super::*;
     use base64::Engine;
 
-    /// Every shipped vocabulary, as (name, frame chain).
-    const CHAINS: &[(&str, &[&[u8]])] = &[
-        ("cl100k_base", CL100K_BASE_CHAIN),
-        ("o200k_base", O200K_BASE_CHAIN),
-        ("r50k_base", R50K_BASE_CHAIN),
-        ("p50k_base", P50K_BASE_CHAIN),
-        ("llama3", LLAMA3_CHAIN),
-        ("deepseek_v3", DEEPSEEK_V3_CHAIN),
-        ("qwen2", QWEN2_CHAIN),
-        ("mistral_v3", MISTRAL_V3_CHAIN),
-        ("kimi_k2", KIMI_K2_CHAIN),
-        ("glm4", GLM4_CHAIN),
-        ("glm5", GLM5_CHAIN),
-        ("minimax_m2", MINIMAX_M2_CHAIN),
-    ];
+    /// Every vocabulary this build carries, as (name, frame chain).
+    // the pushes are cfg-gated, so a collect() would not express this
+    #[allow(clippy::vec_init_then_push)]
+    fn chains() -> Vec<(&'static str, &'static [&'static [u8]])> {
+        #[allow(unused_mut)]
+        let mut chains: Vec<(&'static str, &'static [&'static [u8]])> = Vec::new();
+        #[cfg(feature = "vocab-cl100k_base")]
+        chains.push(("cl100k_base", CL100K_BASE_CHAIN));
+        #[cfg(feature = "vocab-o200k_base")]
+        chains.push(("o200k_base", O200K_BASE_CHAIN));
+        #[cfg(feature = "vocab-r50k_base")]
+        chains.push(("r50k_base", R50K_BASE_CHAIN));
+        #[cfg(feature = "vocab-p50k_base")]
+        chains.push(("p50k_base", P50K_BASE_CHAIN));
+        #[cfg(feature = "vocab-llama3")]
+        chains.push(("llama3", LLAMA3_CHAIN));
+        #[cfg(feature = "vocab-deepseek_v3")]
+        chains.push(("deepseek_v3", DEEPSEEK_V3_CHAIN));
+        #[cfg(feature = "vocab-qwen2")]
+        chains.push(("qwen2", QWEN2_CHAIN));
+        #[cfg(feature = "vocab-mistral_v3")]
+        chains.push(("mistral_v3", MISTRAL_V3_CHAIN));
+        #[cfg(feature = "vocab-kimi_k2")]
+        chains.push(("kimi_k2", KIMI_K2_CHAIN));
+        #[cfg(feature = "vocab-glm4")]
+        chains.push(("glm4", GLM4_CHAIN));
+        #[cfg(feature = "vocab-glm5")]
+        chains.push(("glm5", GLM5_CHAIN));
+        #[cfg(feature = "vocab-minimax_m2")]
+        chains.push(("minimax_m2", MINIMAX_M2_CHAIN));
+        chains
+    }
 
     /// Parse `tests/vocab-oracle/<name>.tiktoken.zst`: one
     /// `<base64(token bytes)> <rank>` line per entry.
@@ -866,7 +928,7 @@ mod vocab_oracle {
 
     #[test]
     fn shipped_vocabularies_match_the_oracle() {
-        for &(name, chain) in CHAINS {
+        for (name, chain) in chains() {
             let shipped = parse_tkv(chain);
             let reference = oracle(name);
             assert_eq!(
@@ -887,7 +949,8 @@ mod vocab_oracle {
     }
 
     /// The three derived vocabularies must stay exact rank-aligned extensions of
-    /// their base — the property that lets their files hold only the tail.
+    /// their base — the property that lets their files hold only the tail. Read
+    /// straight from the oracles, so this holds regardless of which features are on.
     #[test]
     fn derived_vocabularies_extend_their_base() {
         for (derived, base) in [
