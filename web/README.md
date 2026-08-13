@@ -92,7 +92,7 @@ npm run build      # type-checks, then emits dist/
 npm run preview    # serve dist/ locally
 ```
 
-The build output is fully static. The wasm binary is ~11 MB (17 zstd-compressed
+The build output is fully static. The wasm binary is ~6.3 MB (17 zstd-compressed
 vocabularies are embedded; zstd data does not gzip further) — the UI shows a
 loading state and the page itself paints instantly, so this is a
 first-interaction cost, not a first-paint cost.
@@ -140,7 +140,7 @@ the body produces `unrecognized directive: tiktoken.golia.jp` at Caddy's config
 validation step (which refuses the deploy and leaves the live config untouched).
 
 The vhost sets the two headers this site needs: hashed assets under `/assets/*`
-get `max-age=31536000, immutable` (the 11 MB wasm is fetched once per release),
+get `max-age=31536000, immutable` (the 6.3 MB wasm is fetched once per release),
 everything else gets `no-cache`. Caddy serves `.wasm` as `application/wasm`
 natively — no MIME configuration is required.
 
