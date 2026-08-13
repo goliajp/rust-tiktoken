@@ -24,6 +24,40 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [4.0.1] - 2026-08-13
+
+### Fixed
+- **Builds that leave a vocabulary out emitted dead-code and unused-import
+  warnings** — 13 for a single vocabulary, 27 for none. Whatever a build
+  omits, the machinery for it is still compiled and now unreachable: an
+  omitted vocabulary's split pattern and special-token table, and with no
+  vocabulary at all the TKV1 decoder, the merge loop and the piece cache as
+  well. That is what the vocabulary features added in 4.0.0 do, not a defect
+  in them, but rustc cannot tell the difference.
+
+  Registry dependencies have their lints capped, so this never reached anyone
+  using the published crate; a path or workspace dependency — what every
+  contributor and every monorepo consumer has — saw all of them.
+
+  A crate-level `allow(dead_code, unused_imports)` now applies whenever
+  `vocabs-all` is off. Verified by mutation: a deliberately dead function is
+  reported under the defaults and silenced under `--no-default-features`, with
+  or without a single vocabulary.
+
+  This is deliberately blanket rather than a `cfg` on each of the twelve
+  items. Gating them individually means guessing a condition per constant, and
+  a condition guessed too narrowly is not a warning but a build failure in
+  some feature combination CI does not enumerate. What the blanket allow gives
+  up is code dead in *every* configuration — which the full build still
+  catches, and that is the build CI lints strictly and nearly everyone ships.
+
+- CI lints the configurations that produced them. `cargo build` does not fail
+  on warnings and the strict clippy job runs default features only, so the
+  reduced builds had nowhere to be checked. The feature-matrix job now runs
+  `cargo clippy -- -D warnings` with no vocabularies and with one.
+
+No code, token ids, or public API changed.
+
 ## [4.0.0] - 2026-08-13
 
 Token ids, encodings and the public API are unchanged. The major bump is for

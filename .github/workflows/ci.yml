@@ -45,6 +45,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # no vocabulary at all is a supported build (pricing tables only)
       - run: cargo build -p tiktoken --no-default-features
+      # `cargo build` does not fail on warnings and the strict clippy job below
+      # only runs default features, so the vocabulary-free build was free to
+      # accumulate them — it had 27. Lint it here, where it is exercised.
+      - run: cargo clippy -p tiktoken --lib --no-default-features -- -D warnings
+      - run: cargo clippy -p tiktoken --lib --no-default-features --features vocab-o200k_base -- -D warnings
       # one vocabulary on its own, one that pulls in the base it extends, and a
       # mixed pair. `features_*` checks list_encodings()/get_encoding() agree;
       # `vocab_oracle` decodes whatever data the build carries and diffs it
