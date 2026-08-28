@@ -13,3 +13,11 @@ authors = ["GOLIA株式会社", "Li Hao <lihao@golia.jp>"]
 [profile.release]
 lto = true
 codegen-units = 1
+
+[profile.dev]
+# debug=1 (line tables) instead of the default 2 (full DWARF). Backtraces keep
+# file and line; what is lost is variable inspection in a debugger, which this
+# project's workflow does not use. Measured 2026-08-28: target/debug/deps is
+# the largest single thing on these machines — 104 GB in smix alone — and the
+# debug info is most of it.
+debug = 1
