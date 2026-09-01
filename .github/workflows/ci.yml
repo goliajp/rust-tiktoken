@@ -83,7 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@v2.85.4
+      - uses: taiki-e/install-action@v2.87.1
         with:
           tool: cargo-audit,cargo-deny
       - run: cargo audit
