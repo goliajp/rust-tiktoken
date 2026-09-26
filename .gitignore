@@ -10,9 +10,6 @@ tiktoken-wasm/pkg/
 .idea/
 .vscode/
 
-# Claude Code
-.claude/
-
 # local
 .env.local
 tiktoken/tests/__pycache__/
