@@ -7,7 +7,7 @@
 //! All encoding instances are cached globally via `OnceLock`, so repeated
 //! calls to `getEncoding()` with the same name return the same underlying data.
 
-use wasm_bindgen::prelude::{wasm_bindgen, JsError};
+use wasm_bindgen::prelude::{JsError, wasm_bindgen};
 
 /// WASM wrapper around a tiktoken encoding instance.
 ///
@@ -98,16 +98,20 @@ pub fn list_encodings() -> Vec<String> {
 ///
 /// Supported encodings:
 /// - `"cl100k_base"` — GPT-4, GPT-3.5-turbo
-/// - `"o200k_base"` — GPT-4o, GPT-4.1, o1, o3
+/// - `"o200k_base"` — GPT-4o, GPT-4.1, GPT-5.x, GPT-6.x, o1, o3
 /// - `"o200k_harmony"` — gpt-oss (harmony chat format)
 /// - `"p50k_base"` — text-davinci-002/003
 /// - `"p50k_edit"` — text-davinci-edit
 /// - `"r50k_base"` — GPT-3 (davinci, curie, etc.)
 /// - `"gpt2"` — GPT-2 (alias for r50k_base)
-/// - `"llama3"` — Meta Llama 3/4
+/// - `"llama3"` — Meta Llama 3.x
+/// - `"llama4"` — Meta Llama 4, Muse
 /// - `"deepseek_v3"` — DeepSeek V3/R1
 /// - `"qwen2"` — Qwen 2/2.5/3
+/// - `"qwen3_5"` — Qwen 3.5–3.8
 /// - `"mistral_v3"` — Mistral/Codestral/Pixtral
+/// - `"mistral_v15"` — Mistral Large 4
+/// - `"deepseek_v4"`, `"kimi_k2"`, `"kimi_k3"`, `"glm4"`, `"glm5"`, `"minimax_m2"`
 ///
 /// Throws `Error` for unknown encoding names.
 #[wasm_bindgen(js_name = getEncoding)]
@@ -299,7 +303,13 @@ mod tests {
     #[test]
     fn encoding_for_known_models() {
         let models = [
-            "gpt-4o", "gpt-4", "gpt-3.5-turbo", "llama-4", "deepseek-r1", "qwen3", "mistral-large",
+            "gpt-4o",
+            "gpt-4",
+            "gpt-3.5-turbo",
+            "llama-4",
+            "deepseek-r1",
+            "qwen3",
+            "mistral-large",
         ];
         for model in models {
             let enc = encoding_for_model(model);
