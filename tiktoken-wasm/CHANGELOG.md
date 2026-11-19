@@ -5,6 +5,13 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-11-20
+
+Version lockstep with `tiktoken` 5.1.0, whose vocabulary data now comes from
+per-vendor data crates. The JavaScript API, the token ids and the npm package
+contents are unchanged; a custom wasm build that selects only some
+vocabularies now downloads only those vendors' data crates.
+
 ## [5.0.1] - 2026-11-20
 
 Version lockstep with `tiktoken` 5.0.1. No API change.

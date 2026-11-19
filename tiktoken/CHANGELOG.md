@@ -29,6 +29,44 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [5.1.0] - 2026-11-20
+
+The vocabulary data moves out of this crate into eight data crates, one per
+vendor (#11). Nothing changes in the API, the feature names, the defaults or
+any token id.
+
+### Changed
+
+- **Cargo downloads only the vendors you enable.** Every `vocab-*` feature now
+  pulls in its vendor's data crate as an optional dependency, and cargo skips
+  optional dependencies that are not enabled. A build with only
+  `vocab-cl100k_base` downloads `tiktoken` and `tiktoken-vocab-openai`
+  instead of all 7.9 MB.
+
+  | crate | vocabularies | `.crate` bytes |
+  |:--|:--|--:|
+  | `tiktoken` | (code only) | 150,105 |
+  | `tiktoken-vocab-openai` | cl100k_base, o200k_base, r50k_base, p50k_base | 1,373,659 |
+  | `tiktoken-vocab-meta` | llama3, llama4 | 936,156 |
+  | `tiktoken-vocab-deepseek` | deepseek_v3 | 522,537 |
+  | `tiktoken-vocab-qwen` | qwen2, qwen3_5 | 1,560,865 |
+  | `tiktoken-vocab-mistral` | mistral_v3, mistral_v15 | 1,387,561 |
+  | `tiktoken-vocab-moonshot` | kimi_k2 | 662,493 |
+  | `tiktoken-vocab-zhipu` | glm4, glm5 | 587,077 |
+  | `tiktoken-vocab-minimax` | minimax_m2 | 825,420 |
+
+  The default build downloads the same total as before, split across nine
+  crates. `tiktoken` 5.0.1 was 7,968,379 bytes, at 76% of the crates.io 10 MB
+  package limit; each crate is now far below it, so new vocabularies are no
+  longer capped by it.
+- **Each data crate carries its vendor's license** (and NOTICE where the
+  license requires one), so the license travels with the data. The data
+  crates are versioned on their own: they start at 1.0.0, add vocabularies in
+  minor releases, and would take a major release for a change to existing
+  token data.
+- The conversion scripts move from `tiktoken/src/encodings/` to
+  `vocabs/tools/` (they were never part of the published API).
+
 ## [5.0.1] - 2026-11-20
 
 ### Fixed

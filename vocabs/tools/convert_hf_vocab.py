@@ -26,8 +26,8 @@ differentially compared against the HF tokenizer over the parity corpus
 
 Usage:
     pip install tokenizers tiktoken zstandard mistral-common
-    python tiktoken/src/encodings/convert_hf_vocab.py qwen3_5 llama4 mistral_v15
-    python tiktoken/src/encodings/build_tkv.py    qwen3_5 llama4 mistral_v15
+    python vocabs/tools/convert_hf_vocab.py qwen3_5 llama4 mistral_v15
+    python vocabs/tools/build_tkv.py        qwen3_5 llama4 mistral_v15
 """
 
 import base64
@@ -39,7 +39,7 @@ import tiktoken as pytiktoken
 import zstandard
 from tokenizers import Tokenizer
 
-TESTS_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "tests"
+TESTS_DIR = pathlib.Path(__file__).resolve().parents[2] / "tiktoken" / "tests"
 OUT_DIR = TESTS_DIR / "vocab-oracle"
 sys.path.insert(0, str(TESTS_DIR))
 from canonical_corpus import corpus  # noqa: E402
