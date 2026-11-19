@@ -12,11 +12,11 @@ The fastest Rust BPE tokenizer — 5–49x faster than tiktoken-rs natively (15�
 
 ## Features
 
-- **Multi-provider**: 17 encodings across 8 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, MiniMax)
+- **Multi-provider**: 20 encodings across 8 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, MiniMax)
 - **Fast**: hand-written pre-tokenizer for ASCII and CJK (bypasses the regex), key-size-layered vocabulary, whole-piece memoisation, hybrid BPE merge
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
-- **Pricing**: cost estimation for 116 models across 11 providers
-- **Compact**: all 17 vocabularies embedded in 5.1 MB, and opt-out per vocabulary — a cl100k-only build carries 373 KB of data
+- **Pricing**: cost estimation for 153 models across 11 providers
+- **Compact**: all 20 vocabularies embedded in 7.8 MB, and opt-out per vocabulary — a cl100k-only build carries 373 KB of data
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
 ## Performance
@@ -75,7 +75,7 @@ implementation's memoisation — it is the floor, and the lead holds there too.
 
 The scanners are pinned to the regex by property tests (hundreds of thousands
 of random inputs per run), and every encoding is pinned to its vendor's
-tokenizer by 44,518 differential fixture cases.
+tokenizer by 53,275 differential fixture cases.
 
 Benchmark source: [`benches/`](benches/), [`../bench-compare/`](../bench-compare/). Reproducible via `cargo bench` / `cargo run -p bench-compare`.
 
@@ -93,11 +93,11 @@ tiktoken = { version = "4", features = ["parallel"] }
 
 ### Picking vocabularies
 
-All 17 encodings are on by default (5.1 MB of vocabulary data). Turn off the
+All 20 encodings are on by default (7.8 MB of vocabulary data). Turn off the
 defaults and name what you use to carry only that:
 
 ```toml
-# GPT-4o / GPT-5 only — 815 KB of vocabulary data instead of 5.1 MB
+# GPT-4o / GPT-5 only — 815 KB of vocabulary data instead of 7.8 MB
 tiktoken = { version = "4", default-features = false, features = ["vocab-o200k_base"] }
 
 # a whole vendor
@@ -143,23 +143,26 @@ marked `+ base` are rank-aligned extensions storing only their tail.
 
 | Encoding | Provider | Feature | Data | Models |
 |---|---|---|---|---|
-| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
+| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), GPT-6.x (assumed; unpublished), o1, o3, o4-mini |
 | `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss (harmony chat format) |
 | `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
 | `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + base | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 era: davinci, curie, babbage, ada |
 | `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2 (alias for `r50k_base`) |
-| `llama3` | Meta | `vocab-llama3` | 111 KB + base | Llama 3, 3.1, 3.2, 3.3, 4 |
+| `llama3` | Meta | `vocab-llama3` | 111 KB + base | Llama 3, 3.1, 3.2, 3.3 |
+| `llama4` | Meta | `vocab-llama4` | 816 KB | Llama 4 Scout / Maverick, Muse |
 | `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3, R1 |
-| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash (V3 vocab + V4 special tokens) |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash, V4.1 Flash (V3 vocab + V4 special tokens) |
 | `qwen2` | Alibaba | `vocab-qwen2` | 564 KB | Qwen 2.5, Qwen 3 |
-| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral (Tekken tokenizer) |
+| `qwen3_5` | Alibaba | `vocab-qwen3_5` | 989 KB | Qwen 3.5 – 3.8, Qwen 4 (assumed; unpublished) |
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral, Large 3, Small 4 (Tekken tokenizer) |
+| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4 (Tekken v15) |
 | `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
-| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 (K2 vocab + K3 special tokens) |
+| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1 (K2 vocab + K3 special tokens) |
 | `glm4` | Zhipu | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
-| `glm5` | Zhipu | `vocab-glm5` | 6 KB + base | GLM-5 / 5.2 |
-| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 |
+| `glm5` | Zhipu | `vocab-glm5` | 6 KB + base | GLM-5 / 5.1 / 5.2 / 5.3 |
+| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 / M3 / M3.1 |
 
 ## API
 
@@ -226,7 +229,7 @@ assert!(matches!(r.matched, pricing::Match::Normalized { .. }));
 assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_some());
 ```
 
-Supports 116 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba,
+Supports 153 models across OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba,
 Mistral, Moonshot, Zhipu, MiniMax and Voyage.
 
 ## WebAssembly

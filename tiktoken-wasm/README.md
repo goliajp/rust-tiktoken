@@ -23,7 +23,7 @@ wasm-pack build --target web --release
 
 Output is in `pkg/` — a complete npm-ready package containing:
 - `tiktoken_wasm.js` — ES module with WASM loader
-- `tiktoken_wasm_bg.wasm` — compiled WASM binary (6.28 MB, 5.55 MB gzipped, all 17 vocabularies)
+- `tiktoken_wasm_bg.wasm` — compiled WASM binary (8.96 MB, 8.22 MB gzipped, all 20 vocabularies)
 
 Building it yourself, `--no-default-features --features vocab-o200k_base` (or
 any other `vocab-*` / vendor group forwarded from `tiktoken`) drops that to
@@ -53,7 +53,7 @@ await init()
 
 // discover available encodings
 const names: string[] = listEncodings()
-// ["cl100k_base", "o200k_base", ..., "mistral_v3"]
+// ["cl100k_base", "o200k_base", ..., "minimax_m2"]
 
 // encode / decode
 const enc: Encoding = getEncoding('cl100k_base')
@@ -70,7 +70,7 @@ console.log(enc.numSpecialTokens)  // 5
 
 // by model name — supports OpenAI, Meta, DeepSeek, Qwen, Mistral
 const enc2 = encodingForModel('gpt-4o')
-const encName = modelToEncoding('llama-4-scout')  // "llama3"
+const encName = modelToEncoding('llama-4-scout')  // "llama4"
 
 // cost estimation (USD)
 const cost: number = estimateCost('gpt-4o', 1000, 500)
@@ -132,22 +132,25 @@ List all available encoding names (17 encodings).
 
 Get a tokenizer by encoding name. Supported:
 - `cl100k_base` — GPT-4, GPT-3.5-turbo
-- `o200k_base` — GPT-4o, GPT-4.1, GPT-5–5.6, o1, o3, o4-mini
+- `o200k_base` — GPT-4o, GPT-4.1, GPT-5–5.6, GPT-6 (unconfirmed), o1, o3, o4-mini
 - `o200k_harmony` — gpt-oss (harmony chat format)
 - `p50k_base` — text-davinci-002/003
 - `p50k_edit` — text-davinci-edit
 - `r50k_base` — GPT-3 (davinci, curie, etc.)
 - `gpt2` — GPT-2 (alias for `r50k_base`)
-- `llama3` — Meta Llama 3/4
+- `llama3` — Meta Llama 3.x
+- `llama4` — Meta Llama 4, Muse
 - `deepseek_v3` — DeepSeek V3/R1
 - `qwen2` — Qwen 2/2.5/3
+- `qwen3_5` — Qwen 3.5–3.8, Qwen 4 (unconfirmed)
 - `mistral_v3` — Mistral/Codestral/Pixtral (Tekken)
-- `deepseek_v4` — DeepSeek V4 Pro/Flash
+- `mistral_v15` — Mistral Large 4 (Tekken v15)
+- `deepseek_v4` — DeepSeek V4 Pro/Flash, V4.1 Flash
 - `kimi_k2` — Kimi K2/K2.5/K2.6
-- `kimi_k3` — Kimi K3
+- `kimi_k3` — Kimi K3/K3.1
 - `glm4` — GLM-4.5/4.6/4.7
-- `glm5` — GLM-5/5.2
-- `minimax_m2` — MiniMax M2 family
+- `glm5` — GLM-5/5.1/5.2/5.3
+- `minimax_m2` — MiniMax M2 and M3 families
 
 ### `encodingForModel(model: string): Encoding`
 
@@ -173,7 +176,7 @@ Map a model name to its encoding name without loading the encoding.
 
 ### `estimateCost(modelId, inputTokens, outputTokens): number`
 
-Estimate API cost in USD. Supports 116 models across 11 providers.
+Estimate API cost in USD. Supports 153 models across 11 providers.
 
 ### `getModelInfo(modelId): ModelInfo`
 
@@ -185,7 +188,7 @@ model. The returned `id` is this table's own spelling.
 
 ### `allModels(): ModelInfo[]`
 
-List all 116 supported models with pricing info.
+List all 153 supported models with pricing info.
 
 ### `modelsByProvider(provider): ModelInfo[]`
 
@@ -205,21 +208,21 @@ Filter models by provider: `"OpenAI"`, `"Anthropic"`, `"Google"`, `"Meta"`, `"De
 
 ## Supported Models (pricing)
 
-`estimateCost` / `getModelInfo` / `allModels` cover **116 models across 11
-providers** (2026-08 pricing). Per provider, newest first:
+`estimateCost` / `getModelInfo` / `allModels` cover **153 models across 11
+providers** (2026-11 pricing). Per provider, newest first:
 
 | Provider | Models | Latest entries |
 |----------|-------:|----------------|
-| OpenAI | 34 | gpt-5.6-sol/terra/luna, gpt-5.5(-pro), gpt-5.4(-mini/nano/pro), gpt-5.2(-pro), gpt-5.1, gpt-5(-mini/nano/pro), gpt-4.1, gpt-4o, o1/o3/o4-mini, … |
-| Anthropic | 17 | claude-fable-5, claude-mythos-5, claude-opus-5, claude-sonnet-5, claude-opus-4.8/4.7/4.6, claude-haiku-4.5, … |
-| Google | 13 | gemini-3.1-pro-preview, gemini-3.6/3.5-flash, gemini-2.5-pro/flash, … |
-| Mistral | 12 | mistral-large/medium/small, codestral, devstral, ministral, pixtral-large, … |
-| Alibaba | 9 | qwen3.8-max, qwen3.5-plus, qwen3-max/plus/coder, qwen2.5-72b, … |
-| Meta | 6 | llama-4-scout/maverick, llama-3.3-70b, llama-3.1-405b/70b/8b |
-| Zhipu | 5 | glm-5.2, glm-5, glm-4.7, glm-4.5(-air) |
-| DeepSeek | 4 | deepseek-v4-pro, deepseek-v4-flash, deepseek-v3, deepseek-r1 |
-| MiniMax | 4 | minimax-m2.7, minimax-m2.5, minimax-m2.1, minimax-m2 |
-| Moonshot | 4 | kimi-k3, kimi-k2.7-code, kimi-k2.6, kimi-k2.5 |
+| OpenAI | 41 | gpt-6.2-astra/sol, gpt-6.1-sol/terra, gpt-6-astra/sol/luna, gpt-5.6-sol/terra/luna, gpt-5.5(-pro), gpt-5.4(-mini/nano/pro), gpt-5.2(-pro), gpt-5.1, gpt-5(-mini/nano/pro), gpt-4.1, gpt-4o, o1/o3/o4-mini, … |
+| Anthropic | 24 | claude-fable-5.2/5.1/5, claude-mythos-5.2/5.1/5, claude-opus-5.5/5, claude-sonnet-5.5/5, claude-haiku-5.5, claude-opus-4.8/4.7/4.6, claude-haiku-4.5, … |
+| Google | 19 | gemini-4-neon/hydrogen/carbon/argon, gemini-3.8-flash, gemini-3.1-pro-preview, gemini-3.6/3.5-flash, gemini-embedding-2, gemini-2.5-pro/flash, … |
+| Mistral | 15 | mistral-large-4, mistral-large/medium/small, codestral, devstral, ministral, mistral-embed, codestral-embed, pixtral-large, … |
+| Alibaba | 13 | qwen4-max, qwen3.8-max/flash/27b/2.4t-a95b, qwen3.5-plus, qwen3-max/plus/coder, qwen2.5-72b, … |
+| Meta | 8 | muse-spark-open, muse-glimmer-30b, llama-4-scout/maverick, llama-3.3-70b, llama-3.1-405b/70b/8b |
+| Zhipu | 8 | glm-5.3(-flashx/-flash), glm-5.2, glm-5, glm-4.7, glm-4.5(-air) |
+| DeepSeek | 5 | deepseek-flash, deepseek-v4-pro, deepseek-v4-flash, deepseek-v3, deepseek-r1 |
+| MiniMax | 6 | minimax-m3, minimax-m3.1-flash, minimax-m2.7/m2.5/m2.1/m2 |
+| Moonshot | 6 | kimi-k3.1-pro(-highspeed), kimi-k3, kimi-k2.7-code, kimi-k2.6, kimi-k2.5 |
 | Voyage | 8 | voyage-4-large/4/4-lite/code-4, voyage-3-large, voyage-3.5(-lite), voyage-code-3 (embeddings) |
 
 The authoritative list is the code: call `allModels()` at runtime, or see
