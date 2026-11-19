@@ -54,6 +54,19 @@ jobs:
       - name: build wasm
         working-directory: tiktoken-wasm
         run: wasm-pack build --target web --release --scope goliapkg
+      # the wasm embeds every vocabulary, so the npm package carries their
+      # licenses and notices as well as the crate's own
+      - name: add license files to the npm package
+        working-directory: tiktoken-wasm
+        run: |
+          cp -L LICENSE-MIT LICENSE-APACHE LICENSE-3RD-PARTY NOTICE pkg/
+          cp -RL licenses pkg/
+          node -e '
+            const fs = require("fs")
+            const p = JSON.parse(fs.readFileSync("pkg/package.json", "utf8"))
+            p.files = [...new Set([...(p.files || []), "LICENSE-MIT", "LICENSE-APACHE", "LICENSE-3RD-PARTY", "NOTICE", "licenses"])]
+            fs.writeFileSync("pkg/package.json", JSON.stringify(p, null, 2) + "\n")
+          '
       - name: publish to crates.io
         working-directory: tiktoken-wasm
         run: |
