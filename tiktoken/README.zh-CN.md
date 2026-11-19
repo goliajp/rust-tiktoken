@@ -16,7 +16,7 @@
 - **高性能**：手写扫描器覆盖 ASCII 与 CJK（绕开正则）、词表按 key 长度分层、重复片段整片记忆、混合 BPE 合并
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
 - **费用估算**：覆盖 11 家厂商共 153 个模型
-- **体积紧凑**：20 份词表共 7.8 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据
+- **体积紧凑**：20 份词表共 7.8 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据，cargo 也只下载启用的厂商的数据
 - **零分配计数**：`count()` 不分配 token 向量
 
 ## 性能
@@ -96,13 +96,15 @@ tiktoken = { version = "4", features = ["parallel"] }
 
 ```toml
 # 只要 GPT-4o / GPT-5 —— 词表数据 815 KB 而非 7.8 MB
-tiktoken = { version = "4", default-features = false, features = ["vocab-o200k_base"] }
+tiktoken = { version = "5", default-features = false, features = ["vocab-o200k_base"] }
 
 # 或者按厂商整组
-tiktoken = { version = "4", default-features = false, features = ["vocab-openai"] }
+tiktoken = { version = "5", default-features = false, features = ["vocab-openai"] }
 ```
 
-实测 `examples/count_tokens`（release）：全词表 6,480,912 字节，仅 `vocab-cl100k_base` 2,226,704 字节。
+实测 `examples/count_tokens`（release，Linux x86_64）：全词表 9,463,280 字节，仅 `vocab-cl100k_base` 2,550,256 字节。
+
+词表数据按厂商分在各自的 crate 里（`tiktoken-vocab-openai`、`-meta`、`-deepseek`、`-qwen`、`-mistral`、`-moonshot`、`-zhipu`、`-minimax`），由上面的特性引入，所以 cargo 只下载你启用的厂商：只用 OpenAI 约 1.5 MB，全部是 7.9 MB。
 
 没编进来的编码就是不存在：`list_encodings()` 不列出它，`get_encoding()` 返回 `None`。`pricing` 表与词表无关，所以只做费用估算时可以一个 `vocab-*` 都不开。
 

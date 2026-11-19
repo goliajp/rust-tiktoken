@@ -1,0 +1,19 @@
+[package]
+name = "tiktoken-vocab-openai"
+version = "1.0.0"
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+license = "MIT"
+description = "OpenAI tokenizer vocabularies (cl100k_base, o200k_base, r50k_base, p50k_base) for the tiktoken crate"
+documentation = "https://docs.rs/tiktoken-vocab-openai"
+keywords = ["tiktoken", "tokenizer", "bpe", "vocabulary"]
+categories = ["text-processing"]
+
+# Each vocabulary is behind its own feature, so a build carries only the ones
+# its `tiktoken` features name. Nothing is on by default.
+[features]
+cl100k_base = []
+o200k_base = []
+r50k_base = []
+p50k_base = []

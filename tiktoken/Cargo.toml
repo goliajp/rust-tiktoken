@@ -4,7 +4,7 @@ description = "A high-performance pure-Rust implementation of OpenAI's tiktoken 
 license.workspace = true
 repository.workspace = true
 documentation = "https://docs.rs/tiktoken"
-version = "5.0.1"
+version = "5.1.0"
 edition.workspace = true
 authors.workspace = true
 keywords = ["tiktoken", "tokenizer", "bpe", "openai", "gpt"]
@@ -12,7 +12,8 @@ categories = ["text-processing", "algorithms"]
 # Oracle fixtures, the `.tiktoken.zst` vocabulary references and the
 # differential tests stay in the repository but are excluded from the published
 # package: ~15 MB of reference data used only to validate this crate against
-# upstream tokenizers, against a 10 MB crates.io package cap.
+# upstream tokenizers. The vocabularies themselves ship in the tiktoken-vocab-*
+# crates.
 exclude = ["tests/", "examples/react-app/", "PERF-*.md", "SIZE-*.md"]
 
 [features]
@@ -45,29 +46,39 @@ vocab-moonshot = ["vocab-kimi_k2"]
 vocab-zhipu = ["vocab-glm4", "vocab-glm5"]
 vocab-minimax = ["vocab-minimax_m2"]
 
-# by vocabulary. The three with a dependency are rank-aligned extensions of it
-# and share its data file, so enabling them enables the base for free.
-vocab-cl100k_base = []
-vocab-o200k_base = []
-vocab-r50k_base = []
-vocab-p50k_base = ["vocab-r50k_base"]
-vocab-llama3 = ["vocab-cl100k_base"]
-vocab-llama4 = []
-vocab-deepseek_v3 = []
-vocab-qwen2 = []
-vocab-qwen3_5 = []
-vocab-mistral_v3 = []
-vocab-mistral_v15 = []
-vocab-kimi_k2 = []
-vocab-glm4 = []
-vocab-glm5 = ["vocab-glm4"]
-vocab-minimax_m2 = []
+# by vocabulary. Each pulls in the data crate of its vendor (one crate per
+# vendor, so cargo only downloads the vendors you use) and turns on that
+# vocabulary in it. The three with a dependency are rank-aligned extensions of
+# it and store only their tail, so enabling them enables the base as well.
+vocab-cl100k_base = ["dep:tiktoken-vocab-openai", "tiktoken-vocab-openai/cl100k_base"]
+vocab-o200k_base = ["dep:tiktoken-vocab-openai", "tiktoken-vocab-openai/o200k_base"]
+vocab-r50k_base = ["dep:tiktoken-vocab-openai", "tiktoken-vocab-openai/r50k_base"]
+vocab-p50k_base = ["vocab-r50k_base", "dep:tiktoken-vocab-openai", "tiktoken-vocab-openai/p50k_base"]
+vocab-llama3 = ["vocab-cl100k_base", "dep:tiktoken-vocab-meta", "tiktoken-vocab-meta/llama3"]
+vocab-llama4 = ["dep:tiktoken-vocab-meta", "tiktoken-vocab-meta/llama4"]
+vocab-deepseek_v3 = ["dep:tiktoken-vocab-deepseek", "tiktoken-vocab-deepseek/deepseek_v3"]
+vocab-qwen2 = ["dep:tiktoken-vocab-qwen", "tiktoken-vocab-qwen/qwen2"]
+vocab-qwen3_5 = ["dep:tiktoken-vocab-qwen", "tiktoken-vocab-qwen/qwen3_5"]
+vocab-mistral_v3 = ["dep:tiktoken-vocab-mistral", "tiktoken-vocab-mistral/mistral_v3"]
+vocab-mistral_v15 = ["dep:tiktoken-vocab-mistral", "tiktoken-vocab-mistral/mistral_v15"]
+vocab-kimi_k2 = ["dep:tiktoken-vocab-moonshot", "tiktoken-vocab-moonshot/kimi_k2"]
+vocab-glm4 = ["dep:tiktoken-vocab-zhipu", "tiktoken-vocab-zhipu/glm4"]
+vocab-glm5 = ["vocab-glm4", "dep:tiktoken-vocab-zhipu", "tiktoken-vocab-zhipu/glm5"]
+vocab-minimax_m2 = ["dep:tiktoken-vocab-minimax", "tiktoken-vocab-minimax/minimax_m2"]
 
 [dependencies]
 rayon = { version = "^1", optional = true }
 regex = "^1"
 rustc-hash = "^2"
 ruzstd = "^0.9"
+tiktoken-vocab-openai = { version = "1.0.0", path = "../vocabs/openai", optional = true }
+tiktoken-vocab-meta = { version = "1.0.0", path = "../vocabs/meta", optional = true }
+tiktoken-vocab-deepseek = { version = "1.0.0", path = "../vocabs/deepseek", optional = true }
+tiktoken-vocab-qwen = { version = "1.0.0", path = "../vocabs/qwen", optional = true }
+tiktoken-vocab-mistral = { version = "1.0.0", path = "../vocabs/mistral", optional = true }
+tiktoken-vocab-moonshot = { version = "1.0.0", path = "../vocabs/moonshot", optional = true }
+tiktoken-vocab-zhipu = { version = "1.0.0", path = "../vocabs/zhipu", optional = true }
+tiktoken-vocab-minimax = { version = "1.0.0", path = "../vocabs/minimax", optional = true }
 
 [dev-dependencies]
 # only for reading the `tests/vocab-oracle/*.tiktoken.zst` reference files
