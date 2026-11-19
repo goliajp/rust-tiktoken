@@ -29,6 +29,26 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [5.0.1] - 2026-11-20
+
+### Fixed
+
+- **Stack overflow on threads with small stacks.** The per-thread piece cache
+  (about 1.2 MB) was built on the stack before moving to the heap. Release
+  builds usually optimise the copy away; debug builds did not, so the first
+  cache miss on a thread with a small stack — async runtime workers, rayon
+  pools — aborted the process (reproduced on a 256 KB stack). It is now
+  allocated on the heap directly. Contributed by John Howard (#15).
+- **Third-party licenses were incomplete.** LICENSE-3RD-PARTY covered the
+  vocabularies only up to Mistral v3: Kimi, GLM and MiniMax (added in 4.x) and
+  Llama 4, Qwen 3.5 and Mistral Large 4 (added in 5.0.0) had no entry, and the
+  Llama 3 entry linked to its license instead of including it. Every
+  vocabulary is now listed with its source, license, copyright and any
+  conditions; the full license texts ship in `licenses/`, and the notices the
+  licenses require — "Built with Llama", the Llama 3 and 4 notice sentences,
+  DeepSeek's use-based restrictions, Mistral's attribution — in a new NOTICE
+  file. The READMEs' License sections now say which conditions exist.
+
 ## [5.0.0] - 2026-11-20
 
 The model table and the vocabularies are refreshed to 2026-11: three new

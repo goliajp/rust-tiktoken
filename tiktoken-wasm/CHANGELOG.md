@@ -5,6 +5,18 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1] - 2026-11-20
+
+Version lockstep with `tiktoken` 5.0.1. No API change.
+
+### Fixed
+- **The npm package shipped without any license file**, though the wasm
+  embeds every vocabulary. It now carries LICENSE-MIT, LICENSE-APACHE,
+  LICENSE-3RD-PARTY, NOTICE and the full third-party license texts in
+  `licenses/`; the crate on crates.io carries the same files.
+- The stack-overflow fix and the completed third-party licenses from
+  `tiktoken` 5.0.1.
+
 ## [5.0.0] - 2026-11-20
 
 Version lockstep with `tiktoken` 5.0.0. The JavaScript API keeps every function
