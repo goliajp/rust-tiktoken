@@ -1,0 +1,16 @@
+[package]
+name = "tiktoken-vocab-minimax"
+version = "1.0.0"
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+license-file = "LICENSE"
+description = "MiniMax tokenizer vocabularies (minimax_m2) for the tiktoken crate"
+documentation = "https://docs.rs/tiktoken-vocab-minimax"
+keywords = ["tiktoken", "tokenizer", "bpe", "vocabulary"]
+categories = ["text-processing"]
+
+# Each vocabulary is behind its own feature, so a build carries only the ones
+# its `tiktoken` features name. Nothing is on by default.
+[features]
+minimax_m2 = []

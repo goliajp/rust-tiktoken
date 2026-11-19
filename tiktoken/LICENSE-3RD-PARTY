@@ -1,7 +1,10 @@
 # Third-Party Licenses
 
-This crate embeds tokenizer vocabularies published by other parties. The
-crate's own code is licensed MIT OR Apache-2.0 (LICENSE-MIT, LICENSE-APACHE);
+A build of this crate embeds tokenizer vocabularies published by other
+parties. Since 5.1.0 the data itself ships in the tiktoken-vocab-* crates, one
+per vendor, each carrying its vendor's license; this file lists all of them in
+one place. The crate's own code is licensed MIT OR Apache-2.0 (LICENSE-MIT,
+LICENSE-APACHE);
 each vocabulary stays under its publisher's license, listed below. The full
 texts are in the `licenses/` directory next to this file, and the attribution
 notices the licenses require are collected in NOTICE.

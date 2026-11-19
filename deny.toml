@@ -29,3 +29,51 @@ unmaintained = "workspace"
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+
+# The vocabulary data crates ship their publishers' own licenses, which have
+# no SPDX identifier. Name each one here and allow it for its crate only, so a
+# custom license anywhere else in the graph still fails the check.
+[[licenses.clarify]]
+crate = "tiktoken-vocab-meta"
+expression = "LicenseRef-Llama3-Community AND LicenseRef-Llama4-Community"
+license-files = []
+
+[[licenses.clarify]]
+crate = "tiktoken-vocab-deepseek"
+expression = "LicenseRef-DeepSeek-Model-1.0"
+license-files = []
+
+[[licenses.clarify]]
+crate = "tiktoken-vocab-mistral"
+expression = "Apache-2.0 AND LicenseRef-Mistral-Ecosystem-Open-Weight"
+license-files = []
+
+[[licenses.clarify]]
+crate = "tiktoken-vocab-moonshot"
+expression = "LicenseRef-Kimi-K2-Modified-MIT"
+license-files = []
+
+[[licenses.clarify]]
+crate = "tiktoken-vocab-minimax"
+expression = "LicenseRef-MiniMax-M2-Modified-MIT"
+license-files = []
+
+[[licenses.exceptions]]
+crate = "tiktoken-vocab-meta"
+allow = ["LicenseRef-Llama3-Community", "LicenseRef-Llama4-Community"]
+
+[[licenses.exceptions]]
+crate = "tiktoken-vocab-deepseek"
+allow = ["LicenseRef-DeepSeek-Model-1.0"]
+
+[[licenses.exceptions]]
+crate = "tiktoken-vocab-mistral"
+allow = ["LicenseRef-Mistral-Ecosystem-Open-Weight"]
+
+[[licenses.exceptions]]
+crate = "tiktoken-vocab-moonshot"
+allow = ["LicenseRef-Kimi-K2-Modified-MIT"]
+
+[[licenses.exceptions]]
+crate = "tiktoken-vocab-minimax"
+allow = ["LicenseRef-MiniMax-M2-Modified-MIT"]
