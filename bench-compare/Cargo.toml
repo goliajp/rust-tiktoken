@@ -12,7 +12,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 tiktoken = { path = "../tiktoken", version = "4.1.2" }
-tiktoken-rs = "0.9"
+tiktoken-rs = "0.12"
 
 [[bin]]
 name = "bench-compare"
