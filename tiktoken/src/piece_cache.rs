@@ -57,7 +57,12 @@ const EMPTY: Slot = Slot {
 };
 
 thread_local! {
-    static CACHE: RefCell<Box<[Slot; SLOTS]>> = RefCell::new(Box::new([EMPTY; SLOTS]));
+    static CACHE: RefCell<Box<[Slot; SLOTS]>> = RefCell::new(
+        vec![EMPTY; SLOTS]
+            .into_boxed_slice()
+            .try_into()
+            .unwrap_or_else(|_| unreachable!()),
+    );
 }
 
 #[inline]

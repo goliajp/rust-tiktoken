@@ -1,0 +1,20 @@
+tiktoken
+Copyright GOLIA株式会社. Licensed MIT OR Apache-2.0.
+
+This product embeds tokenizer vocabularies from third parties, each under its
+publisher's license. See LICENSE-3RD-PARTY and the licenses/ directory.
+
+Built with Llama.
+Llama 4 is licensed under the Llama 4 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.
+
+Built with Meta Llama 3.
+Meta Llama 3 is licensed under the Meta Llama 3 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.
+
+The deepseek_v3 and deepseek_v4 vocabulary is subject to the use-based
+restrictions in paragraph 5 and Attachment A of the DeepSeek License
+Agreement (licenses/deepseek-LICENSE-MODEL.txt).
+
+Mistral Ecosystem Open-Weight License attribution notice: 2026 - Mistral
+
+The vocabularies were converted from their published formats into this
+crate's TKV1 format; token bytes and ranks are unchanged.

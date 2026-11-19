@@ -220,6 +220,12 @@ export function App() {
               <img src="/golia-wordmark.png" alt="GOLIA" width={92} height={20} />
             </a>
             <div><T k="foot.license" /></div>
+            <div>
+              <a href={`${GITHUB}/blob/master/tiktoken/LICENSE-3RD-PARTY`} target="_blank" rel="noreferrer">
+                <T k="foot.vocab" />
+              </a>
+              {' · Built with Llama'}
+            </div>
           </div>
           <div className="links">
             {LINKS.map(({ label, href, icon }) => (
