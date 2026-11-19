@@ -1,11 +1,11 @@
 //! High-performance pure-Rust BPE tokenizer compatible with OpenAI's tiktoken
 //! and all mainstream LLM tokenizers.
 //!
-//! Supports 17 encodings across 8 providers: OpenAI (`cl100k_base`, `o200k_base`,
-//! `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`, `gpt2`), Meta (`llama3`),
-//! DeepSeek (`deepseek_v3`, `deepseek_v4`), Alibaba (`qwen2`), Mistral
-//! (`mistral_v3`), Moonshot (`kimi_k2`, `kimi_k3`), Zhipu (`glm4`, `glm5`),
-//! and MiniMax (`minimax_m2`).
+//! Supports 20 encodings across 8 providers: OpenAI (`cl100k_base`, `o200k_base`,
+//! `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`, `gpt2`), Meta (`llama3`,
+//! `llama4`), DeepSeek (`deepseek_v3`, `deepseek_v4`), Alibaba (`qwen2`,
+//! `qwen3_5`), Mistral (`mistral_v3`, `mistral_v15`), Moonshot (`kimi_k2`,
+//! `kimi_k3`), Zhipu (`glm4`, `glm5`), and MiniMax (`minimax_m2`).
 //!
 //! Includes token encoding, decoding, counting, and multi-provider pricing.
 //!
@@ -88,11 +88,17 @@ static GLM5: OnceLock<CoreBpe> = OnceLock::new();
 static MINIMAX_M2: OnceLock<CoreBpe> = OnceLock::new();
 #[cfg(feature = "vocab-deepseek_v3")]
 static DEEPSEEK_V4: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-llama4")]
+static LLAMA4: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-qwen3_5")]
+static QWEN3_5: OnceLock<CoreBpe> = OnceLock::new();
+#[cfg(feature = "vocab-mistral_v15")]
+static MISTRAL_V15: OnceLock<CoreBpe> = OnceLock::new();
 
 /// All available encoding names.
 ///
 /// Returns the list of encoding names that can be passed to [`get_encoding`].
-/// With the default features that is all 17; a build that names only some
+/// With the default features that is all 20; a build that names only some
 /// `vocab-*` features lists only those.
 ///
 /// # Examples
@@ -104,7 +110,8 @@ static DEEPSEEK_V4: OnceLock<CoreBpe> = OnceLock::new();
 /// assert!(names.contains(&"gpt2"));
 /// assert!(names.contains(&"kimi_k3"));
 /// assert!(names.contains(&"glm5"));
-/// assert_eq!(names.len(), 17);
+/// assert!(names.contains(&"qwen3_5"));
+/// assert_eq!(names.len(), 20);
 /// ```
 pub fn list_encodings() -> &'static [&'static str] {
     &ENCODING_NAMES
@@ -125,12 +132,18 @@ static ENCODING_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
     names.extend_from_slice(&["r50k_base", "gpt2"]);
     #[cfg(feature = "vocab-llama3")]
     names.push("llama3");
+    #[cfg(feature = "vocab-llama4")]
+    names.push("llama4");
     #[cfg(feature = "vocab-deepseek_v3")]
     names.extend_from_slice(&["deepseek_v3", "deepseek_v4"]);
     #[cfg(feature = "vocab-qwen2")]
     names.push("qwen2");
+    #[cfg(feature = "vocab-qwen3_5")]
+    names.push("qwen3_5");
     #[cfg(feature = "vocab-mistral_v3")]
     names.push("mistral_v3");
+    #[cfg(feature = "vocab-mistral_v15")]
+    names.push("mistral_v15");
     #[cfg(feature = "vocab-kimi_k2")]
     names.extend_from_slice(&["kimi_k2", "kimi_k3"]);
     #[cfg(feature = "vocab-glm4")]
@@ -146,10 +159,10 @@ static ENCODING_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
 ///
 /// Supported encodings:
 /// - OpenAI: `cl100k_base`, `o200k_base`, `o200k_harmony`, `p50k_base`, `p50k_edit`, `r50k_base`, `gpt2`
-/// - Meta: `llama3`
+/// - Meta: `llama3`, `llama4`
 /// - DeepSeek: `deepseek_v3`, `deepseek_v4`
-/// - Alibaba: `qwen2`
-/// - Mistral: `mistral_v3`
+/// - Alibaba: `qwen2`, `qwen3_5`
+/// - Mistral: `mistral_v3`, `mistral_v15`
 /// - Moonshot: `kimi_k2`, `kimi_k3`
 /// - Zhipu: `glm4`, `glm5`
 /// - MiniMax: `minimax_m2`
@@ -172,14 +185,20 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
         "r50k_base" | "gpt2" => Some(R50K_BASE.get_or_init(encoding::r50k_base)),
         #[cfg(feature = "vocab-llama3")]
         "llama3" => Some(LLAMA3.get_or_init(encoding::llama3)),
+        #[cfg(feature = "vocab-llama4")]
+        "llama4" => Some(LLAMA4.get_or_init(encoding::llama4)),
         #[cfg(feature = "vocab-deepseek_v3")]
         "deepseek_v3" => Some(DEEPSEEK_V3.get_or_init(encoding::deepseek_v3)),
         #[cfg(feature = "vocab-deepseek_v3")]
         "deepseek_v4" => Some(DEEPSEEK_V4.get_or_init(encoding::deepseek_v4)),
         #[cfg(feature = "vocab-qwen2")]
         "qwen2" => Some(QWEN2.get_or_init(encoding::qwen2)),
+        #[cfg(feature = "vocab-qwen3_5")]
+        "qwen3_5" => Some(QWEN3_5.get_or_init(encoding::qwen3_5)),
         #[cfg(feature = "vocab-mistral_v3")]
         "mistral_v3" => Some(MISTRAL_V3.get_or_init(encoding::mistral_v3)),
+        #[cfg(feature = "vocab-mistral_v15")]
+        "mistral_v15" => Some(MISTRAL_V15.get_or_init(encoding::mistral_v15)),
         #[cfg(feature = "vocab-kimi_k2")]
         "kimi_k2" => Some(KIMI_K2.get_or_init(encoding::kimi_k2)),
         #[cfg(feature = "vocab-kimi_k2")]
@@ -278,6 +297,8 @@ const EXACT_MODEL_ENCODINGS: &[(&str, &str)] = &[
     ("deepseek-reasoner", "deepseek_v4"),
     // Moonshot API alias for the current flagship
     ("kimi-latest", "kimi_k3"),
+    // Mistral's alias points at Large 4 since its 2026-11 release
+    ("mistral-large-latest", "mistral_v15"),
     // embeddings
     ("text-embedding-3-small", "cl100k_base"),
     ("text-embedding-3-large", "cl100k_base"),
@@ -305,6 +326,10 @@ const MODEL_PREFIX_ENCODINGS: &[(&str, &str)] = &[
     // OpenAI — o200k_harmony must precede o200k_base so `gpt-oss` is not
     // shadowed, and the o200k block must precede the cl100k `gpt-4` entry.
     ("gpt-oss", "o200k_harmony"),
+    // GPT-6: OpenAI has not published its tokenizer, and upstream tiktoken has
+    // no mapping for it. Token counts measured on GPT-6 match GPT-5.x's, so it
+    // maps to o200k_base, unconfirmed by OpenAI.
+    ("gpt-6", "o200k_base"),
     ("o4-mini", "o200k_base"),
     ("o3", "o200k_base"),
     ("o1", "o200k_base"),
@@ -334,15 +359,23 @@ const MODEL_PREFIX_ENCODINGS: &[(&str, &str)] = &[
     ("ada", "r50k_base"),
     ("gpt-2", "r50k_base"),
     ("gpt2", "r50k_base"),
-    // Meta — the llama3 encoding covers Llama 3.x and 4.x
+    // Meta — Llama 4 has its own vocabulary, so its prefixes precede the
+    // generic `llama-` ones, which cover Llama 3.x. Meta's Muse models share the
+    // Llama 4 vocabulary.
+    ("llama-4", "llama4"),
+    ("llama4", "llama4"),
+    ("Llama-4", "llama4"),
+    ("muse-", "llama4"),
+    ("Muse-", "llama4"),
     ("llama-", "llama3"),
     ("llama3", "llama3"),
-    ("llama4", "llama3"),
     ("Llama-", "llama3"),
     ("Meta-Llama-", "llama3"),
     // DeepSeek — v4 prefixes must precede the generation catch-alls
     ("deepseek-v4", "deepseek_v4"),
     ("DeepSeek-V4", "deepseek_v4"),
+    // V4.1 Flash (2026-09) keeps the V4 vocabulary and split pattern
+    ("deepseek-flash", "deepseek_v4"),
     ("deepseek", "deepseek_v3"),
     ("DeepSeek", "deepseek_v3"),
     // Moonshot — k3 before k2 is not required (distinct prefixes), but keep
@@ -363,10 +396,25 @@ const MODEL_PREFIX_ENCODINGS: &[(&str, &str)] = &[
     // MiniMax — the M2 tokenizer covers the whole M2.x family
     ("minimax", "minimax_m2"),
     ("MiniMax", "minimax_m2"),
-    // Alibaba
+    // Alibaba — Qwen 3.5 through 3.8 share a new vocabulary; Qwen 2 through
+    // Qwen 3 keep qwen2's. Qwen 4's tokenizer is unpublished and maps to
+    // qwen3_5, the latest published one, unconfirmed by Alibaba.
+    ("qwen3.5", "qwen3_5"),
+    ("qwen3.6", "qwen3_5"),
+    ("qwen3.7", "qwen3_5"),
+    ("qwen3.8", "qwen3_5"),
+    ("qwen4", "qwen3_5"),
+    ("Qwen3.5", "qwen3_5"),
+    ("Qwen3.6", "qwen3_5"),
+    ("Qwen3.7", "qwen3_5"),
+    ("Qwen3.8", "qwen3_5"),
+    ("Qwen4", "qwen3_5"),
     ("qwen", "qwen2"),
     ("Qwen", "qwen2"),
-    // Mistral
+    // Mistral — Large 4 moved to the 204.8k Tekken v15 vocabulary; other
+    // current models, Small 4 included, keep the 131k one.
+    ("mistral-large-4", "mistral_v15"),
+    ("Mistral-Large-4", "mistral_v15"),
     ("mistral", "mistral_v3"),
     ("Mistral", "mistral_v3"),
     ("mixtral", "mistral_v3"),
@@ -395,10 +443,13 @@ mod tests {
         "r50k_base",
         "gpt2",
         "llama3",
+        "llama4",
         "deepseek_v3",
         "deepseek_v4",
         "qwen2",
+        "qwen3_5",
         "mistral_v3",
+        "mistral_v15",
         "kimi_k2",
         "kimi_k3",
         "glm4",
@@ -1000,19 +1051,67 @@ mod tests {
 
     #[test]
     fn test_model_to_encoding_llama3() {
-        for model in [
-            "llama-3.1-70b",
-            "llama3-8b",
-            "Meta-Llama-3.1-8B",
-            "llama-4-scout",
-            "llama-4-maverick",
-        ] {
+        for model in ["llama-3.1-70b", "llama3-8b", "Meta-Llama-3.1-8B"] {
             assert_eq!(
                 model_to_encoding(model),
                 Some("llama3"),
                 "wrong encoding for {model}"
             );
         }
+    }
+
+    #[test]
+    fn test_model_to_encoding_llama4() {
+        for model in [
+            "llama-4-scout",
+            "llama-4-maverick",
+            "llama4-scout",
+            "Llama-4-Scout-17B-16E-Instruct",
+            "muse-spark-open",
+            "Muse-Glimmer-30B",
+        ] {
+            assert_eq!(
+                model_to_encoding(model),
+                Some("llama4"),
+                "wrong encoding for {model}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_model_to_encoding_qwen3_5() {
+        for model in [
+            "qwen3.5-plus",
+            "qwen3.8-max",
+            "qwen3.8-flash",
+            "Qwen3.8-27B",
+            "qwen4-max",
+        ] {
+            assert_eq!(
+                model_to_encoding(model),
+                Some("qwen3_5"),
+                "wrong encoding for {model}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_model_to_encoding_new_2026_11_ids() {
+        assert_eq!(model_to_encoding("gpt-6-sol"), Some("o200k_base"));
+        assert_eq!(model_to_encoding("gpt-6.2-astra"), Some("o200k_base"));
+        assert_eq!(model_to_encoding("deepseek-flash"), Some("deepseek_v4"));
+        assert_eq!(model_to_encoding("mistral-large-4"), Some("mistral_v15"));
+        assert_eq!(
+            model_to_encoding("mistral-large-latest"),
+            Some("mistral_v15")
+        );
+        assert_eq!(
+            model_to_encoding("Mistral-Large-4-1T-A52B"),
+            Some("mistral_v15")
+        );
+        // Large 3 and Small 4 keep the 131k vocabulary
+        assert_eq!(model_to_encoding("mistral-large-2512"), Some("mistral_v3"));
+        assert_eq!(model_to_encoding("mistral-small-2603"), Some("mistral_v3"));
     }
 
     #[test]

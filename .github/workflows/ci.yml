@@ -59,6 +59,7 @@ jobs:
       - run: cargo test -p tiktoken --lib --no-default-features --features vocab-llama3 -- features_ vocab_oracle
       - run: cargo test -p tiktoken --lib --no-default-features --features vocab-p50k_base -- features_ vocab_oracle
       - run: cargo test -p tiktoken --lib --no-default-features --features vocab-kimi_k2,vocab-deepseek_v3 -- features_ vocab_oracle
+      - run: cargo test -p tiktoken --lib --no-default-features --features vocab-llama4,vocab-qwen3_5,vocab-mistral_v15 -- features_ vocab_oracle
 
   lint:
     name: fmt + clippy (lib strict)

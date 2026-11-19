@@ -60,6 +60,25 @@ def corpus():
         "x", "xx", "xxx", "x" * 10, "x" * 50, "x" * 255, "x" * 256, "x" * 257,
     ]
 
+    # ---- digit runs: Tekken v15 groups digits in threes from the right ----
+    for n in range(1, 13):
+        run = "1234567890123"[:n]
+        texts += [run, "x" + run, run + "y", "x" + run + "y", " " + run, run + " ", run + "\n"]
+    texts += [
+        "1234 5678", "12345,67890", "1.23456", "$1234567.89", "v1.2.34567",
+        "\u0661\u0662\u0663\u0664", "\uff11\uff12\uff13\uff14", "1\u00b2\u00b34",
+        "12\uff134", "\u2160\u2161\u2162\u2163", "1234\u4f60\u597d5678",
+    ]
+
+    # ---- combining marks that survive NFC: qwen3_5 folds them into words ----
+    texts += [
+        "\u0928\u092e\u0938\u094d\u0924\u0947 \u0926\u0941\u0928\u093f\u092f\u093e",
+        "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a", "\u0e01\u0e47",
+        "\u0645\u064e\u0631\u0652\u062d\u064e\u0628\u064b\u0627", "\u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd",
+        "\u2764\ufe0f", "\u263a\ufe0f ok", "\U0001f44d\U0001f3fd", "1\ufe0f\u20e3",
+        "q\u0301", "q\u0308y", "a\u0332b\u0332c", "!\u0301", " \u0301a", "\u4f60\u0301\u597d",
+    ]
+
     # ---- adversarial: prev x whitespace x next matrix ----
     for p in PREV:
         for w in WS:

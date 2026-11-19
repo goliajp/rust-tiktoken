@@ -7,6 +7,18 @@
 
 use regex::Regex;
 
+mod cl100k;
+mod deepseek;
+mod digits;
+mod o200k;
+mod whitespace;
+
+use cl100k::*;
+use deepseek::*;
+use digits::*;
+use o200k::*;
+use whitespace::*;
+
 /// Trait for splitting text into pieces before BPE encoding.
 pub trait PreTokenizer: Send + Sync {
     /// Find the next match starting at or after `pos`.
@@ -35,6 +47,9 @@ pub(crate) enum FastPath {
     /// mistral_v3 (Tekken) pattern: o200k-style case splitting, but with no
     /// contraction rule, single-digit `\p{N}`, and a `[\r\n/]*` punctuation tail.
     Tekken,
+    /// mistral_v15 (Tekken v15) pattern: Tekken's rules, except that digit runs
+    /// split into right-aligned groups of three (see `digits.rs`).
+    Tekken15,
     /// minimax_m2 pattern: o200k's letter/digit rules (contractions included)
     /// with Tekken's `[\r\n/]*` punctuation tail.
     MiniMax,
@@ -72,20 +87,6 @@ pub(crate) enum WhitespaceRules {
     NewlineFirstSplitOnNumCjk,
 }
 
-/// Rule 2 of `DEEPSEEK_V3_PATTERN`, by codepoint: `[一-龥\x{3040}-\x{309F}\x{30A0}-\x{30FF}]`.
-#[inline]
-fn is_deepseek_cjk(c: u32) -> bool {
-    matches!(c, 0x4E00..=0x9FA5 | 0x3040..=0x30FF)
-}
-
-/// Whether `c` would have been isolated by an earlier stage of the deepseek_v3
-/// split pipeline: `\p{N}{1,3}` (stage 1) or `[一-龥\u{3040}-\u{309F}\u{30A0}-\u{30FF}]+`
-/// (stage 2). Kept in sync with `DEEPSEEK_V3_PATTERN`'s first two alternatives.
-#[inline]
-fn is_deepseek_split_boundary(c: char) -> bool {
-    c.is_numeric() || matches!(c, '一'..='龥' | '\u{3040}'..='\u{309F}' | '\u{30A0}'..='\u{30FF}')
-}
-
 /// Regex-based pre-tokenizer wrapping the existing regex + whitespace adjustment logic.
 pub struct RegexPreTokenizer {
     regex: Regex,
@@ -114,6 +115,7 @@ impl PreTokenizer for RegexPreTokenizer {
             FastPath::Qwen2 => cl100k_ascii_next::<1>(bytes, pos),
             FastPath::O200k => o200k_like_ascii_next::<true, 3, true, false>(bytes, pos),
             FastPath::Tekken => o200k_like_ascii_next::<false, 1, true, false>(bytes, pos),
+            FastPath::Tekken15 => return self.tekken15_next(text, pos),
             FastPath::MiniMax => o200k_like_ascii_next::<true, 3, true, false>(bytes, pos),
             FastPath::Kimi => o200k_like_ascii_next::<true, 3, false, true>(bytes, pos),
             FastPath::Deepseek => deepseek_ascii_next(bytes, pos),
@@ -122,10 +124,28 @@ impl PreTokenizer for RegexPreTokenizer {
         if let Some(r) = fast {
             return Some(r);
         }
+        self.regex_next(text, pos)
+    }
+}
+
+impl RegexPreTokenizer {
+    #[inline]
+    fn regex_next(&self, text: &str, pos: usize) -> Option<(usize, usize)> {
         let mat = self.regex.find_at(text, pos)?;
         let start = mat.start();
-        let end = adjust_whitespace_end(bytes, start, mat.end(), self.ws);
+        let end = adjust_whitespace_end(text.as_bytes(), start, mat.end(), self.ws);
         Some((start, end))
+    }
+
+    /// Kept out of line: inlining the digit rule into `next_match` grew it
+    /// enough to cost the other encodings' `encode` loop ~20% on ASCII text.
+    #[inline(never)]
+    fn tekken15_next(&self, text: &str, pos: usize) -> Option<(usize, usize)> {
+        if let Some(end) = tekken15_digit_group_end(text, pos) {
+            return Some((pos, end));
+        }
+        o200k_like_ascii_next::<false, 1, true, false>(text.as_bytes(), pos)
+            .or_else(|| self.regex_next(text, pos))
     }
 }
 
@@ -360,603 +380,6 @@ fn ascii_num_punct<const MAX_DIGITS: usize, const SLASH_TAIL: bool>(
     None
 }
 
-/// A space at `i` followed by a non-ASCII char: the punct rule applies only
-/// if that char is certainly punctuation. Out of line with the other CJK arms.
-#[cold]
-#[inline(never)]
-fn space_cjk_punct<const SLASH_TAIL: bool>(b: &[u8], i: usize) -> Option<(usize, usize)> {
-    if cjk_class(decode_char(b, i + 1).0) != CjkClass::Punct {
-        return None;
-    }
-    let e = scan_punct_run_mixed(b, i + 1)?;
-    Some((i, take_line_tail::<SLASH_TAIL>(b, e)))
-}
-
-/// cl100k-family piece starting on a non-ASCII char. Same leftmost-first rule
-/// order as the ASCII path: rule 2 (optional leading char + letters), then
-/// rule 4 (punct run). Out of line so CJK support does not bloat the inlined
-/// ASCII scanner.
-#[cold]
-#[inline(never)]
-fn cl100k_cjk_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
-    let n = b.len();
-    let (ch, len) = decode_char(b, i);
-    match cjk_class(ch) {
-        // rule 2, no leading char
-        CjkClass::Han | CjkClass::Caseless | CjkClass::Upper | CjkClass::Lower => {
-            scan_letter_run_mixed(b, i + len).map(|e| (i, e))
-        }
-        // 、 or 　 can be rule 2's leading char `[^\r\n\p{L}\p{N}]` when
-        // letters follow; a lone 、 falls to the punct rule, a lone 　 to the
-        // whitespace rules (defer).
-        CjkClass::Punct | CjkClass::Ws => {
-            let j = i + len;
-            let next_is_letter = j < n && {
-                let c1 = b[j];
-                if c1 < 0x80 {
-                    c1.is_ascii_alphabetic()
-                } else {
-                    matches!(
-                        cjk_class(decode_char(b, j).0),
-                        CjkClass::Han | CjkClass::Caseless | CjkClass::Upper | CjkClass::Lower
-                    )
-                }
-            };
-            if next_is_letter {
-                return scan_letter_run_mixed(b, j).map(|e| (i, e));
-            }
-            if cjk_class(ch) == CjkClass::Ws {
-                return None; // whitespace rules → regex
-            }
-            let e = scan_punct_run_mixed(b, i + len)?;
-            Some((i, take_line_tail::<false>(b, e)))
-        }
-        CjkClass::Num | CjkClass::Other => None,
-    }
-}
-
-/// cl100k-family: an eligible ASCII leading char at `i` with a non-ASCII char
-/// after it. Rule 2 if that char is a letter; otherwise the digit/punct rules
-/// via [`ascii_num_punct`], whose own cold escapes finish any CJK punct run.
-#[cold]
-#[inline(never)]
-fn cl100k_cjk_after_lead<const MAX_DIGITS: usize>(b: &[u8], i: usize) -> Option<(usize, usize)> {
-    if matches!(
-        cjk_class(decode_char(b, i + 1).0),
-        CjkClass::Han | CjkClass::Caseless | CjkClass::Upper | CjkClass::Lower
-    ) {
-        return scan_letter_run_mixed(b, i + 1).map(|e| (i, e));
-    }
-    ascii_num_punct::<MAX_DIGITS, false>(b, i)
-}
-
-/// ASCII fast-path pre-tokenizer for the cl100k pattern (and qwen2, which is
-/// identical except `MAX_DIGITS = 1` instead of 3).
-///
-/// Returns `Some((pos, end))` for a piece it can resolve entirely within ASCII,
-/// or `None` to defer to the regex (non-ASCII byte at a decision point, or a
-/// whitespace-run start whose `\s*[\r\n]+|\s+` + lookahead semantics we don't
-/// replicate here). Alternatives are tried in the regex's leftmost-first order.
-#[inline(always)]
-fn cl100k_ascii_next<const MAX_DIGITS: usize>(b: &[u8], i: usize) -> Option<(usize, usize)> {
-    let n = b.len();
-    if i >= n {
-        return None;
-    }
-    let c0 = b[i];
-    if c0 >= 0x80 {
-        return cl100k_cjk_next(b, i);
-    }
-
-    // Rule 1: (?i:'s|'t|'re|'ve|'m|'ll|'d). On no contraction, fall through; the
-    // quote may act as a rule-2 leading char or a rule-4 punctuation run.
-    if c0 == b'\''
-        && let Some(len) = match_contraction(b, i)
-    {
-        return Some((i, i + len));
-    }
-
-    // Rule 2: [^\r\n\p{L}\p{N}]?\p{L}+
-    // case A: one leading non-CRLF non-alnum char, then letters
-    if c0 != b'\r'
-        && c0 != b'\n'
-        && !c0.is_ascii_alphabetic()
-        && !c0.is_ascii_digit()
-        && let Some(&c1) = b.get(i + 1)
-    {
-        if c1 < 0x80 && c1.is_ascii_alphabetic() {
-            let mut j = i + 2;
-            while j < n && b[j] < 0x80 && b[j].is_ascii_alphabetic() {
-                j += 1;
-            }
-            if j < n && b[j] >= 0x80 {
-                return scan_letter_run_mixed(b, j).map(|e| (i, e));
-            }
-            return Some((i, j));
-        }
-        if c1 >= 0x80 {
-            return cl100k_cjk_after_lead::<MAX_DIGITS>(b, i);
-        }
-    }
-    // case B: no leading char, c0 is a letter
-    if c0.is_ascii_alphabetic() {
-        let mut j = i + 1;
-        while j < n && b[j] < 0x80 && b[j].is_ascii_alphabetic() {
-            j += 1;
-        }
-        if j < n && b[j] >= 0x80 {
-            return scan_letter_run_mixed(b, j).map(|e| (i, e));
-        }
-        return Some((i, j));
-    }
-
-    // Rules 3 & 4: digits, punctuation. Rules 5/6 (whitespace) → defer.
-    ascii_num_punct::<MAX_DIGITS, false>(b, i)
-}
-
-/// Membership of one char in the o200k-family case-split letter classes.
-///
-/// The "upper" class is `[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]`, the "lower" class
-/// `[\p{Ll}\p{Lm}\p{Lo}\p{M}]` — `Lo`/`Lm` (Han, kana, hangul) sit in *both*,
-/// which is what `Both` encodes. With `HAN_APART` (kimi), Han is excluded from
-/// both classes (`&&[^\p{Han}]`) and certainly ends a word run instead.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum LetterKind {
-    Upper,
-    Lower,
-    Both,
-    End,
-    Defer,
-}
-
-#[inline(always)]
-fn o200k_letter_kind<const HAN_APART: bool>(b: &[u8], j: usize) -> (LetterKind, usize) {
-    let c = b[j];
-    if c < 0x80 {
-        if c.is_ascii_uppercase() {
-            return (LetterKind::Upper, 1);
-        }
-        if c.is_ascii_lowercase() {
-            return (LetterKind::Lower, 1);
-        }
-        return (LetterKind::End, 1);
-    }
-    o200k_letter_kind_cjk::<HAN_APART>(b, j)
-}
-
-/// [`o200k_letter_kind`] for the non-ASCII case, out of line.
-#[cold]
-#[inline(never)]
-fn o200k_letter_kind_cjk<const HAN_APART: bool>(b: &[u8], j: usize) -> (LetterKind, usize) {
-    let (ch, len) = decode_char(b, j);
-    let kind = match cjk_class(ch) {
-        CjkClass::Han => {
-            if HAN_APART {
-                LetterKind::End
-            } else {
-                LetterKind::Both
-            }
-        }
-        CjkClass::Caseless => LetterKind::Both,
-        CjkClass::Upper => LetterKind::Upper,
-        CjkClass::Lower => LetterKind::Lower,
-        CjkClass::Punct | CjkClass::Num | CjkClass::Ws => LetterKind::End,
-        CjkClass::Other => LetterKind::Defer,
-    };
-    (kind, len)
-}
-
-/// How an o200k-family piece that starts on a non-ASCII char proceeds.
-enum CjkStart {
-    /// A complete piece (kimi's `[\p{Han}]+` branch).
-    Piece(usize),
-    /// Defer to the regex.
-    Defer,
-    /// Not a word start — try the digit/punct rules.
-    Punct,
-    /// The word rules apply; letters begin at this byte offset.
-    Letters(usize),
-}
-
-/// Classify a non-ASCII piece start for [`o200k_like_ascii_next`], out of
-/// line so CJK support does not bloat the inlined ASCII scanner.
-#[cold]
-#[inline(never)]
-fn o200k_cjk_start<const HAN_APART: bool>(b: &[u8], i: usize) -> CjkStart {
-    let n = b.len();
-    let (ch, len) = decode_char(b, i);
-    let cls = cjk_class(ch);
-    // Kimi's `[\p{Han}]+` branch is ordered before the word rules: a Han run
-    // is a piece of its own, with no leading char and no suffix.
-    if HAN_APART && cls == CjkClass::Han {
-        let mut j = i + len;
-        while j < n {
-            if b[j] < 0x80 {
-                break;
-            }
-            let (c2, l2) = decode_char(b, j);
-            match cjk_class(c2) {
-                CjkClass::Han => j += l2,
-                // Ext-B and friends are also \p{Han} but unknown to the
-                // table — the run might continue, so defer.
-                CjkClass::Other => return CjkStart::Defer,
-                _ => break,
-            }
-        }
-        return CjkStart::Piece(j);
-    }
-    match cls {
-        // a letter with no leading char
-        CjkClass::Han | CjkClass::Caseless | CjkClass::Upper | CjkClass::Lower => {
-            CjkStart::Letters(i)
-        }
-        // 、 or 　 as the leading char `[^\r\n\p{L}\p{N}]` when a word
-        // follows; otherwise 、 falls to the punct rule, 　 to whitespace.
-        CjkClass::Punct | CjkClass::Ws => {
-            let j = i + len;
-            let follows_word = j < n && {
-                let (k1, _) = o200k_letter_kind::<HAN_APART>(b, j);
-                matches!(k1, LetterKind::Upper | LetterKind::Lower | LetterKind::Both)
-            };
-            if follows_word {
-                CjkStart::Letters(j)
-            } else if cls == CjkClass::Ws {
-                CjkStart::Defer
-            } else {
-                CjkStart::Punct
-            }
-        }
-        CjkClass::Num | CjkClass::Other => CjkStart::Defer,
-    }
-}
-
-/// Fast-path pre-tokenizer for the case-splitting patterns: o200k, Mistral's
-/// Tekken, MiniMax and Kimi.
-///
-/// The letter rules differ from cl100k: both split on case
-/// (`[\p{Lu}…]*[\p{Ll}…]+` then `[\p{Lu}…]+[\p{Ll}…]*`, CamelCase-aware),
-/// with the caseless `Lo`/`Lm` letters (Han, kana, hangul) a member of both
-/// classes — see [`o200k_letter_kind`].
-///
-/// The variants differ in places passed in by the caller: o200k/MiniMax attach
-/// an optional contraction suffix to the word and use `\p{N}{1,3}`; Tekken has
-/// no contraction rule and uses `\p{N}`; Kimi (`HAN_APART`) tries a dedicated
-/// `[\p{Han}]+` branch first and excludes Han from both letter classes.
-#[inline(always)]
-fn o200k_like_ascii_next<
-    const CONTRACTIONS: bool,
-    const MAX_DIGITS: usize,
-    const SLASH_TAIL: bool,
-    const HAN_APART: bool,
->(
-    b: &[u8],
-    i: usize,
-) -> Option<(usize, usize)> {
-    let n = b.len();
-    if i >= n {
-        return None;
-    }
-    let c0 = b[i];
-    if c0 >= 0x80 {
-        return o200k_cjk_next::<CONTRACTIONS, MAX_DIGITS, SLASH_TAIL, HAN_APART>(b, i);
-    }
-
-    // Determine the letter start `p`: either c0 itself (a letter), or one
-    // leading non-CRLF non-alnum char followed by an ASCII letter.
-    let p = if c0.is_ascii_alphabetic() {
-        i
-    } else if c0 != b'\r' && c0 != b'\n' && !c0.is_ascii_digit() {
-        // eligible leading char (punct/space). The word rules apply only if a
-        // letter follows; otherwise it's a digit/punct/ws piece.
-        match b.get(i + 1) {
-            Some(&c1) if c1 < 0x80 && c1.is_ascii_alphabetic() => i + 1,
-            Some(&c1) if c1 >= 0x80 => {
-                return o200k_cjk_after_lead::<CONTRACTIONS, MAX_DIGITS, SLASH_TAIL, HAN_APART>(
-                    b, i,
-                );
-            }
-            _ => return ascii_num_punct::<MAX_DIGITS, SLASH_TAIL>(b, i),
-        }
-    } else {
-        // digit, or \r\n
-        return ascii_num_punct::<MAX_DIGITS, SLASH_TAIL>(b, i);
-    };
-
-    // Scan the uppercase run from `p`; a non-ASCII byte at any decision point
-    // hands the whole word over to the CJK-aware cold scanner.
-    let mut q = p;
-    while q < n && b[q] < 0x80 && b[q].is_ascii_uppercase() {
-        q += 1;
-    }
-    if q < n && b[q] >= 0x80 {
-        return o200k_word_mixed::<CONTRACTIONS, HAN_APART>(b, i, p);
-    }
-
-    let letters_end = if q > p {
-        // started with uppercase(s)
-        if q < n && b[q].is_ascii_lowercase() {
-            // Rule A: [A-Z]*[a-z]+  (greedy uppercase, then lowercase run)
-            let mut r = q;
-            while r < n && b[r] < 0x80 && b[r].is_ascii_lowercase() {
-                r += 1;
-            }
-            if r < n && b[r] >= 0x80 {
-                return o200k_word_mixed::<CONTRACTIONS, HAN_APART>(b, i, p);
-            }
-            r
-        } else {
-            // Rule B: [A-Z]+  (no trailing lowercase)
-            q
-        }
-    } else {
-        // b[p] is lowercase (it's a letter but not uppercase): Rule A lowercase+
-        let mut r = p;
-        while r < n && b[r] < 0x80 && b[r].is_ascii_lowercase() {
-            r += 1;
-        }
-        if r < n && b[r] >= 0x80 {
-            return o200k_word_mixed::<CONTRACTIONS, HAN_APART>(b, i, p);
-        }
-        r
-    };
-
-    // Optional contraction suffix attached to the word: (?i:'s|'t|…)?
-    // Tekken has no contraction rule at all, so it never extends the word here.
-    let mut end = letters_end;
-    if CONTRACTIONS
-        && end < n
-        && b[end] == b'\''
-        && let Some(len) = match_contraction(b, end)
-    {
-        end += len;
-    }
-    Some((i, end))
-}
-
-/// o200k-family piece starting on a non-ASCII char, out of line.
-#[cold]
-#[inline(never)]
-fn o200k_cjk_next<
-    const CONTRACTIONS: bool,
-    const MAX_DIGITS: usize,
-    const SLASH_TAIL: bool,
-    const HAN_APART: bool,
->(
-    b: &[u8],
-    i: usize,
-) -> Option<(usize, usize)> {
-    match o200k_cjk_start::<HAN_APART>(b, i) {
-        CjkStart::Piece(e) => Some((i, e)),
-        CjkStart::Defer => None,
-        CjkStart::Punct => ascii_num_punct::<MAX_DIGITS, SLASH_TAIL>(b, i),
-        CjkStart::Letters(p) => o200k_word_mixed::<CONTRACTIONS, HAN_APART>(b, i, p),
-    }
-}
-
-/// o200k-family: an eligible ASCII leading char at `i` with a non-ASCII char
-/// after it. The word rules if that char is a word member; otherwise the
-/// digit/punct rules via [`ascii_num_punct`].
-#[cold]
-#[inline(never)]
-fn o200k_cjk_after_lead<
-    const CONTRACTIONS: bool,
-    const MAX_DIGITS: usize,
-    const SLASH_TAIL: bool,
-    const HAN_APART: bool,
->(
-    b: &[u8],
-    i: usize,
-) -> Option<(usize, usize)> {
-    if matches!(
-        o200k_letter_kind::<HAN_APART>(b, i + 1).0,
-        LetterKind::Upper | LetterKind::Lower | LetterKind::Both
-    ) {
-        return o200k_word_mixed::<CONTRACTIONS, HAN_APART>(b, i, i + 1);
-    }
-    ascii_num_punct::<MAX_DIGITS, SLASH_TAIL>(b, i)
-}
-
-/// The o200k-family word scan over mixed ASCII/CJK letters, out of line. The
-/// piece starts at `i`, its letters at `p`.
-///
-/// The upper-ish run `[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*` takes Upper and Both
-/// members. `last_both_end` emulates rule A's backtracking: when the run is
-/// followed by a non-letter, `[U]*[L]+` hands characters back until `[L]+` can
-/// take one — and the only run members `[L]+` can take are Both-class chars,
-/// so the match ends exactly after the run's last Both-class char (or the rule
-/// fails and rule B keeps the whole run).
-#[cold]
-#[inline(never)]
-fn o200k_word_mixed<const CONTRACTIONS: bool, const HAN_APART: bool>(
-    b: &[u8],
-    i: usize,
-    p: usize,
-) -> Option<(usize, usize)> {
-    let n = b.len();
-    let mut q = p;
-    let mut last_both_end: Option<usize> = None;
-    while q < n {
-        let (kind, len) = o200k_letter_kind::<HAN_APART>(b, q);
-        match kind {
-            LetterKind::Upper => q += len,
-            LetterKind::Both => {
-                q += len;
-                last_both_end = Some(q);
-            }
-            LetterKind::Lower | LetterKind::End => break,
-            LetterKind::Defer => return None,
-        }
-    }
-
-    let next_kind = if q < n {
-        o200k_letter_kind::<HAN_APART>(b, q).0
-    } else {
-        LetterKind::End
-    };
-    let letters_end = if q > p {
-        match next_kind {
-            // Rule A: greedy upper part, then the lower-ish run
-            LetterKind::Lower => scan_lower_run::<HAN_APART>(b, q)?,
-            // Rule A via backtracking if the run holds a Both char, else rule B
-            LetterKind::End => last_both_end.unwrap_or(q),
-            _ => return None,
-        }
-    } else {
-        // no upper part: p is lower-ish, rule A with `[U]*` empty
-        scan_lower_run::<HAN_APART>(b, p)?
-    };
-
-    // Optional contraction suffix attached to the word: (?i:'s|'t|…)?
-    let mut end = letters_end;
-    if CONTRACTIONS
-        && end < n
-        && b[end] == b'\''
-        && let Some(len) = match_contraction(b, end)
-    {
-        end += len;
-    }
-    Some((i, end))
-}
-
-/// The lower-ish run `[\p{Ll}\p{Lm}\p{Lo}\p{M}]+`: Lower and Both members.
-/// Greedy with no backtracking (it is the branch's last letter element).
-#[inline]
-fn scan_lower_run<const HAN_APART: bool>(b: &[u8], mut r: usize) -> Option<usize> {
-    let n = b.len();
-    while r < n {
-        let (kind, len) = o200k_letter_kind::<HAN_APART>(b, r);
-        match kind {
-            LetterKind::Lower | LetterKind::Both => r += len,
-            LetterKind::Upper | LetterKind::End => return Some(r),
-            LetterKind::Defer => return None,
-        }
-    }
-    Some(r)
-}
-
-/// ASCII fast-path pre-tokenizer for the deepseek_v3 pattern.
-///
-/// Pattern (leftmost-first): `\p{N}{1,3}` | CJK/kana+ | `[ascii-punct][A-Za-z]+`
-/// | `[^\r\n\p{L}\p{P}\p{S}]?[\p{L}\p{M}]+` | ` ?[\p{P}\p{S}]+[\r\n]*` | `\s*[\r\n]+`
-/// | `\s+` | `[\s\S]`. ASCII `[\p{P}\p{S}]` is exactly `u8::is_ascii_punctuation()`.
-///
-/// Conservative: resolves digits, letters, punct+letters, punct runs, and the
-/// common space-led letter/punct pieces; defers to the regex on any non-ASCII
-/// byte, whitespace/control start, or catch-all case (deferral is always safe).
-#[inline]
-fn deepseek_ascii_next(b: &[u8], i: usize) -> Option<(usize, usize)> {
-    let n = b.len();
-    if i >= n {
-        return None;
-    }
-    let c0 = b[i];
-    if c0 >= 0x80 {
-        // Rule 2: `[一-龥\x{3040}-\x{309F}\x{30A0}-\x{30FF}]+`. Unlike the
-        // category-based rules, these are exact ranges, so membership is
-        // certain in both directions and the run never needs to defer.
-        let (ch, len) = decode_char(b, i);
-        if is_deepseek_cjk(ch) {
-            let mut j = i + len;
-            while j < n && b[j] >= 0x80 {
-                let (c2, l2) = decode_char(b, j);
-                if is_deepseek_cjk(c2) {
-                    j += l2;
-                } else {
-                    break;
-                }
-            }
-            return Some((i, j));
-        }
-        return None; // other non-ASCII → defer
-    }
-
-    // Rule 1: \p{N}{1,3}
-    if c0.is_ascii_digit() {
-        let mut j = i;
-        let mut k = 0;
-        while j < n && k < 3 && b[j].is_ascii_digit() {
-            j += 1;
-            k += 1;
-        }
-        if k < 3 && j < n && b[j] >= 0x80 {
-            return None; // a Unicode \p{N} could extend the run
-        }
-        return Some((i, j));
-    }
-
-    // Rule 3: [ascii-punct][A-Za-z]+ (one punct glued to a letter run).
-    // Rule 5: ` ?[\p{P}\p{S}]+[\r\n]*` (here with no leading space — c0 is punct).
-    if c0.is_ascii_punctuation() {
-        if let Some(&c1) = b.get(i + 1)
-            && c1 < 0x80
-            && c1.is_ascii_alphabetic()
-        {
-            // Rule 3 — note its letters are [A-Za-z], so a non-ASCII byte simply
-            // ends the run (no defer needed).
-            let mut j = i + 1;
-            while j < n && b[j].is_ascii_alphabetic() {
-                j += 1;
-            }
-            return Some((i, j));
-        }
-        // Rule 5: punctuation/symbol run, then trailing newlines.
-        let mut k = i;
-        while k < n && b[k] < 0x80 && b[k].is_ascii_punctuation() {
-            k += 1;
-        }
-        if k < n && b[k] >= 0x80 {
-            return None; // a Unicode \p{P}/\p{S} could extend the run
-        }
-        k = take_line_tail::<false>(b, k);
-        return Some((i, k));
-    }
-
-    // Rule 4 (no leading char): [\p{L}\p{M}]+ — for ASCII, a letter run.
-    if c0.is_ascii_alphabetic() {
-        let mut j = i;
-        while j < n && b[j].is_ascii_alphabetic() {
-            j += 1;
-        }
-        if j < n && b[j] >= 0x80 {
-            return None; // a Unicode letter/mark could extend the run
-        }
-        return Some((i, j));
-    }
-
-    // Leading space: Rule 4 (space + letters) or Rule 5 (space + punct run).
-    if c0 == b' ' {
-        match b.get(i + 1) {
-            Some(&c1) if c1 >= 0x80 => return None, // unicode letter/punct ambiguous
-            Some(&c1) if c1.is_ascii_alphabetic() => {
-                let mut j = i + 1;
-                while j < n && b[j].is_ascii_alphabetic() {
-                    j += 1;
-                }
-                if j < n && b[j] >= 0x80 {
-                    return None;
-                }
-                return Some((i, j));
-            }
-            Some(&c1) if c1.is_ascii_punctuation() => {
-                let mut k = i + 1;
-                while k < n && b[k] < 0x80 && b[k].is_ascii_punctuation() {
-                    k += 1;
-                }
-                if k < n && b[k] >= 0x80 {
-                    return None;
-                }
-                k = take_line_tail::<false>(b, k);
-                return Some((i, k));
-            }
-            // space followed by digit/space/eof → whitespace rules → defer
-            _ => return None,
-        }
-    }
-
-    // other whitespace, control chars, catch-all → defer to regex
-    None
-}
-
 /// Match a contraction at `b[i] == '\''`, returning its byte length (2 or 3) or
 /// `None`. Case-insensitive, matching `(?i:'s|'t|'re|'ve|'m|'ll|'d)`. Shared by
 /// both patterns (standalone alternative in cl100k, word suffix in o200k).
@@ -970,79 +393,6 @@ fn match_contraction(b: &[u8], i: usize) -> Option<usize> {
         b'l' if b.get(i + 2).map(|c| c.to_ascii_lowercase()) == Some(b'l') => Some(3),
         _ => None,
     }
-}
-
-/// Emulates `\s+(?!\S)|\s+` from original tiktoken patterns.
-/// Pure byte-level fast path for ASCII whitespace, char-level fallback for Unicode.
-///
-/// `ws` gates the emulation: only the generic whitespace branch carries the
-/// lookahead. For newline-branch patterns a match ending in `\r`/`\n` came from
-/// a rule that has none (`\s*[\r\n]+`, or the `[\r\n]*` tail of the punctuation
-/// rule) and is returned untouched. For
-/// [`WhitespaceRules::NewlineFirstSplitOnNumCjk`] a following digit or CJK char
-/// is an upstream split boundary and counts as end-of-input.
-#[inline]
-fn adjust_whitespace_end(bytes: &[u8], start: usize, end: usize, ws: WhitespaceRules) -> usize {
-    if end - start <= 1 || end >= bytes.len() {
-        return end;
-    }
-
-    // Newline-branch patterns: a match ending in \r/\n never carries the
-    // lookahead, so it keeps its full extent (canonical "\n\n" / "\r\n" tokens).
-    if ws != WhitespaceRules::Generic && matches!(bytes[end - 1], b'\r' | b'\n') {
-        return end;
-    }
-
-    // fast reject: if first byte is printable ASCII (0x21..0x7E), not whitespace
-    let first = bytes[start];
-    if first > 0x20 && first < 0x7F {
-        return end;
-    }
-
-    // deepseek_v3: an upstream split boundary right after the run terminates the
-    // slice the lookahead would have seen, so the run keeps its full extent.
-    if ws == WhitespaceRules::NewlineFirstSplitOnNumCjk
-        && let Some(next) = bytes[end..].iter().next()
-        && (next.is_ascii_digit() || *next >= 0x80)
-        && let Some(c) = std::str::from_utf8(&bytes[end..])
-            .ok()
-            .and_then(|s| s.chars().next())
-        && is_deepseek_split_boundary(c)
-    {
-        return end;
-    }
-
-    // ASCII fast path
-    // safety: end < bytes.len() is guaranteed by the early return above
-    let piece = &bytes[start..end];
-    if piece.iter().all(|&b| is_ascii_ws(b)) {
-        let next = bytes[end];
-        if is_ascii_ws(next) {
-            return end;
-        }
-        return end - 1;
-    }
-
-    // unicode slow path
-    // safety: regex::Match boundaries are always valid UTF-8 since input is &str
-    let matched = std::str::from_utf8(&bytes[start..end]).unwrap();
-    if !matched.chars().all(|c| c.is_whitespace()) {
-        return end;
-    }
-    let tail = std::str::from_utf8(&bytes[end..]).unwrap();
-    let next_char = match tail.chars().next() {
-        Some(c) => c,
-        None => return end,
-    };
-    if next_char.is_whitespace() {
-        return end;
-    }
-    let last_len = matched.chars().next_back().unwrap().len_utf8();
-    // don't trim if it would make the piece empty (single multi-byte whitespace char)
-    if end - last_len <= start {
-        return end;
-    }
-    end - last_len
 }
 
 #[inline(always)]
