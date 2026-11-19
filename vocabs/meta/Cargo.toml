@@ -1,0 +1,17 @@
+[package]
+name = "tiktoken-vocab-meta"
+version = "1.0.0"
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+license-file = "LICENSE"
+description = "Meta tokenizer vocabularies (llama3, llama4) for the tiktoken crate"
+documentation = "https://docs.rs/tiktoken-vocab-meta"
+keywords = ["tiktoken", "tokenizer", "bpe", "vocabulary"]
+categories = ["text-processing"]
+
+# Each vocabulary is behind its own feature, so a build carries only the ones
+# its `tiktoken` features name. Nothing is on by default.
+[features]
+llama3 = []
+llama4 = []

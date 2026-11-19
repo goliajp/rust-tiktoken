@@ -27,7 +27,7 @@
 
 - **手写预分词器，覆盖 ASCII 与 CJK** —— 字母、数字、标点、缩写、汉字/假名/谚文与全角形式都不经过正则引擎直接解析；正则仍是判准（属性测试钉死等价），也是罕见形状的兜底。
 - **20 套编码 · 153 个模型 · 11 家厂商** —— OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2–3.8、Mistral（含 Large 4）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3；并提供美元成本估算（价格含 Anthropic、Google）。
-- **轻量可移植** —— 20 份词表共 7.8 MB 编译期内嵌且可按词表退订（只要 cl100k 的构建仅带 373 KB）、按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、可选 rayon 并行、零分配 `count()`、零 C 依赖的纯 Rust、自足的 wasm 构建。
+- **轻量可移植** —— 20 份词表共 7.8 MB 编译期内嵌且可按词表退订（只要 cl100k 的构建仅带 373 KB，cargo 也只下载启用的厂商的数据）、按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、可选 rayon 并行、零分配 `count()`、零 C 依赖的纯 Rust、自足的 wasm 构建。
 
 完整 API、支持模型表、基准测试见各 crate 的 README：**[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。
 

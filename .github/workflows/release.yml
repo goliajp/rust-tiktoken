@@ -22,6 +22,22 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # tiktoken depends on the vocabulary data crates, so they go first. Their
+      # versions change only when the data does; an unchanged one is already
+      # on crates.io and is skipped.
+      - name: publish vocabulary data crates
+        run: |
+          for dir in vocabs/*/; do
+            [ -f "$dir/Cargo.toml" ] || continue
+            set +e
+            out=$(cargo publish --manifest-path "$dir/Cargo.toml" --token ${{ secrets.CRATES_IO_TOKEN }} 2>&1)
+            rc=$?
+            set -e
+            echo "$out"
+            if [ $rc -ne 0 ] && ! echo "$out" | grep -q "already exists on crates.io"; then
+              exit $rc
+            fi
+          done
       - name: publish to crates.io
         run: |
           set +e
