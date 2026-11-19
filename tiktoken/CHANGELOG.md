@@ -2,7 +2,7 @@
 
 ## Upgrading from 3.5.x — token id changes
 
-Versions 3.6.0 and 3.8.0 change token ids for some inputs. That is the point
+Versions 3.6.0, 3.8.0 and 5.0.0 change token ids for some inputs. That is the point
 of the fixes — the previous ids diverged from the reference tokenizers — but
 any cached token counts or stored id sequences produced by 3.5.1 or earlier
 should be recomputed after upgrading. Affected:
@@ -20,9 +20,160 @@ should be recomputed after upgrading. Affected:
 - whitespace runs before digits and CJK on `deepseek_v3` (3.6.0)
 - punctuation followed by a newline and a slash on `o200k_base` /
   `o200k_harmony` — `".\n/"` is one token (118550), previously two (3.8.0)
+- **any text**, for model ids whose `model_to_encoding` resolution changed in
+  5.0.0: Llama 4 (`llama3` → `llama4`), Qwen 3.5 – 3.8 (`qwen2` → `qwen3_5`),
+  Mistral Large 4 / `mistral-large-latest` (`mistral_v3` → `mistral_v15`), and
+  `deepseek-flash` (`deepseek_v3` → `deepseek_v4`). The old ids were wrong for
+  these models; no encoding's own output changed.
 
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
+
+## [5.0.0] - 2026-11-20
+
+The model table and the vocabularies are refreshed to 2026-11: three new
+encodings, 153 priced models (was 116), corrected model-to-encoding mappings,
+and pricing for cache writes and premium tiers. The major version is for
+source-level changes in the pricing API (below).
+
+### Breaking
+
+- **`pricing::VisionPricing` is now `#[non_exhaustive]`** and gained
+  `AnthropicPatch { max_edge_px, max_tokens }`. If you `match` on it without a
+  `_` arm, add one. `AnthropicDivisor` still exists, so code naming it builds,
+  but no table entry uses it any more.
+- **The pricing structs are `#[non_exhaustive]`**: `Pricing`, `TierRates`,
+  `HighTierPricing`, `AudioPricing`, `ExtendedPricing`, `Resolved`, and the
+  `Match` enum (`Model` already was). Code outside the crate can no longer
+  build them with struct literals, and a `match` on `Match` needs a `_` arm.
+  This is what lets the table gain billing dimensions in minor releases — this
+  release adds three fields to `ExtendedPricing`.
+- **Token counts change for the model ids listed under "Changed —
+  model_to_encoding"**, because those ids now resolve to the vocabulary the
+  model actually uses. Recompute stored counts for them.
+
+### Added — encodings
+
+| Encoding | Feature | Data | Models |
+|:--|:--|--:|:--|
+| `llama4` | `vocab-llama4` (in `vocab-meta`) | 815,632 | Llama 4 Scout / Maverick, Meta Muse |
+| `qwen3_5` | `vocab-qwen3_5` (in `vocab-qwen`) | 989,188 | Qwen 3.5 – 3.8 |
+| `mistral_v15` | `vocab-mistral_v15` (in `vocab-mistral`) | 853,244 | Mistral Large 4 (Tekken v15) |
+
+None of the three extends an existing vocabulary: Llama 4's 200,000 tokens are
+not llama3's, Qwen 3.5 retrained its 248,044-token vocabulary (only 281 ids
+coincide with qwen2's), and Tekken v15's 204,800 ranks diverge from v3's at
+rank 24. Each was converted from the vendor's own files and checked against the
+vendor's implementation (HF `tokenizers` for Llama and Qwen, `mistral-common`
+for Tekken) before it was written.
+
+- `qwen3_5` differs from `qwen2` in its split pattern too: letters absorb
+  combining marks (`[\p{L}\p{M}]+`), so Devanagari, Thai and emoji with
+  variation selectors split differently.
+- `mistral_v15` splits digit runs into groups of three counted from the right
+  (`1234567` → `1` `234` `567`), a rule the upstream pattern writes with a
+  lookahead. It is implemented as a pre-pass, linear in the run length.
+- `llama4` uses the `minimax_m2` split pattern exactly, and its fast path.
+
+Evidence: 2,919 fixture cases per new encoding in `tests/fixtures/`
+(53,275 across all encodings, was 44,518), plus the wide differential run —
+0 mismatches in 145,511 cases across the 13 HF-sourced encodings and 0 in
+67,164 across the OpenAI ones, on a corpus that gained digit runs and
+combining-mark text for this release.
+
+### Changed — `model_to_encoding`
+
+- `llama-4*`, `Llama-4*`, `llama4*` → `llama4` (was `llama3`, which was wrong
+  for Llama 4 from the start); `muse-*` → `llama4`
+- `qwen3.5*` … `qwen3.8*`, `Qwen3.5*` … → `qwen3_5` (was `qwen2`); `qwen4*` →
+  `qwen3_5` as well, an assumption: Qwen 4's tokenizer is unpublished
+- `mistral-large-4*`, `Mistral-Large-4*`, `mistral-large-latest` →
+  `mistral_v15` (was `mistral_v3`). Large 3 and Small 4 keep `mistral_v3`.
+- `deepseek-flash` (V4.1) → `deepseek_v4` (was `deepseek_v3` via the generic
+  prefix)
+- `gpt-6*` → `o200k_base` (new). OpenAI has not published GPT-6's tokenizer
+  and upstream tiktoken has no mapping for it; measured token counts match
+  GPT-5.x's. Treat it as an estimate.
+
+### Changed — pricing
+
+153 models across the same 11 providers. Per-provider detail and sources are in
+the `pricing` module docs and next to each entry; in short:
+
+- **New**: OpenAI GPT-6 / 6.1 / 6.2 (Astra / Sol / Terra / Luna); Claude
+  Fable / Mythos 5.1 and 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5; Gemini 4 (Neon,
+  Hydrogen, Carbon, Argon), Gemini 3.8 Flash, `gemini-embedding-2`;
+  `deepseek-flash`; `qwen4-max` and three Qwen 3.8 SKUs; Mistral Large 4 and
+  Mistral's two embedding models; Meta Muse Spark Open and Muse Glimmer 30B;
+  Kimi K3.1 Pro (+ highspeed); GLM-5.3 (+ FlashX, Flash); MiniMax M3 and M3.1
+  Flash.
+- **Repriced**: `deepseek-v4-pro` and `deepseek-v4-flash` (DeepSeek's 2026-08
+  increase, then the V4.1 Flash cut); `llama-3.1-8b` and `llama-4-scout` (new
+  hoster rates). Claude Sonnet 5's $2 / $10 is now its standard price.
+- **Corrected**: `gemini-2.5-flash` cached input $0.075 → $0.03; context
+  windows of `codestral` (128K), `mistral-small` and `ministral-14b` (256K);
+  `o1-mini`'s shutdown date.
+- **Deprecated** (rates kept for lookups): GPT-5 / 5-mini / 5-nano / 5-pro,
+  o3 / o3-pro, GPT-5.1, GPT-5.4-nano, GPT-4.1 family, GPT-4o family; Claude
+  Sonnet 4.5; Gemini 2.5 Pro / Flash, 3.5 Flash; `kimi-k2.5`; MiniMax M2
+  family; Mistral Large 3, Medium, Devstral; `llama-4-maverick`; seven older
+  Qwen SKUs.
+- **Time-limited prices**: entries hold the price that applies after a
+  promotion or introductory period, where the provider publishes it
+  (`gemini-4-argon` / `-carbon` from 2026-12-01, `gemini-3.8-flash` /
+  `-3.6-flash` from 2027-01-01). `gpt-5.6-sol`'s promotion runs to 2026-11-30
+  with no published follow-on rate, so it keeps its launch rate. DeepSeek
+  entries hold peak-hour rates; off-peak is half.
+- **New tiers**: `with_high_tier` for Claude Haiku 5.5 (prompts over 100K),
+  MiniMax M3 (over 512K) and Qwen 3.5 Plus (over 256K).
+- **New billing dimensions** on `ExtendedPricing`, with estimators on `Model`:
+  - `cache_writes` — cache-write prices per lifetime (`CacheWrite`), filled
+    for GPT-6.x and GPT-5.6 Terra / Luna (30 minutes, 12 hours), Claude 4 and
+    later (5 minutes, 1 hour), Kimi K3 / K3.1 and Qwen 4 Max. Read one with
+    `Model::cache_write_per_1m(ttl_minutes)`.
+  - `ultrafast` — OpenAI's tier above Fast, for GPT-6 Astra, 6.1 Sol and 6.2
+    Astra / Sol (`estimate_ultrafast_cost`).
+  - `background` — OpenAI's 2- and 8-hour completion windows (30% and 40% off
+    standard) for GPT-6.2 Astra / Sol, 6.1 Terra and 6 Luna, stored as the
+    published discount (`BackgroundWindow`, `estimate_background_cost`).
+  - Anthropic Fast mode is stored in `priority`, alongside OpenAI's Fast tier:
+    Fable / Mythos 5.2, Opus 5.5, Opus 5, Opus 4.8.
+- **Anthropic image tokens** follow Anthropic's current formula: one token per
+  28×28 patch after Anthropic's reference resize, 2,576 px / 4,784 tokens for
+  Claude 4.7 and later and 1,568 px / 1,568 tokens before. The old
+  `(w × h) / 750` approximation undercounted 4.7+ images by up to ~3×.
+
+### Benchmarks re-measured
+
+Every comparison in the READMEs and on the site was re-run on 2026-11-20
+against the competitors' current releases, which got much faster:
+on English prose, tiktoken-rs 0.9 → 0.12 is ~2.6× faster and Python tiktoken
+0.12 → 0.14 ~1.4×, on the same machine; gpt-tokenizer moved from 3.4 to 4.1.
+This crate's own native times are unchanged within noise (English prose
+51.5 → 52.6 µs). The headline
+ratios therefore drop to what is measured now: **3.7–20× faster than
+tiktoken-rs** natively (was 5–49×) and **1.1–2.7× faster than
+gpt-tokenizer** in the browser (was 2–4×). The browser numbers now come from
+the same M4 Mac mini as the native ones.
+
+### Package
+
+| | 4.1.2 | 5.0.0 |
+|:--|--:|--:|
+| vocabulary data (all features) | 5,148,835 | 7,806,899 |
+| `.crate` | 5,269,038 (50.2% of the cap) | 7,948,122 (75.8%) |
+
+At 7.95 MB the `.crate` is just under 8 MB, the size at which the vocabulary
+data is to move to its own crate ([#11]); the next vocabulary crosses it.
+
+### Internal
+
+- `encoding.rs`, `pretokenize.rs` and `pricing.rs` are split into per-vendor
+  and per-concern modules. Public paths are unchanged (`tiktoken::encoding::*`
+  re-exports every constructor).
+- Dependency floor unchanged; lockfile refresh picks up `regex` 1.13 and
+  `ruzstd` 0.9.1. The manifest drops `homepage`, which cargo now flags as
+  redundant with `repository`.
 
 ## [4.1.2] - 2026-08-13
 

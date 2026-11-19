@@ -6,8 +6,8 @@ are ground truth for encodings this crate reimplements, so they must come from
 the reference tokenizer, never from this crate's own output.
 
 Usage:
-    pip install tokenizers
-    python tiktoken/tests/fixtures/generate_hf_fixtures.py
+    pip install tokenizers mistral-common
+    python tiktoken/tests/fixtures/generate_hf_fixtures.py [encoding ...]
 
 Reference repos are ungated mirrors carrying the same tokenizer as the gated
 originals; each is pinned with its expected vocab size, so a mirror that drifts
@@ -37,7 +37,27 @@ REFERENCES = {
     "glm4": ("zai-org/GLM-4.5", 151_329),
     "glm5": ("zai-org/GLM-5.2", 154_820),
     "minimax_m2": ("MiniMaxAI/MiniMax-M2", 200_000),
+    "qwen3_5": ("Qwen/Qwen3.5-27B", 248_044),
+    "llama4": ("unsloth/Llama-4-Scout-17B-16E-Instruct", 200_000),
 }
+
+# Tekken references come from mistral-common, Mistral's own implementation:
+# encoding name -> (repo carrying tekken.json, expected vocab size)
+TEKKEN_REFERENCES = {
+    "mistral_v15": ("mistralai/Mistral-Large-4-1T-A52B", 204_800),
+}
+
+
+def tekken_reference(name):
+    """Return an `encode(text) -> ids` callable for a Tekken vocabulary."""
+    from huggingface_hub import hf_hub_download
+    from mistral_common.tokens.tokenizers.tekken import Tekkenizer
+
+    repo, want_vocab = TEKKEN_REFERENCES[name]
+    tok = Tekkenizer.from_file(hf_hub_download(repo, "tekken.json"))
+    if tok.n_words != want_vocab:
+        raise SystemExit(f"{name}: {repo} has vocab {tok.n_words}, expected {want_vocab}")
+    return lambda text: tok.encode(text, bos=False, eos=False)
 
 WHITESPACE = [
     " ", "  ", "   ", "\t", "\t\t",
@@ -94,6 +114,25 @@ def corpus():
         "x", "x" * 10, "x" * 255, "x" * 256, "x" * 257,
     ]
 
+    # ---- digit runs: Tekken v15 groups digits in threes from the right ----
+    for n in range(1, 13):
+        run = "1234567890123"[:n]
+        texts += [run, "x" + run, run + "y", "x" + run + "y", " " + run, run + " ", run + "\n"]
+    texts += [
+        "1234 5678", "12345,67890", "1.23456", "$1234567.89", "v1.2.34567",
+        "\u0661\u0662\u0663\u0664", "\uff11\uff12\uff13\uff14", "1\u00b2\u00b34",
+        "12\uff134", "\u2160\u2161\u2162\u2163", "1234\u4f60\u597d5678",
+    ]
+
+    # ---- combining marks that survive NFC: qwen3_5 folds them into words ----
+    texts += [
+        "\u0928\u092e\u0938\u094d\u0924\u0947 \u0926\u0941\u0928\u093f\u092f\u093e",
+        "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35\u0e04\u0e23\u0e31\u0e1a", "\u0e01\u0e47",
+        "\u0645\u064e\u0631\u0652\u062d\u064e\u0628\u064b\u0627", "\u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd",
+        "\u2764\ufe0f", "\u263a\ufe0f ok", "\U0001f44d\U0001f3fd", "1\ufe0f\u20e3",
+        "q\u0301", "q\u0308y", "a\u0332b\u0332c", "!\u0301", " \u0301a", "\u4f60\u0301\u597d",
+    ]
+
     for p in PRECEDERS:
         for w in WHITESPACE:
             for f in FOLLOWERS:
@@ -107,9 +146,27 @@ def corpus():
     return out
 
 
+def write_cases(name, cases, skipped):
+    path = OUT_DIR / f"{name}.json"
+    path.write_text(json.dumps(cases, indent=2, ensure_ascii=False) + "\n")
+    print(f"wrote {len(cases)} cases to {path} ({skipped} skipped)")
+
+
 def main():
     texts = corpus()
+    wanted = set(sys.argv[1:]) or {*REFERENCES, *TEKKEN_REFERENCES}
+    for name in TEKKEN_REFERENCES:
+        if name not in wanted:
+            continue
+        encode = tekken_reference(name)
+        cases = []
+        for text in texts:
+            tokens = encode(text)
+            cases.append({"text": text, "tokens": tokens, "count": len(tokens)})
+        write_cases(name, cases, 0)
     for name, (repo, want_vocab) in REFERENCES.items():
+        if name not in wanted:
+            continue
         tok = Tokenizer.from_pretrained(repo)
         got_vocab = tok.get_vocab_size(with_added_tokens=False)
         if got_vocab != want_vocab:
@@ -128,9 +185,7 @@ def main():
             tokens = tok.encode(text, add_special_tokens=False).ids
             cases.append({"text": text, "tokens": tokens, "count": len(tokens)})
 
-        path = OUT_DIR / f"{name}.json"
-        path.write_text(json.dumps(cases, indent=2, ensure_ascii=False) + "\n")
-        print(f"wrote {len(cases)} cases to {path} ({skipped} skipped)")
+        write_cases(name, cases, skipped)
 
 
 if __name__ == "__main__":

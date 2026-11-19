@@ -11,13 +11,13 @@
 >
 > **升级到 4.0？** token id 与 API 都没变。唯一的破坏性变更：词表移到了默认开启的 `vocab-*` feature 之后，写了 `default-features = false` 的依赖需要点名自己用到的词表。
 
-最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 5〜49 倍**，**浏览器内比 gpt-tokenizer 快 2〜4 倍** —— 中日文散文同样领先。
+最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 3.7〜20 倍**，**浏览器内比 gpt-tokenizer 快 1.1〜2.7 倍** —— 中日文散文同样领先。
 
 ## 本 workspace 的 crate
 
 | 路径 | Crate / Package | 说明 | 版本 |
 |:-----|:----------------|:-----|:-----|
-| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE 分词器 —— 17 套编码、116 个模型、多厂商价格 | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
+| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE 分词器 —— 20 套编码、153 个模型、多厂商价格 | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`tiktoken-wasm`](https://crates.io/crates/tiktoken-wasm) (Rust) | 上述分词器的 WASM 绑定 crate | [![crates.io](https://img.shields.io/crates/v/tiktoken-wasm.svg?style=flat-square)](https://crates.io/crates/tiktoken-wasm) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) (npm) | 同上，通过 `wasm-pack` 发布到 npm | [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm.svg?style=flat-square)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) |
 
@@ -26,8 +26,8 @@
 ## 亮点
 
 - **手写预分词器，覆盖 ASCII 与 CJK** —— 字母、数字、标点、缩写、汉字/假名/谚文与全角形式都不经过正则引擎直接解析；正则仍是判准（属性测试钉死等价），也是罕见形状的兜底。
-- **17 套编码 · 116 个模型 · 11 家厂商** —— OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen、Mistral、Kimi K2/K3、GLM-4/5、MiniMax M2；并提供美元成本估算（价格含 Anthropic、Google）。
-- **轻量可移植** —— 17 份词表共 5.1 MB 编译期内嵌且可按词表退订（只要 cl100k 的构建仅带 373 KB）、按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、可选 rayon 并行、零分配 `count()`、零 C 依赖的纯 Rust、自足的 wasm 构建。
+- **20 套编码 · 153 个模型 · 11 家厂商** —— OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2–3.8、Mistral（含 Large 4）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3；并提供美元成本估算（价格含 Anthropic、Google）。
+- **轻量可移植** —— 20 份词表共 7.8 MB 编译期内嵌且可按词表退订（只要 cl100k 的构建仅带 373 KB）、按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、可选 rayon 并行、零分配 `count()`、零 C 依赖的纯 Rust、自足的 wasm 构建。
 
 完整 API、支持模型表、基准测试见各 crate 的 README：**[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。
 
@@ -68,7 +68,7 @@ const tokens = enc.encode('hello world')
 
 ## 性能
 
-在 Apple M4 Mac mini 上，`encode` **比 tiktoken-rs 快 5〜49 倍**、**比 Python tiktoken 快 5〜29 倍**：ASCII 29〜49 倍，中日文散文 15〜17 倍，对抗性无重复 CJK 语料 5 倍。浏览器内（wasm）比 gpt-tokenizer 快 2〜4 倍。完整对比表与方法见 [`tiktoken/README.md#performance`](tiktoken/README.md#performance)。
+在 Apple M4 Mac mini 上，`encode` **比 tiktoken-rs 快 3.7〜20 倍**、**比 Python tiktoken 快 4.6〜45 倍**：ASCII 15〜20 倍，中日文散文 14〜18 倍，对抗性无重复 CJK 语料 3.7 倍。浏览器内（wasm）比 gpt-tokenizer 快 1.1〜2.7 倍。完整对比表与方法见 [`tiktoken/README.md#performance`](tiktoken/README.md#performance)。
 
 ## 构建
 

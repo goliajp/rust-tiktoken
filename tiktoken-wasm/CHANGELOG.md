@@ -5,6 +5,37 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-11-20
+
+Version lockstep with `tiktoken` 5.0.0. The JavaScript API keeps every function
+and signature; what changes is the data behind it.
+
+### Added
+- **Three encodings**: `llama4` (Llama 4, Meta Muse), `qwen3_5` (Qwen 3.5 –
+  3.8) and `mistral_v15` (Mistral Large 4). `listEncodings()` returns 20 names,
+  and `getEncoding` accepts the new ones. Each has its `vocab-*` feature for a
+  custom build.
+- **Pricing for 153 models** (was 116): GPT-6, Claude 5.x, Gemini 4, Qwen 4,
+  Kimi K3.1, GLM-5.3, MiniMax M3 and more; see the `tiktoken` 5.0.0 entry.
+
+### Changed
+- **`modelToEncoding` / `encodingForModel` return a different encoding** for
+  Llama 4 (`llama4`, was `llama3`), Qwen 3.5 – 3.8 (`qwen3_5`, was `qwen2`),
+  Mistral Large 4 and `mistral-large-latest` (`mistral_v15`, was
+  `mistral_v3`) and `deepseek-flash` (`deepseek_v4`), so their token counts
+  change. `gpt-6*` now resolves to `o200k_base`, which OpenAI has not
+  confirmed.
+- **The artifact grows by the three vocabularies.**
+
+  | | 4.0.0 | 5.0.0 |
+  |:--|--:|--:|
+  | `tiktoken_wasm_bg.wasm` | 6,277,462 | 8,963,334 |
+  | gzip -9 | 5,550,867 | 8,217,849 |
+
+  4.0.0 is the published npm artifact; 5.0.0 is measured on a local
+  `wasm-pack build --target web --release`. A build with only the vocabularies you use stays
+  small; see the README.
+
 ## [4.0.1] - 2026-08-13
 
 Version lockstep with `tiktoken` 4.0.1. The JavaScript API, the token ids and
