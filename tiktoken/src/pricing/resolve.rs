@@ -5,6 +5,7 @@ use super::*;
 
 /// How [`resolve_model`] reached a table entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Match {
     /// The id is a table id (case-insensitively).
     Exact,
@@ -16,6 +17,7 @@ pub enum Match {
 
 /// A model, plus how its id was matched.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct Resolved {
     /// The matched table entry.
     pub model: &'static Model,

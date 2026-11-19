@@ -11,7 +11,7 @@
 >
 > **Upgrading to 4.0?** Token ids and the API are unchanged. The one break: vocabularies now live behind default-on `vocab-*` features, so a dependency written as `default-features = false` must name the ones it uses.
 
-The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **5–49x faster than tiktoken-rs** natively and **2–4x faster than gpt-tokenizer in the browser** — CJK prose included.
+The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **3.7–20x faster than tiktoken-rs** natively and **1.1–2.7x faster than gpt-tokenizer in the browser** — CJK prose included.
 
 ## Crates in this workspace
 
@@ -68,7 +68,7 @@ const tokens = enc.encode('hello world')
 
 ## Performance
 
-On an Apple M4 Mac mini, `encode` is **5–49x faster than tiktoken-rs** and **5–29x faster than Python tiktoken**: 29–49x on ASCII, 15–17x on Chinese and Japanese prose, 5x even on an adversarial no-repeat CJK corpus. In the browser (wasm) it is 2–4x faster than gpt-tokenizer. Full tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
+On an Apple M4 Mac mini, `encode` is **3.7–20x faster than tiktoken-rs** and **4.6–45x faster than Python tiktoken**: 15–20x on ASCII, 14–18x on Chinese and Japanese prose, 3.7x on an adversarial no-repeat CJK corpus. In the browser (wasm) it is 1.1–2.7x faster than gpt-tokenizer. Full tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
 
 ## Build
 
