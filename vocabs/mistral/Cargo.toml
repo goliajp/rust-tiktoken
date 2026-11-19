@@ -1,0 +1,17 @@
+[package]
+name = "tiktoken-vocab-mistral"
+version = "1.0.0"
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+license-file = "LICENSE"
+description = "Mistral AI tokenizer vocabularies (mistral_v3, mistral_v15) for the tiktoken crate"
+documentation = "https://docs.rs/tiktoken-vocab-mistral"
+keywords = ["tiktoken", "tokenizer", "bpe", "vocabulary"]
+categories = ["text-processing"]
+
+# Each vocabulary is behind its own feature, so a build carries only the ones
+# its `tiktoken` features name. Nothing is on by default.
+[features]
+mistral_v3 = []
+mistral_v15 = []

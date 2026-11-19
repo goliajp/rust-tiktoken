@@ -1,6 +1,17 @@
 [workspace]
 resolver = "3"
-members = ["tiktoken", "bench-compare"]
+members = [
+    "tiktoken",
+    "bench-compare",
+    "vocabs/openai",
+    "vocabs/meta",
+    "vocabs/deepseek",
+    "vocabs/qwen",
+    "vocabs/mistral",
+    "vocabs/moonshot",
+    "vocabs/zhipu",
+    "vocabs/minimax",
+]
 exclude = ["tiktoken-wasm"]
 
 [workspace.package]

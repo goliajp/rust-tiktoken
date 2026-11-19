@@ -5,7 +5,7 @@ Pipeline for a vocabulary:
 
     upstream (HF / tiktoken.model)
       -> convert_hf_vocab.py -> tests/vocab-oracle/<name>.tiktoken.zst   (base64 text, not packaged)
-      -> build_tkv.py        -> src/encodings/<name>.tkv.zst             (binary, packaged)
+      -> build_tkv.py        -> vocabs/<vendor>/data/<name>.tkv.zst      (binary, packaged in tiktoken-vocab-<vendor>)
 
 The oracle keeps the human-inspectable `<base64(token)> <rank>` form and stays
 out of the published crate (`exclude = ["tests/"]`); the `vocab_oracle` tests in
@@ -36,8 +36,8 @@ run time — a derived vocabulary's first N entries *are* the base's.
 
 Usage:
     pip install zstandard
-    python tiktoken/src/encodings/build_tkv.py            # all
-    python tiktoken/src/encodings/build_tkv.py glm5       # one
+    python vocabs/tools/build_tkv.py            # all
+    python vocabs/tools/build_tkv.py glm5       # one
 """
 
 import base64
@@ -48,8 +48,20 @@ from collections import defaultdict
 
 import zstandard
 
-OUT_DIR = pathlib.Path(__file__).resolve().parent
-ORACLE_DIR = OUT_DIR.parent.parent / "tests" / "vocab-oracle"
+VOCABS_DIR = pathlib.Path(__file__).resolve().parent.parent
+ORACLE_DIR = VOCABS_DIR.parent / "tiktoken" / "tests" / "vocab-oracle"
+
+# vocabulary -> the data crate (vocabs/<vendor>/) that ships it
+VENDOR = {
+    "cl100k_base": "openai", "o200k_base": "openai", "r50k_base": "openai", "p50k_base": "openai",
+    "llama3": "meta", "llama4": "meta",
+    "deepseek_v3": "deepseek",
+    "qwen2": "qwen", "qwen3_5": "qwen",
+    "mistral_v3": "mistral", "mistral_v15": "mistral",
+    "kimi_k2": "moonshot",
+    "glm4": "zhipu", "glm5": "zhipu",
+    "minimax_m2": "minimax",
+}
 
 MAGIC = b"TKV1"
 ZSTD_LEVEL = 19
@@ -154,7 +166,7 @@ def build(name: str) -> tuple[int, int]:
     if decode_frame(frame) != payload:
         raise SystemExit(f"{name}: round-trip mismatch")
 
-    out = OUT_DIR / f"{name}.tkv.zst"
+    out = VOCABS_DIR / VENDOR[name] / "data" / f"{name}.tkv.zst"
     out.write_bytes(frame)
     old = (ORACLE_DIR / f"{name}.tiktoken.zst").stat().st_size
     print(

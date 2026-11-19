@@ -1,0 +1,17 @@
+[package]
+name = "tiktoken-vocab-qwen"
+version = "1.0.0"
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+license = "Apache-2.0"
+description = "Alibaba Qwen tokenizer vocabularies (qwen2, qwen3_5) for the tiktoken crate"
+documentation = "https://docs.rs/tiktoken-vocab-qwen"
+keywords = ["tiktoken", "tokenizer", "bpe", "vocabulary"]
+categories = ["text-processing"]
+
+# Each vocabulary is behind its own feature, so a build carries only the ones
+# its `tiktoken` features name. Nothing is on by default.
+[features]
+qwen2 = []
+qwen3_5 = []

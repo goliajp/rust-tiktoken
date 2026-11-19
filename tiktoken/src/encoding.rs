@@ -13,35 +13,36 @@ use crate::bpe::CoreBpe;
 use crate::pretokenize::{FastPath, WhitespaceRules};
 
 // Embedded vocabulary frames, decompressed on first use via the OnceLocks in
-// lib.rs. Built from the `tests/vocab-oracle/*.tiktoken.zst` reference files by
-// `src/encodings/build_tkv.py`; the `vocab_oracle` tests below diff the two.
+// lib.rs. The data lives in the tiktoken-vocab-* crates, one per vendor, built
+// from the `tests/vocab-oracle/*.tiktoken.zst` reference files by
+// `vocabs/tools/build_tkv.py`; the `vocab_oracle` tests below diff the two.
 //
 // Each file is gated on its `vocab-*` feature so that a build only carries the
 // vocabularies it names — see the feature table in Cargo.toml.
 #[cfg(feature = "vocab-cl100k_base")]
-const CL100K_BASE_TKV: &[u8] = include_bytes!("encodings/cl100k_base.tkv.zst");
+const CL100K_BASE_TKV: &[u8] = tiktoken_vocab_openai::CL100K_BASE;
 #[cfg(feature = "vocab-o200k_base")]
-const O200K_BASE_TKV: &[u8] = include_bytes!("encodings/o200k_base.tkv.zst");
+const O200K_BASE_TKV: &[u8] = tiktoken_vocab_openai::O200K_BASE;
 #[cfg(feature = "vocab-r50k_base")]
-const R50K_BASE_TKV: &[u8] = include_bytes!("encodings/r50k_base.tkv.zst");
+const R50K_BASE_TKV: &[u8] = tiktoken_vocab_openai::R50K_BASE;
 #[cfg(feature = "vocab-deepseek_v3")]
-const DEEPSEEK_V3_TKV: &[u8] = include_bytes!("encodings/deepseek_v3.tkv.zst");
+const DEEPSEEK_V3_TKV: &[u8] = tiktoken_vocab_deepseek::DEEPSEEK_V3;
 #[cfg(feature = "vocab-qwen2")]
-const QWEN2_TKV: &[u8] = include_bytes!("encodings/qwen2.tkv.zst");
+const QWEN2_TKV: &[u8] = tiktoken_vocab_qwen::QWEN2;
 #[cfg(feature = "vocab-mistral_v3")]
-const MISTRAL_V3_TKV: &[u8] = include_bytes!("encodings/mistral_v3.tkv.zst");
+const MISTRAL_V3_TKV: &[u8] = tiktoken_vocab_mistral::MISTRAL_V3;
 #[cfg(feature = "vocab-kimi_k2")]
-const KIMI_K2_TKV: &[u8] = include_bytes!("encodings/kimi_k2.tkv.zst");
+const KIMI_K2_TKV: &[u8] = tiktoken_vocab_moonshot::KIMI_K2;
 #[cfg(feature = "vocab-glm4")]
-const GLM4_TKV: &[u8] = include_bytes!("encodings/glm4.tkv.zst");
+const GLM4_TKV: &[u8] = tiktoken_vocab_zhipu::GLM4;
 #[cfg(feature = "vocab-minimax_m2")]
-const MINIMAX_M2_TKV: &[u8] = include_bytes!("encodings/minimax_m2.tkv.zst");
+const MINIMAX_M2_TKV: &[u8] = tiktoken_vocab_minimax::MINIMAX_M2;
 #[cfg(feature = "vocab-qwen3_5")]
-const QWEN3_5_TKV: &[u8] = include_bytes!("encodings/qwen3_5.tkv.zst");
+const QWEN3_5_TKV: &[u8] = tiktoken_vocab_qwen::QWEN3_5;
 #[cfg(feature = "vocab-llama4")]
-const LLAMA4_TKV: &[u8] = include_bytes!("encodings/llama4.tkv.zst");
+const LLAMA4_TKV: &[u8] = tiktoken_vocab_meta::LLAMA4;
 #[cfg(feature = "vocab-mistral_v15")]
-const MISTRAL_V15_TKV: &[u8] = include_bytes!("encodings/mistral_v15.tkv.zst");
+const MISTRAL_V15_TKV: &[u8] = tiktoken_vocab_mistral::MISTRAL_V15;
 
 // Three vocabularies are exact rank-aligned extensions of another one: every
 // token at rank `i` of the base is the token at rank `i` of the derived
@@ -50,11 +51,11 @@ const MISTRAL_V15_TKV: &[u8] = include_bytes!("encodings/mistral_v15.tkv.zst");
 // entries have to be built either way. Their features pull in the base's
 // feature, which is why the chains below can reference it unconditionally.
 #[cfg(feature = "vocab-llama3")]
-const LLAMA3_TAIL_TKV: &[u8] = include_bytes!("encodings/llama3.tkv.zst");
+const LLAMA3_TAIL_TKV: &[u8] = tiktoken_vocab_meta::LLAMA3_TAIL;
 #[cfg(feature = "vocab-glm5")]
-const GLM5_TAIL_TKV: &[u8] = include_bytes!("encodings/glm5.tkv.zst");
+const GLM5_TAIL_TKV: &[u8] = tiktoken_vocab_zhipu::GLM5_TAIL;
 #[cfg(feature = "vocab-p50k_base")]
-const P50K_BASE_TAIL_TKV: &[u8] = include_bytes!("encodings/p50k_base.tkv.zst");
+const P50K_BASE_TAIL_TKV: &[u8] = tiktoken_vocab_openai::P50K_BASE_TAIL;
 
 #[cfg(feature = "vocab-cl100k_base")]
 pub(crate) const CL100K_BASE_CHAIN: &[&[u8]] = &[CL100K_BASE_TKV];
@@ -231,7 +232,7 @@ pub(crate) const MISTRAL_V15_PATTERN: &str = concat!(
 /// `rank0 + i` and no rank column is stored. The body is grouped by length
 /// rather than laid out in rank order because the length block is read first
 /// and already says which class each token comes from — the regrouping is free
-/// and compresses better. Files are produced by `src/encodings/build_tkv.py`.
+/// and compresses better. Files are produced by `vocabs/tools/build_tkv.py`.
 ///
 /// The data is embedded at compile time, so malformed input is a build defect,
 /// not a runtime condition: this panics rather than returning an error.
