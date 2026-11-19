@@ -22,7 +22,7 @@ check_only=false
 echo "→ building"
 npm run build
 
-# The wasm carries all 17 vocabularies; a truncated or half-written upload
+# The wasm carries all 20 vocabularies; a truncated or half-written upload
 # would still serve HTTP 200, so pin the digest and compare it post-deploy.
 wasm_local=$(ls dist/assets/*.wasm)
 digest=$(shasum -a 256 "$wasm_local" | awk '{print $1}')
