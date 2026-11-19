@@ -213,8 +213,14 @@ use tiktoken::pricing;
 let cost = pricing::estimate_cost("gpt-4o", 1_000_000, 500_000).unwrap();
 
 // with prompt caching
-let model = pricing::get_model("claude-opus-4").unwrap();
+let model = pricing::get_model("claude-opus-5.5").unwrap();
 let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
+
+// cache writes are priced per cache lifetime, here 1 hour; premium-speed and
+// background windows have their own estimators
+assert_eq!(model.cache_write_per_1m(60), Some(8.0));
+let fast = pricing::get_model("gpt-6-sol").unwrap().estimate_priority_cost(1_000, 1_000);
+let background = pricing::get_model("gpt-6-luna").unwrap().estimate_background_cost(1_000, 1_000, 8);
 
 // list all models for a provider
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);

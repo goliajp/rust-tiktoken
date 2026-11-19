@@ -8,8 +8,10 @@ use super::*;
 //
 // `cached_input` is the cache-READ price. It is 0.1× base input except where an
 // entry says otherwise (0.025× on Fable / Mythos 5.1 and 5.2, 0.05× on Opus and
-// Sonnet 5.5). Cache WRITES (1.25× for a 5-minute TTL, 2× for 1 hour) are not
-// modelled.
+// Sonnet 5.5). Cache writes are listed per lifetime (5 minutes, 1 hour); Haiku
+// 5.5's long-prompt write rates ($0.625 / $1) are not modelled. Fast mode is
+// stored as `priority` (Opus 4.8's is withdrawn on 2026-11-30); cached input
+// in Fast mode is unpublished.
 //
 // Tokenizer note: Claude 4.7 and later use a newer tokenizer that produces
 // roughly 30% more tokens for the same text than Claude 4.6 and earlier. This
@@ -39,7 +41,9 @@ const CLAUDE_FABLE_52: Model = model(
     128_000,
 )
 .with_batch(4.00, 20.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 10.00), CacheWrite::new(60, 16.00)])
+.with_priority(16.00, None, 80.00);
 
 /// claude-mythos-5.2 — frontier tier, limited availability. Same rates as Fable 5.2.
 const CLAUDE_MYTHOS_52: Model = model(
@@ -52,7 +56,9 @@ const CLAUDE_MYTHOS_52: Model = model(
     128_000,
 )
 .with_batch(4.00, 20.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 10.00), CacheWrite::new(60, 16.00)])
+.with_priority(16.00, None, 80.00);
 
 /// claude-fable-5.1 — frontier tier (2026-09-01). Cache reads are 0.025× input.
 const CLAUDE_FABLE_51: Model = model(
@@ -65,7 +71,8 @@ const CLAUDE_FABLE_51: Model = model(
     128_000,
 )
 .with_batch(5.00, 25.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 12.50), CacheWrite::new(60, 20.00)]);
 
 /// claude-mythos-5.1 — frontier tier, limited availability. Same rates as Fable 5.1.
 const CLAUDE_MYTHOS_51: Model = model(
@@ -78,7 +85,8 @@ const CLAUDE_MYTHOS_51: Model = model(
     128_000,
 )
 .with_batch(5.00, 25.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 12.50), CacheWrite::new(60, 20.00)]);
 
 /// claude-fable-5 — frontier tier.
 const CLAUDE_FABLE_5: Model = model(
@@ -91,7 +99,8 @@ const CLAUDE_FABLE_5: Model = model(
     128_000,
 )
 .with_batch(5.00, 25.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 12.50), CacheWrite::new(60, 20.00)]);
 
 /// claude-mythos-5 — frontier tier, limited availability. Same rates as Fable 5.
 const CLAUDE_MYTHOS_5: Model = model(
@@ -104,7 +113,8 @@ const CLAUDE_MYTHOS_5: Model = model(
     128_000,
 )
 .with_batch(5.00, 25.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 12.50), CacheWrite::new(60, 20.00)]);
 
 /// claude-opus-5.5 — flagship (2026-09-22). Cache reads are 0.05× input.
 const CLAUDE_OPUS_55: Model = model(
@@ -117,7 +127,9 @@ const CLAUDE_OPUS_55: Model = model(
     128_000,
 )
 .with_batch(2.00, 10.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 5.00), CacheWrite::new(60, 8.00)])
+.with_priority(8.00, None, 40.00);
 
 /// claude-opus-5 — flagship of the first Claude 5 release.
 const CLAUDE_OPUS_5: Model = model(
@@ -130,7 +142,9 @@ const CLAUDE_OPUS_5: Model = model(
     128_000,
 )
 .with_batch(2.50, 12.50)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 6.25), CacheWrite::new(60, 10.00)])
+.with_priority(10.00, None, 50.00);
 
 /// claude-sonnet-5.5 — balanced tier (2026-09-28). Cache reads are 0.05× input
 /// (lowered from 0.1× on 2026-10-07).
@@ -144,7 +158,8 @@ const CLAUDE_SONNET_55: Model = model(
     128_000,
 )
 .with_batch(1.00, 5.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 2.50), CacheWrite::new(60, 4.00)]);
 
 /// claude-sonnet-5 — balanced tier. Launched with $2/$10 as introductory pricing;
 /// Anthropic made it the standard price on 2026-08-10, cancelling the
@@ -159,7 +174,8 @@ const CLAUDE_SONNET_5: Model = model(
     128_000,
 )
 .with_batch(1.00, 5.00)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 2.50), CacheWrite::new(60, 4.00)]);
 
 /// claude-haiku-5.5 — fast tier (2026-10-07). Priced by prompt length: a
 /// request whose input (cache reads and writes included) is over 100,000
@@ -176,7 +192,8 @@ const CLAUDE_HAIKU_55: Model = model(
 )
 .with_batch(0.05, 0.25)
 .with_high_tier(0.50, 2.50, Some(0.05), 100_000)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 0.125), CacheWrite::new(60, 0.20)]);
 
 const CLAUDE_OPUS_48: Model = model(
     "claude-opus-4.8",
@@ -188,7 +205,9 @@ const CLAUDE_OPUS_48: Model = model(
     128_000,
 )
 .with_batch(2.50, 12.50)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 6.25), CacheWrite::new(60, 10.00)])
+.with_priority(10.00, None, 50.00);
 
 const CLAUDE_OPUS_47: Model = model(
     "claude-opus-4.7",
@@ -200,7 +219,8 @@ const CLAUDE_OPUS_47: Model = model(
     128_000,
 )
 .with_batch(2.50, 12.50)
-.with_vision(VISION_HIGH_RES);
+.with_vision(VISION_HIGH_RES)
+.with_cache_writes(&[CacheWrite::new(5, 6.25), CacheWrite::new(60, 10.00)]);
 
 const CLAUDE_OPUS_46: Model = model(
     "claude-opus-4.6",
@@ -212,7 +232,8 @@ const CLAUDE_OPUS_46: Model = model(
     128_000,
 )
 .with_batch(2.50, 12.50)
-.with_vision(VISION_STANDARD);
+.with_vision(VISION_STANDARD)
+.with_cache_writes(&[CacheWrite::new(5, 6.25), CacheWrite::new(60, 10.00)]);
 
 const CLAUDE_SONNET_46: Model = model(
     "claude-sonnet-4.6",
@@ -224,7 +245,8 @@ const CLAUDE_SONNET_46: Model = model(
     64_000,
 )
 .with_batch(1.50, 7.50)
-.with_vision(VISION_STANDARD);
+.with_vision(VISION_STANDARD)
+.with_cache_writes(&[CacheWrite::new(5, 3.75), CacheWrite::new(60, 6.00)]);
 
 const CLAUDE_HAIKU_45: Model = model(
     "claude-haiku-4.5",
@@ -236,7 +258,8 @@ const CLAUDE_HAIKU_45: Model = model(
     64_000,
 )
 .with_batch(0.50, 2.50)
-.with_vision(VISION_STANDARD);
+.with_vision(VISION_STANDARD)
+.with_cache_writes(&[CacheWrite::new(5, 1.25), CacheWrite::new(60, 2.00)]);
 
 const CLAUDE_OPUS_45: Model = model(
     "claude-opus-4.5",
@@ -248,7 +271,8 @@ const CLAUDE_OPUS_45: Model = model(
     64_000,
 )
 .with_batch(2.50, 12.50)
-.with_vision(VISION_STANDARD);
+.with_vision(VISION_STANDARD)
+.with_cache_writes(&[CacheWrite::new(5, 6.25), CacheWrite::new(60, 10.00)]);
 
 /// DEPRECATED — deprecated 2026-09-30, retires 2026-11-30. Replaced by
 /// claude-sonnet-5.5.
@@ -262,7 +286,8 @@ const CLAUDE_SONNET_45: Model = model(
     64_000,
 )
 .with_batch(1.50, 7.50)
-.with_vision(VISION_STANDARD);
+.with_vision(VISION_STANDARD)
+.with_cache_writes(&[CacheWrite::new(5, 3.75), CacheWrite::new(60, 6.00)]);
 
 /// DEPRECATED — retired 2026-06-15 on the Claude API. Replaced by
 /// claude-opus-4.5 and later. Cache price corrected 2026-06:
@@ -275,7 +300,8 @@ const CLAUDE_OPUS_4: Model = model(
     Some(1.50),
     200_000,
     32_000,
-);
+)
+.with_cache_writes(&[CacheWrite::new(5, 18.75), CacheWrite::new(60, 30.00)]);
 
 /// DEPRECATED — retired 2026-06-15 on the Claude API. Replaced by
 /// claude-sonnet-4.6 and later. Cache price corrected 2026-06:
@@ -288,7 +314,8 @@ const CLAUDE_SONNET_4: Model = model(
     Some(0.30),
     200_000,
     64_000,
-);
+)
+.with_cache_writes(&[CacheWrite::new(5, 3.75), CacheWrite::new(60, 6.00)]);
 
 /// DEPRECATED — retired 2026-02-19 on Anthropic-operated API
 /// (still available on AWS Bedrock and Google Vertex AI).
