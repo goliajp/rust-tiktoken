@@ -12,11 +12,11 @@
 
 ## 特性
 
-- **多厂商**：17 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
+- **多厂商**：20 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
 - **高性能**：手写扫描器覆盖 ASCII 与 CJK（绕开正则）、词表按 key 长度分层、重复片段整片记忆、混合 BPE 合并
 - **并行编码**：可选的 rayon 多线程编码，适用于长文本
-- **费用估算**：覆盖 11 家厂商共 116 个模型
-- **体积紧凑**：17 份词表共 5.1 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据
+- **费用估算**：覆盖 11 家厂商共 153 个模型
+- **体积紧凑**：20 份词表共 7.8 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据
 - **零分配计数**：`count()` 不分配 token 向量
 
 ## 性能
@@ -73,7 +73,7 @@ JavaScript 分词器。
 | 零分配 `count()` | 有 | 无 | 无 |
 
 扫描器由属性测试钉死在正则语义上（每轮数十万条随机输入）；每套编码由
-44,518 组差分 fixture 钉死在厂商自己的分词器上。
+53,275 组差分 fixture 钉死在厂商自己的分词器上。
 
 基准测试源码：[`benches/`](benches/)、[`../bench-compare/`](../bench-compare/)。
 可通过 `cargo bench` / `cargo run -p bench-compare` 复现。
@@ -92,10 +92,10 @@ tiktoken = { version = "4", features = ["parallel"] }
 
 ### 选择词表
 
-17 种编码默认全开（5.1 MB 词表数据）。关掉默认特性、只点名用到的，二进制里就只带这些：
+20 种编码默认全开（7.8 MB 词表数据）。关掉默认特性、只点名用到的，二进制里就只带这些：
 
 ```toml
-# 只要 GPT-4o / GPT-5 —— 词表数据 815 KB 而非 5.1 MB
+# 只要 GPT-4o / GPT-5 —— 词表数据 815 KB 而非 7.8 MB
 tiktoken = { version = "4", default-features = false, features = ["vocab-o200k_base"] }
 
 # 或者按厂商整组
@@ -132,23 +132,26 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 | 编码 | 厂商 | Feature | 数据 | 适用模型 |
 |---|---|---|---|---|
-| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
+| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), GPT-6.x（推定，官方未公布）, o1, o3, o4-mini |
 | `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony 对话格式） |
 | `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
 | `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + 基座 | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 时代：davinci, curie, babbage, ada |
 | `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` 的别名） |
-| `llama3` | Meta | `vocab-llama3` | 111 KB + 基座 | Llama 3, 3.1, 3.2, 3.3, 4 |
+| `llama3` | Meta | `vocab-llama3` | 111 KB + 基座 | Llama 3, 3.1, 3.2, 3.3 |
+| `llama4` | Meta | `vocab-llama4` | 816 KB | Llama 4 Scout / Maverick, Muse |
 | `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3, R1 |
-| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash（V3 词表 + V4 特殊 token） |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash, V4.1 Flash（V3 词表 + V4 特殊 token） |
 | `qwen2` | 阿里巴巴 | `vocab-qwen2` | 564 KB | Qwen 2.5, Qwen 3 |
-| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral（Tekken 分词器） |
+| `qwen3_5` | 阿里巴巴 | `vocab-qwen3_5` | 989 KB | Qwen 3.5 – 3.8, Qwen 4（推定，官方未公布） |
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral, Large 3, Small 4（Tekken 分词器） |
+| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4 (Tekken v15) |
 | `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
-| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3（K2 词表 + K3 特殊 token） |
+| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1（K2 词表 + K3 特殊 token） |
 | `glm4` | 智谱 | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
-| `glm5` | 智谱 | `vocab-glm5` | 6 KB + 基座 | GLM-5 / 5.2 |
-| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 |
+| `glm5` | 智谱 | `vocab-glm5` | 6 KB + 基座 | GLM-5 / 5.1 / 5.2 / 5.3 |
+| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 / M3 / M3.1 |
 
 ## API
 
@@ -216,7 +219,7 @@ assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_som
 ```
 
 支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、
-智谱、MiniMax、Voyage 共 116 个模型。
+智谱、MiniMax、Voyage 共 153 个模型。
 
 ## WebAssembly
 

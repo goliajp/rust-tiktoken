@@ -92,6 +92,9 @@ fn bench_init(c: &mut Criterion) {
         "deepseek_v3" => tiktoken::encoding::deepseek_v3,
         "qwen2"       => tiktoken::encoding::qwen2,
         "mistral_v3"  => tiktoken::encoding::mistral_v3,
+        "llama4"      => tiktoken::encoding::llama4,
+        "qwen3_5"     => tiktoken::encoding::qwen3_5,
+        "mistral_v15" => tiktoken::encoding::mistral_v15,
     }
 
     group.finish();
@@ -122,6 +125,9 @@ bench_fns! {
     bench_glm4        => "glm4",
     bench_glm5        => "glm5",
     bench_minimax_m2  => "minimax_m2",
+    bench_llama4      => "llama4",
+    bench_qwen3_5     => "qwen3_5",
+    bench_mistral_v15 => "mistral_v15",
 }
 
 criterion_group!(
@@ -140,5 +146,8 @@ criterion_group!(
     bench_glm4,
     bench_glm5,
     bench_minimax_m2,
+    bench_llama4,
+    bench_qwen3_5,
+    bench_mistral_v15,
 );
 criterion_main!(benches);
