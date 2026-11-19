@@ -16,7 +16,7 @@ The fastest Rust BPE tokenizer — 3.7–20x faster than tiktoken-rs natively (1
 - **Fast**: hand-written pre-tokenizer for ASCII and CJK (bypasses the regex), key-size-layered vocabulary, whole-piece memoisation, hybrid BPE merge
 - **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
 - **Pricing**: cost estimation for 153 models across 11 providers
-- **Compact**: all 20 vocabularies embedded in 7.8 MB, and opt-out per vocabulary — a cl100k-only build carries 373 KB of data
+- **Compact**: all 20 vocabularies embedded in 7.8 MB, and opt-out per vocabulary — a cl100k-only build carries 373 KB of data, and cargo downloads only the vendors you enable
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
 
 ## Performance
@@ -98,14 +98,19 @@ defaults and name what you use to carry only that:
 
 ```toml
 # GPT-4o / GPT-5 only — 815 KB of vocabulary data instead of 7.8 MB
-tiktoken = { version = "4", default-features = false, features = ["vocab-o200k_base"] }
+tiktoken = { version = "5", default-features = false, features = ["vocab-o200k_base"] }
 
 # a whole vendor
-tiktoken = { version = "4", default-features = false, features = ["vocab-openai"] }
+tiktoken = { version = "5", default-features = false, features = ["vocab-openai"] }
 ```
 
-Measured on `examples/count_tokens` (release): 6,480,912 bytes with every
-vocabulary, 2,226,704 with `vocab-cl100k_base` alone.
+Measured on `examples/count_tokens` (release, Linux x86_64): 9,463,280 bytes
+with every vocabulary, 2,550,256 with `vocab-cl100k_base` alone.
+
+The data lives in one crate per vendor (`tiktoken-vocab-openai`, `-meta`,
+`-deepseek`, `-qwen`, `-mistral`, `-moonshot`, `-zhipu`, `-minimax`), pulled in
+by the features above, so cargo only downloads the vendors you enable: about
+1.5 MB for OpenAI alone instead of 7.9 MB for all of them.
 
 An encoding whose vocabulary is not compiled in is simply absent —
 `list_encodings()` does not list it and `get_encoding()` returns `None`. The
