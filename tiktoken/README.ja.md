@@ -8,7 +8,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
-最速の Rust BPE トークナイザ — ネイティブで tiktoken-rs の 5〜49 倍（日本語・中国語の文章で 15〜17 倍）、ブラウザ内（wasm）で gpt-tokenizer の 2〜4 倍。手書きスキャナが ASCII と CJK の両方を扱い、語彙はキー長で階層化、繰り返し断片は丸ごとメモ化。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
+最速の Rust BPE トークナイザ — ネイティブで tiktoken-rs の 3.7〜20 倍（日本語・中国語の文章で 14〜18 倍）、ブラウザ内（wasm）で gpt-tokenizer の 1.1〜2.7 倍。手書きスキャナが ASCII と CJK の両方を扱い、語彙はキー長で階層化、繰り返し断片は丸ごとメモ化。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
 
 ## 特徴
 
@@ -29,33 +29,33 @@
 
 `cargo run --release -p bench-compare`
 
-| コーパス | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs rs | vs Python |
+| コーパス | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| 短文 (13 B) | 1.6 µs | 1,081 ns | **33 ns** | **33x** | **48x** |
-| 中程度 (900 B) | 31.9 µs | 52.2 µs | **1.1 µs** | **47x** | **29x** |
-| 英語の文章 (45 KB) | 1,500 µs | 2,498 µs | **51.5 µs** | **49x** | **29x** |
-| 中国語の文章 (4.3 KB) | 119.8 µs | 134.7 µs | **8.1 µs** | **17x** | **15x** |
-| 日本語の文章 (4.6 KB) | 131.0 µs | 144.6 µs | **8.6 µs** | **17x** | **15x** |
-| CJK 混在 ×50 (4.5 KB) | 138.9 µs | 160.3 µs | **15.2 µs** | **11x** | **9.2x** |
-| 敵対的 CJK・繰り返しなし (3.9 KB) | 131.7 µs | 141.2 µs | **25.9 µs** | **5.5x** | **5.1x** |
-| コード (3.9 KB) | 263.7 µs | 317.7 µs | **11.1 µs** | **29x** | **24x** |
+| 短文 (13 B) | 1.3 µs | 581 ns | **29 ns** | **20x** | **45x** |
+| 中程度 (900 B) | 23.3 µs | 19.7 µs | **1.1 µs** | **18x** | **21x** |
+| 英語の文章 (45 KB) | 1,100 µs | 956 µs | **52.6 µs** | **18x** | **21x** |
+| 中国語の文章 (4.3 KB) | 114.0 µs | 96.1 µs | **6.7 µs** | **14x** | **17x** |
+| 日本語の文章 (4.6 KB) | 131.3 µs | 113.9 µs | **6.5 µs** | **18x** | **20x** |
+| CJK 混在 ×50 (4.5 KB) | 122.1 µs | 106.7 µs | **15.4 µs** | **6.9x** | **7.9x** |
+| 敵対的 CJK・繰り返しなし (3.9 KB) | 113.8 µs | 92.5 µs | **24.7 µs** | **3.7x** | **4.6x** |
+| コード (3.9 KB) | 180.0 µs | 159.4 µs | **11.0 µs** | **15x** | **16x** |
 
-o200k_base も同じ比率です（tiktoken-rs の 5〜48 倍）。`count()` は id ベクタを
-一切確保しないため、`encode` よりさらに 5〜15% 高速です。
+o200k_base は tiktoken-rs の 2.8〜14 倍です。`count()` は id ベクタを
+一切確保しないため、`encode` よりさらに 6〜35% 高速です。
 
-#### ブラウザ内 — Mac Studio (M4 Max)・Chromium
+#### ブラウザ内 — Apple M4 Mac mini・Chromium
 
 `web/` で `npm run bench` — 本クレートの wasm ビルドを、主要な 2 つの
 JavaScript トークナイザーと比較。
 
-| コーパス | gpt-tokenizer 3.4 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+| コーパス | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
 |---|---|---|---|
-| 中国語の文章 (4.3 KB) | 36.8 µs | 8,029 µs | **13.4 µs** |
-| 日本語の文章 (4.6 KB) | 27.4 µs | 15,862 µs | **13.5 µs** |
-| CJK 混在 ×50 (4.5 KB) | 41.2 µs | 4,665 µs | **24.2 µs** |
-| 敵対的 CJK・繰り返しなし (3.9 KB) | 49.6 µs | 3,832 µs | **40.3 µs** |
-| 英語の文章 (45 KB) | 478 µs | 7,010 µs | **112.5 µs** |
-| コード (3.9 KB) | 76.0 µs | 916 µs | **19.5 µs** |
+| 中国語の文章 (4.3 KB) | 33.0 µs | 6,669 µs | **12.9 µs** |
+| 日本語の文章 (4.6 KB) | 29.4 µs | 12,885 µs | **13.9 µs** |
+| CJK 混在 ×50 (4.5 KB) | 40.8 µs | 3,917 µs | **23.4 µs** |
+| 敵対的 CJK・繰り返しなし (3.9 KB) | 43.6 µs | 2,741 µs | **38.4 µs** |
+| 英語の文章 (45 KB) | 276 µs | 7,522 µs | **102.0 µs** |
+| コード (3.9 KB) | 32.0 µs | 1,020 µs | **17.5 µs** |
 
 敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にします —
 それが下限であり、下限でも優位は変わりません。
@@ -185,8 +185,14 @@ use tiktoken::pricing;
 let cost = pricing::estimate_cost("gpt-4o", 1_000_000, 500_000).unwrap();
 
 // プロンプトキャッシュ付き
-let model = pricing::get_model("claude-opus-4").unwrap();
+let model = pricing::get_model("claude-opus-5.5").unwrap();
 let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
+
+// キャッシュ書き込みは保持時間ごとの価格（ここでは 1 時間）。高速ティアと
+// バックグラウンド枠にはそれぞれ見積もり関数があります
+assert_eq!(model.cache_write_per_1m(60), Some(8.0));
+let fast = pricing::get_model("gpt-6-sol").unwrap().estimate_priority_cost(1_000, 1_000);
+let background = pricing::get_model("gpt-6-luna").unwrap().estimate_background_cost(1_000, 1_000, 8);
 
 // プロバイダ別のモデル一覧
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);

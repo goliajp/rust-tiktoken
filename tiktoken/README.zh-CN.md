@@ -8,7 +8,7 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器 — 原生比 tiktoken-rs 快 5〜49 倍（中日文散文 15〜17 倍），浏览器内（wasm）比 gpt-tokenizer 快 2〜4 倍。手写扫描器同时覆盖 ASCII 与 CJK，词表按 key 长度分层，重复片段整片记忆。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
+最快的 Rust BPE 分词器 — 原生比 tiktoken-rs 快 3.7〜20 倍（中日文散文 14〜18 倍），浏览器内（wasm）比 gpt-tokenizer 快 1.1〜2.7 倍。手写扫描器同时覆盖 ASCII 与 CJK，词表按 key 长度分层，重复片段整片记忆。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
 
 ## 特性
 
@@ -29,33 +29,33 @@
 
 `cargo run --release -p bench-compare`
 
-| 语料 | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs rs | vs Python |
+| 语料 | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1.6 µs | 1,081 ns | **33 ns** | **33x** | **48x** |
-| 中等文本 (900 B) | 31.9 µs | 52.2 µs | **1.1 µs** | **47x** | **29x** |
-| 英文文本 (45 KB) | 1,500 µs | 2,498 µs | **51.5 µs** | **49x** | **29x** |
-| 中文散文 (4.3 KB) | 119.8 µs | 134.7 µs | **8.1 µs** | **17x** | **15x** |
-| 日文散文 (4.6 KB) | 131.0 µs | 144.6 µs | **8.6 µs** | **17x** | **15x** |
-| 多语混排 ×50 (4.5 KB) | 138.9 µs | 160.3 µs | **15.2 µs** | **11x** | **9.2x** |
-| 对抗语料：CJK 无重复 (3.9 KB) | 131.7 µs | 141.2 µs | **25.9 µs** | **5.5x** | **5.1x** |
-| 代码 (3.9 KB) | 263.7 µs | 317.7 µs | **11.1 µs** | **29x** | **24x** |
+| 短文本 (13 B) | 1.3 µs | 581 ns | **29 ns** | **20x** | **45x** |
+| 中等文本 (900 B) | 23.3 µs | 19.7 µs | **1.1 µs** | **18x** | **21x** |
+| 英文文本 (45 KB) | 1,100 µs | 956 µs | **52.6 µs** | **18x** | **21x** |
+| 中文散文 (4.3 KB) | 114.0 µs | 96.1 µs | **6.7 µs** | **14x** | **17x** |
+| 日文散文 (4.6 KB) | 131.3 µs | 113.9 µs | **6.5 µs** | **18x** | **20x** |
+| 多语混排 ×50 (4.5 KB) | 122.1 µs | 106.7 µs | **15.4 µs** | **6.9x** | **7.9x** |
+| 对抗语料：CJK 无重复 (3.9 KB) | 113.8 µs | 92.5 µs | **24.7 µs** | **3.7x** | **4.6x** |
+| 代码 (3.9 KB) | 180.0 µs | 159.4 µs | **11.0 µs** | **15x** | **16x** |
 
-o200k_base 比例一致（对 tiktoken-rs 5〜48 倍）。`count()` 比 `encode`
-再快 5〜15% —— 它从不分配 id 向量。
+o200k_base 比 tiktoken-rs 快 2.8〜14 倍。`count()` 比 `encode`
+再快 6〜35% —— 它从不分配 id 向量。
 
-#### 浏览器内 — Mac Studio (M4 Max)、Chromium
+#### 浏览器内 — Apple M4 Mac mini、Chromium
 
 在 `web/` 目录 `npm run bench` —— 本 crate 编译为 wasm，对比两个主流
 JavaScript 分词器。
 
-| 语料 | gpt-tokenizer 3.4 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+| 语料 | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
 |---|---|---|---|
-| 中文散文 (4.3 KB) | 36.8 µs | 8,029 µs | **13.4 µs** |
-| 日文散文 (4.6 KB) | 27.4 µs | 15,862 µs | **13.5 µs** |
-| 多语混排 ×50 (4.5 KB) | 41.2 µs | 4,665 µs | **24.2 µs** |
-| 对抗语料：CJK 无重复 (3.9 KB) | 49.6 µs | 3,832 µs | **40.3 µs** |
-| 英文文本 (45 KB) | 478 µs | 7,010 µs | **112.5 µs** |
-| 代码 (3.9 KB) | 76.0 µs | 916 µs | **19.5 µs** |
+| 中文散文 (4.3 KB) | 33.0 µs | 6,669 µs | **12.9 µs** |
+| 日文散文 (4.6 KB) | 29.4 µs | 12,885 µs | **13.9 µs** |
+| 多语混排 ×50 (4.5 KB) | 40.8 µs | 3,917 µs | **23.4 µs** |
+| 对抗语料：CJK 无重复 (3.9 KB) | 43.6 µs | 2,741 µs | **38.4 µs** |
+| 英文文本 (45 KB) | 276 µs | 7,522 µs | **102.0 µs** |
+| 代码 (3.9 KB) | 32.0 µs | 1,020 µs | **17.5 µs** |
 
 对抗语料不含任何重复片段，各实现的记忆化全部失效 —— 那是下界，领先在下界处
 依然成立。
@@ -202,8 +202,13 @@ use tiktoken::pricing;
 let cost = pricing::estimate_cost("gpt-4o", 1_000_000, 500_000).unwrap();
 
 // 带 prompt 缓存
-let model = pricing::get_model("claude-opus-4").unwrap();
+let model = pricing::get_model("claude-opus-5.5").unwrap();
 let cost = model.estimate_cost_with_cache(500_000, 500_000, 200_000);
+
+// 缓存写入按缓存保留时长计价，这里是 1 小时；高速档和后台完成窗口各有估算函数
+assert_eq!(model.cache_write_per_1m(60), Some(8.0));
+let fast = pricing::get_model("gpt-6-sol").unwrap().estimate_priority_cost(1_000, 1_000);
+let background = pricing::get_model("gpt-6-luna").unwrap().estimate_background_cost(1_000, 1_000, 8);
 
 // 按厂商列出所有模型
 let models = pricing::models_by_provider(pricing::Provider::DeepSeek);

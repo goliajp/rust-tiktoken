@@ -13,7 +13,18 @@ use super::*;
 // 128K max output; above 272K input the whole request bills at the long-context
 // rates (input and cache 2×, output 1.5×). Astra is a new tier above Sol.
 // OpenAI renamed the Priority tier "Fast" on 2026-07-30; it is stored as
-// `priority`. The 6.2 SKUs have no Flex tier.
+// `priority`. The 6.2 SKUs have no Flex tier. Ultrafast holds the list rates;
+// the 6.2 SKUs carry a promotion (Astra $24 / $120, Sol $6 / $30) with no
+// published end date. Cache writes are the short-context 30-minute and
+// 12-hour rates (long context doubles them); `gpt-5.6-sol`'s are left out
+// because only its promotional ones are published.
+
+/// Responses API background windows (2026-11-17): token rates 30% below
+/// standard for a 2-hour completion window, 40% for 8 hours.
+const BACKGROUND_WINDOWS: &[BackgroundWindow] = &[
+    BackgroundWindow::new(2, 0.30),
+    BackgroundWindow::new(8, 0.40),
+];
 
 /// gpt-6.2-astra — top tier (2026-11-17).
 const OPENAI_GPT62_ASTRA: Model = model(
@@ -27,7 +38,10 @@ const OPENAI_GPT62_ASTRA: Model = model(
 )
 .with_batch_cached(4.00, 0.20, 20.00)
 .with_priority(16.00, Some(0.80), 80.00)
-.with_high_tier(16.00, 60.00, Some(0.80), 272_000);
+.with_high_tier(16.00, 60.00, Some(0.80), 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 10.00), CacheWrite::new(720, 20.00)])
+.with_ultrafast(48.00, Some(2.40), 240.00)
+.with_background(BACKGROUND_WINDOWS);
 
 /// gpt-6.2-sol — frontier tier (2026-11-17).
 const OPENAI_GPT62_SOL: Model = model(
@@ -41,7 +55,10 @@ const OPENAI_GPT62_SOL: Model = model(
 )
 .with_batch_cached(1.00, 0.05, 5.00)
 .with_priority(4.00, Some(0.20), 20.00)
-.with_high_tier(4.00, 15.00, Some(0.20), 272_000);
+.with_high_tier(4.00, 15.00, Some(0.20), 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 2.50), CacheWrite::new(720, 5.00)])
+.with_ultrafast(12.00, Some(0.60), 60.00)
+.with_background(BACKGROUND_WINDOWS);
 
 /// gpt-6.1-terra — balanced tier (2026-10-26).
 const OPENAI_GPT61_TERRA: Model = model(
@@ -56,7 +73,9 @@ const OPENAI_GPT61_TERRA: Model = model(
 .with_batch_cached(0.50, 0.025, 2.50)
 .with_flex(0.50, Some(0.025), 2.50)
 .with_priority(2.00, Some(0.10), 10.00)
-.with_high_tier(2.00, 7.50, Some(0.10), 272_000);
+.with_high_tier(2.00, 7.50, Some(0.10), 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 1.25), CacheWrite::new(720, 2.50)])
+.with_background(BACKGROUND_WINDOWS);
 
 /// gpt-6.1-sol — frontier tier (2026-09-29).
 const OPENAI_GPT61_SOL: Model = model(
@@ -71,7 +90,9 @@ const OPENAI_GPT61_SOL: Model = model(
 .with_batch_cached(1.00, 0.05, 5.00)
 .with_flex(1.00, Some(0.05), 5.00)
 .with_priority(4.00, Some(0.20), 20.00)
-.with_high_tier(4.00, 15.00, Some(0.20), 272_000);
+.with_high_tier(4.00, 15.00, Some(0.20), 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 2.50), CacheWrite::new(720, 5.00)])
+.with_ultrafast(12.00, Some(0.60), 60.00);
 
 /// gpt-6-astra — top tier (2026-09-03).
 const OPENAI_GPT6_ASTRA: Model = model(
@@ -86,7 +107,9 @@ const OPENAI_GPT6_ASTRA: Model = model(
 .with_batch_cached(5.00, 0.50, 25.00)
 .with_flex(5.00, Some(0.50), 25.00)
 .with_priority(20.00, Some(2.00), 100.00)
-.with_high_tier(20.00, 75.00, Some(2.00), 272_000);
+.with_high_tier(20.00, 75.00, Some(2.00), 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 12.50), CacheWrite::new(720, 25.00)])
+.with_ultrafast(60.00, Some(6.00), 300.00);
 
 /// gpt-6-sol — frontier tier (2026-09-22).
 const OPENAI_GPT6_SOL: Model = model(
@@ -101,7 +124,8 @@ const OPENAI_GPT6_SOL: Model = model(
 .with_batch_cached(1.00, 0.10, 5.00)
 .with_flex(1.00, Some(0.10), 5.00)
 .with_priority(4.00, Some(0.40), 20.00)
-.with_high_tier(4.00, 15.00, Some(0.40), 272_000);
+.with_high_tier(4.00, 15.00, Some(0.40), 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 2.50), CacheWrite::new(720, 5.00)]);
 
 /// gpt-6-luna — high-volume tier (2026-09-22).
 const OPENAI_GPT6_LUNA: Model = model(
@@ -116,7 +140,9 @@ const OPENAI_GPT6_LUNA: Model = model(
 .with_batch_cached(0.05, 0.005, 0.25)
 .with_flex(0.05, Some(0.005), 0.25)
 .with_priority(0.20, Some(0.02), 1.00)
-.with_high_tier(0.20, 0.75, Some(0.02), 272_000);
+.with_high_tier(0.20, 0.75, Some(0.02), 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 0.125), CacheWrite::new(720, 0.25)])
+.with_background(BACKGROUND_WINDOWS);
 
 // GPT-5.6 family (2026-07-09). The generation number is the family; Sol / Terra
 // / Luna are durable capability tiers replacing the base / mini / nano names.
@@ -153,7 +179,8 @@ const OPENAI_GPT56_TERRA: Model = model(
 .with_batch_cached(1.00, 0.10, 6.00)
 .with_flex(1.00, Some(0.10), 6.00)
 .with_priority(4.00, Some(0.40), 24.00)
-.with_high_tier(4.00, 18.00, None, 272_000);
+.with_high_tier(4.00, 18.00, None, 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 2.50), CacheWrite::new(720, 5.00)]);
 
 /// gpt-5.6-luna — high-volume tier: extraction, classification, reformatting.
 const OPENAI_GPT56_LUNA: Model = model(
@@ -168,7 +195,8 @@ const OPENAI_GPT56_LUNA: Model = model(
 .with_batch_cached(0.10, 0.01, 0.60)
 .with_flex(0.10, Some(0.01), 0.60)
 .with_priority(0.40, Some(0.04), 2.40)
-.with_high_tier(0.40, 1.80, None, 272_000);
+.with_high_tier(0.40, 1.80, None, 272_000)
+.with_cache_writes(&[CacheWrite::new(30, 0.25), CacheWrite::new(720, 0.50)]);
 
 /// gpt-5.5 — frontier 2026 model. Has Priority tier (rare among GPT-5.x SKUs).
 const OPENAI_GPT55: Model = model(

@@ -11,7 +11,7 @@
 >
 > **升级到 4.0？** token id 与 API 都没变。唯一的破坏性变更：词表移到了默认开启的 `vocab-*` feature 之后，写了 `default-features = false` 的依赖需要点名自己用到的词表。
 
-最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 5〜49 倍**，**浏览器内比 gpt-tokenizer 快 2〜4 倍** —— 中日文散文同样领先。
+最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 3.7〜20 倍**，**浏览器内比 gpt-tokenizer 快 1.1〜2.7 倍** —— 中日文散文同样领先。
 
 ## 本 workspace 的 crate
 
@@ -68,7 +68,7 @@ const tokens = enc.encode('hello world')
 
 ## 性能
 
-在 Apple M4 Mac mini 上，`encode` **比 tiktoken-rs 快 5〜49 倍**、**比 Python tiktoken 快 5〜29 倍**：ASCII 29〜49 倍，中日文散文 15〜17 倍，对抗性无重复 CJK 语料 5 倍。浏览器内（wasm）比 gpt-tokenizer 快 2〜4 倍。完整对比表与方法见 [`tiktoken/README.md#performance`](tiktoken/README.md#performance)。
+在 Apple M4 Mac mini 上，`encode` **比 tiktoken-rs 快 3.7〜20 倍**、**比 Python tiktoken 快 4.6〜45 倍**：ASCII 15〜20 倍，中日文散文 14〜18 倍，对抗性无重复 CJK 语料 3.7 倍。浏览器内（wasm）比 gpt-tokenizer 快 1.1〜2.7 倍。完整对比表与方法见 [`tiktoken/README.md#performance`](tiktoken/README.md#performance)。
 
 ## 构建
 

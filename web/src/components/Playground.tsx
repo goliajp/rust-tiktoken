@@ -19,10 +19,10 @@ const FEATURED = [
   'kimi_k3',
   'glm5',
   'deepseek_v4',
-  'qwen2',
+  'qwen3_5',
   'minimax_m2',
-  'llama3',
-  'mistral_v3',
+  'llama4',
+  'mistral_v15',
 ]
 
 type WasmState = 'loading' | 'ready' | 'error'
