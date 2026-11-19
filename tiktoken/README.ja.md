@@ -12,11 +12,11 @@
 
 ## 特徴
 
-- **マルチプロバイダ**: 8 社 17 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral、Moonshot、Zhipu、MiniMax）
+- **マルチプロバイダ**: 8 社 20 エンコーディング（OpenAI、Meta、DeepSeek、Alibaba、Mistral、Moonshot、Zhipu、MiniMax）
 - **高速**: 手書きスキャナが ASCII と CJK を処理（正規表現をバイパス）、キー長で階層化した語彙、断片の丸ごとメモ化、ハイブリッド BPE マージ
 - **並列エンコード**: 大規模テキスト用のオプション rayon マルチスレッドエンコード
-- **料金見積もり**: 11 プロバイダ 116 モデルのコスト推定
-- **コンパクト**: 17 語彙で合計 5.1 MB を埋め込み、語彙ごとにオプトアウト可能 — cl100k のみのビルドなら 373 KB
+- **料金見積もり**: 11 プロバイダ 153 モデルのコスト推定
+- **コンパクト**: 20 語彙で合計 7.8 MB を埋め込み、語彙ごとにオプトアウト可能 — cl100k のみのビルドなら 373 KB
 - **ゼロアロケーションカウント**: `count()` パスはトークンベクタを割り当てません
 
 ## パフォーマンス
@@ -73,7 +73,7 @@ JavaScript トークナイザーと比較。
 | アロケーションなしの `count()` | あり | なし | なし |
 
 スキャナはプロパティテスト（毎回数十万件のランダム入力）で正規表現の語義に
-固定され、各エンコーディングは 44,518 件の差分フィクスチャでベンダー自身の
+固定され、各エンコーディングは 53,275 件の差分フィクスチャでベンダー自身の
 トークナイザーに固定されています。
 
 ベンチマークのソース：[`benches/`](benches/)・[`../bench-compare/`](../bench-compare/)。
@@ -115,23 +115,26 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 | エンコーディング | プロバイダ | Feature | データ | 対応モデル |
 |---|---|---|---|---|
-| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), o1, o3, o4-mini |
+| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), GPT-6.x（推定、公式未公表）, o1, o3, o4-mini |
 | `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony チャットフォーマット） |
 | `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
 | `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + ベース | text-davinci-002/003, code-davinci-*, code-cushman-* |
 | `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*, code-davinci-edit-* |
 | `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 世代: davinci, curie, babbage, ada |
 | `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` のエイリアス） |
-| `llama3` | Meta | `vocab-llama3` | 111 KB + ベース | Llama 3, 3.1, 3.2, 3.3, 4 |
+| `llama3` | Meta | `vocab-llama3` | 111 KB + ベース | Llama 3, 3.1, 3.2, 3.3 |
+| `llama4` | Meta | `vocab-llama4` | 816 KB | Llama 4 Scout / Maverick, Muse |
 | `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3, R1 |
-| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash（V3 語彙 + V4 特殊トークン） |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash, V4.1 Flash（V3 語彙 + V4 特殊トークン） |
 | `qwen2` | Alibaba | `vocab-qwen2` | 564 KB | Qwen 2.5, Qwen 3 |
-| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral（Tekken トークナイザ） |
+| `qwen3_5` | Alibaba | `vocab-qwen3_5` | 989 KB | Qwen 3.5 – 3.8, Qwen 4（推定、公式未公表） |
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral, Large 3, Small 4（Tekken トークナイザ） |
+| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4 (Tekken v15) |
 | `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
-| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3（K2 語彙 + K3 特殊トークン） |
+| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1（K2 語彙 + K3 特殊トークン） |
 | `glm4` | Zhipu | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
-| `glm5` | Zhipu | `vocab-glm5` | 6 KB + ベース | GLM-5 / 5.2 |
-| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 |
+| `glm5` | Zhipu | `vocab-glm5` | 6 KB + ベース | GLM-5 / 5.1 / 5.2 / 5.3 |
+| `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 / M3 / M3.1 |
 
 ## API
 
@@ -199,7 +202,7 @@ assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_som
 ```
 
 OpenAI、Anthropic、Google、Meta、DeepSeek、Alibaba、Mistral、Moonshot、Zhipu、
-MiniMax、Voyage の 116 モデルに対応。
+MiniMax、Voyage の 153 モデルに対応。
 
 ## WebAssembly
 
