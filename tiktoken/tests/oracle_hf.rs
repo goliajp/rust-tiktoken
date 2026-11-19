@@ -107,3 +107,18 @@ fn oracle_glm5() {
 fn oracle_minimax_m2() {
     verify_roundtrip_and_count("minimax_m2");
 }
+
+#[test]
+fn oracle_qwen3_5() {
+    verify_roundtrip_and_count("qwen3_5");
+}
+
+#[test]
+fn oracle_llama4() {
+    verify_roundtrip_and_count("llama4");
+}
+
+#[test]
+fn oracle_mistral_v15() {
+    verify_roundtrip_and_count("mistral_v15");
+}
