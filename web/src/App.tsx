@@ -121,19 +121,19 @@ export function App() {
 
           <div className="figures">
             <div className="figure">
-              <div className="v">2–4×</div>
+              <div className="v">1.1–2.7×</div>
               <div className="k"><T k="front.fig.browser" /></div>
             </div>
             <div className="figure">
-              <div className="v">5–49×</div>
+              <div className="v">3.7–20×</div>
               <div className="k"><T k="front.fig.speed" /></div>
             </div>
             <div className="figure">
-              <div className="v">44,518</div>
+              <div className="v">53,275</div>
               <div className="k"><T k="front.fig.comparisons" /></div>
             </div>
             <div className="figure">
-              <div className="v">17</div>
+              <div className="v">20</div>
               <div className="k"><T k="front.fig.encodings" /></div>
             </div>
           </div>

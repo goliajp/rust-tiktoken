@@ -2,8 +2,9 @@
 """Convert a HuggingFace ByteLevel-BPE tokenizer into a `.tiktoken.zst` oracle.
 
 This is how the HF-sourced vocabularies are produced (llama3, qwen2,
-deepseek_v3, mistral_v3, and the 2026-08 additions glm4 / glm5 / minimax_m2).
-Kimi needs no conversion — Moonshot ships a native tiktoken `tiktoken.model`,
+deepseek_v3, mistral_v3, the 2026-08 additions glm4 / glm5 / minimax_m2, and
+the 2026-11 additions qwen3_5 / llama4 / mistral_v15). mistral_v15 is read from
+Mistral's `tekken.json` instead of an HF tokenizer.json. Kimi needs no conversion — Moonshot ships a native tiktoken `tiktoken.model`,
 which only needs zstd compression.
 
 Output lands in `tests/vocab-oracle/`, which is the reference form and is *not*
@@ -24,9 +25,9 @@ differentially compared against the HF tokenizer over the parity corpus
 (`tests/canonical_corpus.py`), skipping texts that contain an added token.
 
 Usage:
-    pip install tokenizers tiktoken zstandard
-    python tiktoken/src/encodings/convert_hf_vocab.py glm4 glm5 minimax_m2
-    python tiktoken/src/encodings/build_tkv.py    glm4 glm5 minimax_m2
+    pip install tokenizers tiktoken zstandard mistral-common
+    python tiktoken/src/encodings/convert_hf_vocab.py qwen3_5 llama4 mistral_v15
+    python tiktoken/src/encodings/build_tkv.py    qwen3_5 llama4 mistral_v15
 """
 
 import base64
@@ -62,6 +63,27 @@ SOURCES = {
         200_000,
         r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",
     ),
+    # Qwen 3.5 through 3.8 share this tokenizer byte for byte. It is a new
+    # vocabulary, not an extension of qwen2's.
+    "qwen3_5": (
+        "Qwen/Qwen3.5-27B",
+        248_044,
+        r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?[\p{L}\p{M}]+|\p{N}| ?[^\s\p{L}\p{M}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",
+    ),
+    # ungated mirror of meta-llama/Llama-4-Scout-17B-16E-Instruct
+    "llama4": (
+        "unsloth/Llama-4-Scout-17B-16E-Instruct",
+        200_000,
+        r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+",
+    ),
+}
+
+# Tekken vocabularies ship as `tekken.json`, not an HF tokenizer.json. Ids
+# below num_special are control tokens; regular rank r has id r + num_special.
+# The oracle stores the control tokens as literal bytes at their ids, the same
+# layout as the mistral_v3 oracle converted from Nemo's tokenizer.json.
+TEKKEN_SOURCES = {
+    "mistral_v15": ("mistralai/Mistral-Large-4-1T-A52B", 204_800),
 }
 
 
@@ -110,7 +132,45 @@ def convert(name: str):
             raise SystemExit(f"{name}: divergence on {text!r}\n  converted: {ours}\n  hf:        {hf}")
         checked += 1
     print(f"{name}: self-check OK ({checked} texts, {skipped} skipped)", file=sys.stderr)
+    write_oracle(name, ranks)
 
+
+def convert_tekken(name: str):
+    """Self-checked against mistral-common's Tekkenizer, the reference
+    implementation, rather than against tiktoken with the same pattern, which
+    would only compare the conversion with itself."""
+    from huggingface_hub import hf_hub_download
+    from mistral_common.tokens.tokenizers.tekken import Tekkenizer
+
+    repo, want_vocab = TEKKEN_SOURCES[name]
+    path = hf_hub_download(repo, "tekken.json")
+    data = json.loads(pathlib.Path(path).read_text())
+    cfg = data["config"]
+    n_special = cfg["default_num_special_tokens"]
+    if cfg["default_vocab_size"] != want_vocab:
+        raise SystemExit(f"{name}: {repo} vocab {cfg['default_vocab_size']} != expected {want_vocab}")
+
+    ranks = {st["token_str"].encode(): st["rank"] for st in data["special_tokens"][:n_special]}
+    for entry in data["vocab"][: want_vocab - n_special]:
+        ranks[base64.b64decode(entry["token_bytes"])] = entry["rank"] + n_special
+    if sorted(ranks.values()) != list(range(want_vocab)):
+        raise SystemExit(f"{name}: ranks are not exactly 0..{want_vocab}")
+
+    ref = Tekkenizer.from_file(path)
+    regular = {tk: r for tk, r in ranks.items() if r >= n_special}
+    enc = pytiktoken.Encoding(name=name, pat_str=cfg["pattern"], mergeable_ranks=regular, special_tokens={})
+    checked = 0
+    for text in corpus():
+        ours = enc.encode(text, disallowed_special=())
+        theirs = ref.encode(text, bos=False, eos=False)
+        if ours != theirs:
+            raise SystemExit(f"{name}: divergence on {text!r}\n  converted: {ours}\n  tekken:    {theirs}")
+        checked += 1
+    print(f"{name}: self-check OK ({checked} texts)", file=sys.stderr)
+    write_oracle(name, ranks)
+
+
+def write_oracle(name: str, ranks: dict):
     lines = b"".join(
         base64.b64encode(tk) + b" " + str(rank).encode() + b"\n"
         for tk, rank in sorted(ranks.items(), key=lambda kv: kv[1])
@@ -121,6 +181,9 @@ def convert(name: str):
 
 
 if __name__ == "__main__":
-    names = sys.argv[1:] or list(SOURCES)
+    names = sys.argv[1:] or [*SOURCES, *TEKKEN_SOURCES]
     for n in names:
-        convert(n)
+        if n in TEKKEN_SOURCES:
+            convert_tekken(n)
+        else:
+            convert(n)

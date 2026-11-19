@@ -11,13 +11,13 @@
 >
 > **Upgrading to 4.0?** Token ids and the API are unchanged. The one break: vocabularies now live behind default-on `vocab-*` features, so a dependency written as `default-features = false` must name the ones it uses.
 
-The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **5–49x faster than tiktoken-rs** natively and **2–4x faster than gpt-tokenizer in the browser** — CJK prose included.
+The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **3.7–20x faster than tiktoken-rs** natively and **1.1–2.7x faster than gpt-tokenizer in the browser** — CJK prose included.
 
 ## Crates in this workspace
 
 | Path | Crate / Package | Description | Version |
 |:-----|:----------------|:------------|:--------|
-| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE tokenizer — 17 encodings, 116 models, multi-provider pricing | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
+| [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | Rust BPE tokenizer — 20 encodings, 153 models, multi-provider pricing | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`tiktoken-wasm`](https://crates.io/crates/tiktoken-wasm) (Rust) | WASM binding crate for the above | [![crates.io](https://img.shields.io/crates/v/tiktoken-wasm.svg?style=flat-square)](https://crates.io/crates/tiktoken-wasm) |
 | [`tiktoken-wasm/`](tiktoken-wasm/) | [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) (npm) | Same, published to npm via `wasm-pack` | [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm.svg?style=flat-square)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) |
 
@@ -26,8 +26,8 @@ The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatibl
 ## Highlights
 
 - **Hand-written pre-tokenizer for ASCII and CJK** — letters, digits, punctuation, contractions, Han/kana/hangul runs and fullwidth forms all resolve without the regex engine, which remains the arbiter (property-tested equivalence) and the fallback for rare shapes.
-- **17 encodings · 116 models · 11 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek V3/V4, Qwen, Mistral, Kimi K2/K3, GLM-4/5, MiniMax M2; plus USD cost estimation (Anthropic & Google included for pricing).
-- **Lean & portable** — all 17 vocabularies embedded in 5.1 MB and opt-out per vocabulary (a cl100k-only build carries 373 KB), key-size-layered vocabulary with whole-piece memoisation, hybrid linear/heap BPE merge, optional rayon parallelism, allocation-free `count()`, pure Rust with zero C dependencies, and a self-contained wasm build.
+- **20 encodings · 153 models · 11 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, GPT-6.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek V3/V4, Qwen 2–3.8, Mistral (incl. Large 4), Kimi K2/K3, GLM-4/5, MiniMax M2/M3; plus USD cost estimation (Anthropic & Google included for pricing).
+- **Lean & portable** — all 20 vocabularies embedded in 7.8 MB and opt-out per vocabulary (a cl100k-only build carries 373 KB), key-size-layered vocabulary with whole-piece memoisation, hybrid linear/heap BPE merge, optional rayon parallelism, allocation-free `count()`, pure Rust with zero C dependencies, and a self-contained wasm build.
 
 Full API, supported-model tables, and benchmarks live in the per-crate READMEs: **[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**.
 
@@ -68,7 +68,7 @@ const tokens = enc.encode('hello world')
 
 ## Performance
 
-On an Apple M4 Mac mini, `encode` is **5–49x faster than tiktoken-rs** and **5–29x faster than Python tiktoken**: 29–49x on ASCII, 15–17x on Chinese and Japanese prose, 5x even on an adversarial no-repeat CJK corpus. In the browser (wasm) it is 2–4x faster than gpt-tokenizer. Full tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
+On an Apple M4 Mac mini, `encode` is **3.7–20x faster than tiktoken-rs** and **4.6–45x faster than Python tiktoken**: 15–20x on ASCII, 14–18x on Chinese and Japanese prose, 3.7x on an adversarial no-repeat CJK corpus. In the browser (wasm) it is 1.1–2.7x faster than gpt-tokenizer. Full tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
 
 ## Build
 

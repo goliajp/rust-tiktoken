@@ -5,7 +5,7 @@ Counterpart to `canonical_corpus.py`: that one covers the OpenAI encodings via
 `openai/tiktoken`, this one covers the encodings sourced from HuggingFace
 tokenizers. Emits the same shape — {encoding: [[text, [token, ...]], ...]}.
 
-    pip install tokenizers
+    pip install tokenizers mistral-common
     python tiktoken/tests/hf_corpus.py /tmp/hf.json
     CANONICAL_JSON=/tmp/hf.json cargo test -p tiktoken \
         --test canonical_parity -- --ignored --nocapture
@@ -41,7 +41,27 @@ REFERENCES = {
     "glm4": ("zai-org/GLM-4.5", 151_329),
     "glm5": ("zai-org/GLM-5.2", 154_820),
     "minimax_m2": ("MiniMaxAI/MiniMax-M2", 200_000),
+    "qwen3_5": ("Qwen/Qwen3.5-27B", 248_044),
+    "llama4": ("unsloth/Llama-4-Scout-17B-16E-Instruct", 200_000),
 }
+
+# Tekken references come from mistral-common, Mistral's own implementation:
+# encoding name -> (repo carrying tekken.json, expected vocab size)
+TEKKEN_REFERENCES = {
+    "mistral_v15": ("mistralai/Mistral-Large-4-1T-A52B", 204_800),
+}
+
+
+def tekken_reference(name):
+    """Return an `encode(text) -> ids` callable for a Tekken vocabulary."""
+    from huggingface_hub import hf_hub_download
+    from mistral_common.tokens.tokenizers.tekken import Tekkenizer
+
+    repo, want_vocab = TEKKEN_REFERENCES[name]
+    tok = Tekkenizer.from_file(hf_hub_download(repo, "tekken.json"))
+    if tok.n_words != want_vocab:
+        raise SystemExit(f"{name}: {repo} has vocab {tok.n_words}, expected {want_vocab}")
+    return lambda text: tok.encode(text, bos=False, eos=False)
 
 
 def kimi_cases(texts):
@@ -84,6 +104,11 @@ def main():
     data["kimi_k2"] = cases
     data["kimi_k3"] = cases
     print(f"kimi_k2 / kimi_k3: {len(cases)} cases", file=sys.stderr)
+
+    for name in TEKKEN_REFERENCES:
+        encode = tekken_reference(name)
+        data[name] = [[t, encode(t)] for t in texts]
+        print(f"{name}: {len(texts)} cases", file=sys.stderr)
 
     for name, (repo, want_vocab) in REFERENCES.items():
         tok = Tokenizer.from_pretrained(repo)

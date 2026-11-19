@@ -46,9 +46,9 @@ const dict: Dict = {
   'front.title.b': { en: 'high-performance', zh: '高性能', ja: '高性能' },
   'front.title.c': { en: ' BPE tokenizer', zh: ' BPE 分词器', ja: ' BPE トークナイザー' },
   'front.abstract': {
-    en: 'Token counts drive billing, context limits and truncation, so a tokenizer has to be fast and exact at once. This one beats the fastest JavaScript tokenizers by 2–4× in the browser and tiktoken-rs by 5–49× natively, and each of its 17 encodings is checked byte-for-byte against the vendor’s own tokenizer — 44,518 differential cases, zero divergence. The playground below runs the published WebAssembly package itself, so both claims can be verified on this page.',
-    zh: 'token 数直接决定计费、上下文上限和截断位置，分词器必须又快又准。浏览器里，它比最快的 JavaScript 分词器快 2–4 倍；原生比 tiktoken-rs 快 5–49 倍。17 套编码逐一与厂商自己的分词器逐字节比对，44,518 组差分对照零分歧。下方试用区运行的就是发布的 WebAssembly 包本体 —— 这两件事都可以当场验证。',
-    ja: 'トークン数は課金・コンテキスト上限・打ち切り位置を直接決めるため、トークナイザーには速さと正確さの両方が要ります。本実装はブラウザ内で最速の JavaScript トークナイザーの 2〜4 倍、ネイティブでは tiktoken-rs の 5〜49 倍高速。17 のエンコーディングはすべてベンダー自身のトークナイザーとバイト単位で照合済みで、44,518 件の差分照合に相違はありません。下のプレイグラウンドは公開中の WebAssembly パッケージそのもの——どちらの主張もこのページで確かめられます。',
+    en: 'Token counts drive billing, context limits and truncation, so a tokenizer has to be fast and exact at once. This one beats the fastest JavaScript tokenizers by 1.1–2.7× in the browser and tiktoken-rs by 3.7–20× natively, and each of its 20 encodings is checked byte-for-byte against the vendor’s own tokenizer — 53,275 differential cases, zero divergence. The playground below runs the published WebAssembly package itself, so both claims can be verified on this page.',
+    zh: 'token 数直接决定计费、上下文上限和截断位置，分词器必须又快又准。浏览器里，它比最快的 JavaScript 分词器快 1.1–2.7 倍；原生比 tiktoken-rs 快 3.7–20 倍。20 套编码逐一与厂商自己的分词器逐字节比对，53,275 组差分对照零分歧。下方试用区运行的就是发布的 WebAssembly 包本体 —— 这两件事都可以当场验证。',
+    ja: 'トークン数は課金・コンテキスト上限・打ち切り位置を直接決めるため、トークナイザーには速さと正確さの両方が要ります。本実装はブラウザ内で最速の JavaScript トークナイザーの 1.1〜2.7 倍、ネイティブでは tiktoken-rs の 3.7〜20 倍高速。20 のエンコーディングはすべてベンダー自身のトークナイザーとバイト単位で照合済みで、53,275 件の差分照合に相違はありません。下のプレイグラウンドは公開中の WebAssembly パッケージそのもの——どちらの主張もこのページで確かめられます。',
   },
   'front.fig.comparisons': {
     en: 'differential cases, zero divergence',
@@ -75,9 +75,9 @@ const dict: Dict = {
     ja: 'ここで、自分のテキストを分割する',
   },
   'pg.blurb': {
-    en: 'This is the npm package itself, running in this page. All 17 encodings are available, and nothing you type leaves the browser.',
-    zh: '这就是发布到 npm 的 WebAssembly 包，原样运行在本页。17 套编码全部可选，输入内容不会离开浏览器。',
-    ja: 'npm に公開している WebAssembly パッケージが、そのままこのページで動いています。17 エンコーディングすべてを選択でき、入力内容がブラウザの外に出ることはありません。',
+    en: 'This is the npm package itself, running in this page. All 20 encodings are available, and nothing you type leaves the browser.',
+    zh: '这就是发布到 npm 的 WebAssembly 包，原样运行在本页。20 套编码全部可选，输入内容不会离开浏览器。',
+    ja: 'npm に公開している WebAssembly パッケージが、そのままこのページで動いています。20 エンコーディングすべてを選択でき、入力内容がブラウザの外に出ることはありません。',
   },
   'pg.cap': { en: 'Encoding', zh: '编码', ja: 'エンコーディング' },
   'pg.placeholder': {
@@ -92,9 +92,9 @@ const dict: Dict = {
   'pg.view.text': { en: 'Segments', zh: '分段', ja: '分割' },
   'pg.view.ids': { en: 'Token IDs', zh: 'Token ID', ja: 'トークン ID' },
   'pg.loading': {
-    en: 'Loading the WebAssembly module — 17 vocabularies, about 6 MB',
-    zh: '正在加载 WebAssembly 模块 —— 内含 17 套词表，约 6 MB',
-    ja: 'WebAssembly モジュールを読み込み中 — 17 の語彙を内蔵、約 6 MB',
+    en: 'Loading the WebAssembly module — 20 vocabularies, about 9 MB',
+    zh: '正在加载 WebAssembly 模块 —— 内含 20 套词表，约 9 MB',
+    ja: 'WebAssembly モジュールを読み込み中 — 20 の語彙を内蔵、約 9 MB',
   },
   'pg.error': {
     en: 'The WebAssembly module failed to load — a hard refresh usually fixes it',
@@ -144,9 +144,9 @@ const dict: Dict = {
     ja: '2 台のマシン、2 組の比較相手、同一のコーパス。計測前に各実装のトークン出力が完全に一致することを確認し、各数値はウォームアップ後 9 回の中央値です（cl100k_base）。どちらの表もリポジトリのコマンドで再現できます。',
   },
   'perf.browser.h': {
-    en: 'In the browser — Mac Studio (M4 Max), Chromium · npm run bench',
-    zh: '浏览器内 —— Mac Studio（M4 Max）、Chromium · npm run bench',
-    ja: 'ブラウザ内 — Mac Studio（M4 Max）・Chromium · npm run bench',
+    en: 'In the browser — Apple M4 Mac mini, Chromium · npm run bench',
+    zh: '浏览器内 —— Apple M4 Mac mini、Chromium · npm run bench',
+    ja: 'ブラウザ内 — Apple M4 Mac mini・Chromium · npm run bench',
   },
   'perf.native.h': {
     en: 'Native — Apple M4 Mac mini, single thread · cargo run -p bench-compare',
@@ -172,17 +172,17 @@ const dict: Dict = {
     ja: 'gpt-tokenizer は最速の JavaScript トークナイザー、js-tiktoken はダウンロード数首位のものです。敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にします——その行が下限であり、下限でも優位は変わりません。',
   },
   'perf.caption': {
-    en: 'Rust rivals, same corpora, encode(). The scanners and the layered vocabulary keep CJK off the regex engine, so it holds 5–17× alongside ASCII’s 29–49×.',
-    zh: 'Rust 同行对比，同一批语料，encode()。扫描器和分层词表让 CJK 不进正则引擎 —— CJK 快 5–17 倍，ASCII 快 29–49 倍。',
-    ja: 'Rust 実装との比較、同一コーパス、encode()。スキャナと階層化した語彙が CJK を正規表現エンジンに通さないため、CJK で 5〜17 倍、ASCII で 29〜49 倍を保ちます。',
+    en: 'Rust rivals, same corpora, encode(). The scanners and the layered vocabulary keep CJK off the regex engine, so it holds 3.7–18× alongside ASCII’s 15–20×.',
+    zh: 'Rust 同行对比，同一批语料，encode()。扫描器和分层词表让 CJK 不进正则引擎 —— CJK 快 3.7–18 倍，ASCII 快 15–20 倍。',
+    ja: 'Rust 実装との比較、同一コーパス、encode()。スキャナと階層化した語彙が CJK を正規表現エンジンに通さないため、CJK で 3.7〜18 倍、ASCII で 15〜20 倍を保ちます。',
   },
 
   // install
   'inst.heading': { en: 'Installation', zh: '安装', ja: '導入' },
   'inst.rust.blurb': {
-    en: 'In Rust — encodings are cached globally, so looking one up again costs nothing. All 17 ship by default; name only the vocabularies you use and the rest stay out of your binary.',
-    zh: 'Rust —— 编码实例全局缓存，重复取用没有开销。17 套词表默认全带；只点名用到的，其余不会进你的二进制。',
-    ja: 'Rust の場合 — エンコーディングはグローバルにキャッシュされ、取り直してもコストはかかりません。既定では 17 語彙すべてを同梱しますが、使うものだけを指定すれば残りはバイナリに入りません。',
+    en: 'In Rust — encodings are cached globally, so looking one up again costs nothing. All 20 ship by default; name only the vocabularies you use and the rest stay out of your binary.',
+    zh: 'Rust —— 编码实例全局缓存，重复取用没有开销。20 套词表默认全带；只点名用到的，其余不会进你的二进制。',
+    ja: 'Rust の場合 — エンコーディングはグローバルにキャッシュされ、取り直してもコストはかかりません。既定では 20 語彙すべてを同梱しますが、使うものだけを指定すれば残りはバイナリに入りません。',
   },
   'inst.js.blurb': {
     en: 'In the browser or Node.js, through the same WebAssembly package this page uses.',
