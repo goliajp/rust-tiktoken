@@ -8,7 +8,7 @@
 
 **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-The fastest Rust BPE tokenizer — 5–49x faster than tiktoken-rs natively (15–17x on Chinese and Japanese prose) and 2–4x faster than gpt-tokenizer in the browser via wasm. Hand-written scanners cover ASCII and CJK alike, the vocabulary is layered by key size, and repeated pieces are memoised whole. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax.
+The fastest Rust BPE tokenizer — 3.7–20x faster than tiktoken-rs natively (14–18x on Chinese and Japanese prose) and 1.1–2.7x faster than gpt-tokenizer in the browser via wasm. Hand-written scanners cover ASCII and CJK alike, the vocabulary is layered by key size, and repeated pieces are memoised whole. Compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and supports **all mainstream LLM tokenizers** — OpenAI, Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax.
 
 ## Features
 
@@ -30,33 +30,33 @@ warmup. Corpora are byte-identical in every harness (`bench-compare/`,
 
 `cargo run --release -p bench-compare`
 
-| Corpus | Python tiktoken 0.12 | tiktoken-rs 0.9 | **tiktoken** | vs rs | vs Python |
+| Corpus | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| short (13 B) | 1.6 µs | 1,081 ns | **33 ns** | **33x** | **48x** |
-| medium (900 B) | 31.9 µs | 52.2 µs | **1.1 µs** | **47x** | **29x** |
-| English prose (45 KB) | 1,500 µs | 2,498 µs | **51.5 µs** | **49x** | **29x** |
-| Chinese prose (4.3 KB) | 119.8 µs | 134.7 µs | **8.1 µs** | **17x** | **15x** |
-| Japanese prose (4.6 KB) | 131.0 µs | 144.6 µs | **8.6 µs** | **17x** | **15x** |
-| mixed CJK ×50 (4.5 KB) | 138.9 µs | 160.3 µs | **15.2 µs** | **11x** | **9.2x** |
-| adversarial CJK, no repeats (3.9 KB) | 131.7 µs | 141.2 µs | **25.9 µs** | **5.5x** | **5.1x** |
-| code (3.9 KB) | 263.7 µs | 317.7 µs | **11.1 µs** | **29x** | **24x** |
+| short (13 B) | 1.3 µs | 581 ns | **29 ns** | **20x** | **45x** |
+| medium (900 B) | 23.3 µs | 19.7 µs | **1.1 µs** | **18x** | **21x** |
+| English prose (45 KB) | 1,100 µs | 956 µs | **52.6 µs** | **18x** | **21x** |
+| Chinese prose (4.3 KB) | 114.0 µs | 96.1 µs | **6.7 µs** | **14x** | **17x** |
+| Japanese prose (4.6 KB) | 131.3 µs | 113.9 µs | **6.5 µs** | **18x** | **20x** |
+| mixed CJK ×50 (4.5 KB) | 122.1 µs | 106.7 µs | **15.4 µs** | **6.9x** | **7.9x** |
+| adversarial CJK, no repeats (3.9 KB) | 113.8 µs | 92.5 µs | **24.7 µs** | **3.7x** | **4.6x** |
+| code (3.9 KB) | 180.0 µs | 159.4 µs | **11.0 µs** | **15x** | **16x** |
 
-o200k_base tracks the same ratios (5–48x vs tiktoken-rs). `count()` runs
-another 5–15% faster than `encode` — it never allocates the id vector.
+o200k_base runs 2.8–14x faster than tiktoken-rs. `count()` runs another
+6–35% faster than `encode` — it never allocates the id vector.
 
-#### In the browser — Mac Studio (M4 Max), Chromium
+#### In the browser — Apple M4 Mac mini, Chromium
 
 `npm run bench` in `web/` — this crate compiled to wasm, against the two
 mainstream JavaScript tokenizers.
 
-| Corpus | gpt-tokenizer 3.4 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+| Corpus | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
 |---|---|---|---|
-| Chinese prose (4.3 KB) | 36.8 µs | 8,029 µs | **13.4 µs** |
-| Japanese prose (4.6 KB) | 27.4 µs | 15,862 µs | **13.5 µs** |
-| mixed CJK ×50 (4.5 KB) | 41.2 µs | 4,665 µs | **24.2 µs** |
-| adversarial CJK, no repeats (3.9 KB) | 49.6 µs | 3,832 µs | **40.3 µs** |
-| English prose (45 KB) | 478 µs | 7,010 µs | **112.5 µs** |
-| code (3.9 KB) | 76.0 µs | 916 µs | **19.5 µs** |
+| Chinese prose (4.3 KB) | 33.0 µs | 6,669 µs | **12.9 µs** |
+| Japanese prose (4.6 KB) | 29.4 µs | 12,885 µs | **13.9 µs** |
+| mixed CJK ×50 (4.5 KB) | 40.8 µs | 3,917 µs | **23.4 µs** |
+| adversarial CJK, no repeats (3.9 KB) | 43.6 µs | 2,741 µs | **38.4 µs** |
+| English prose (45 KB) | 276 µs | 7,522 µs | **102.0 µs** |
+| code (3.9 KB) | 32.0 µs | 1,020 µs | **17.5 µs** |
 
 The adversarial corpus never repeats a piece, which disables every
 implementation's memoisation — it is the floor, and the lead holds there too.

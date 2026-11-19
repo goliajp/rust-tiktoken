@@ -143,6 +143,19 @@ the `pricing` module docs and next to each entry; in short:
   Claude 4.7 and later and 1,568 px / 1,568 tokens before. The old
   `(w × h) / 750` approximation undercounted 4.7+ images by up to ~3×.
 
+### Benchmarks re-measured
+
+Every comparison in the READMEs and on the site was re-run on 2026-11-20
+against the competitors' current releases, which got much faster:
+on English prose, tiktoken-rs 0.9 → 0.12 is ~2.6× faster and Python tiktoken
+0.12 → 0.14 ~1.4×, on the same machine; gpt-tokenizer moved from 3.4 to 4.1.
+This crate's own native times are unchanged within noise (English prose
+51.5 → 52.6 µs). The headline
+ratios therefore drop to what is measured now: **3.7–20× faster than
+tiktoken-rs** natively (was 5–49×) and **1.1–2.7× faster than
+gpt-tokenizer** in the browser (was 2–4×). The browser numbers now come from
+the same M4 Mac mini as the native ones.
+
 ### Package
 
 | | 4.1.2 | 5.0.0 |
