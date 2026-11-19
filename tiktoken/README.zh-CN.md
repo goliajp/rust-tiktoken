@@ -276,6 +276,8 @@ wasm-pack build --target web --release
 
 ## 许可证
 
-采用 [MIT](LICENSE-MIT) 或 [Apache-2.0](LICENSE-APACHE) 双重许可，由你任选其一。
+代码采用 [MIT](LICENSE-MIT) 或 [Apache-2.0](LICENSE-APACHE) 双重许可，由你任选其一。
 
-第三方词表数据许可证：参见 [LICENSE-3RD-PARTY](LICENSE-3RD-PARTY)。
+内嵌的词表不在此列，各自沿用发布方的许可证：[LICENSE-3RD-PARTY](LICENSE-3RD-PARTY) 列出每套词表的来源和许可证，[`licenses/`](licenses/) 收录全文，[NOTICE](NOTICE) 收录这些许可证要求的署名。其中一些许可证对使用附有条件：Llama 许可证（月活超过 7 亿的产品要向 Meta 另行申请许可）、`mistral_v15` 的 Mistral 许可证（经营「Model as a Service」业务的要另签商业许可）、Kimi 和 MiniMax 在规模超过门槛时的署名展示条款，以及 DeepSeek 的使用限制条款。不启用某套词表的 `vocab-*` 特性，构建产物里就不含这套词表。
+
+Built with Llama.

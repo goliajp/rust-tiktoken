@@ -106,4 +106,8 @@ case at every setting, so past failures are always re-checked.
 
 ## License
 
-Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+The code is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+
+The embedded vocabularies are not covered by that: each stays under its publisher's license. [LICENSE-3RD-PARTY](tiktoken/LICENSE-3RD-PARTY) lists every vocabulary with its source and license, [`licenses/`](tiktoken/licenses/) holds the full texts, and [NOTICE](tiktoken/NOTICE) the attributions they require. Some of those licenses set conditions on use: the Llama licenses (products above 700 million monthly active users need a license from Meta), Mistral's license for `mistral_v15` (Model-as-a-Service businesses need a commercial license), display clauses for Kimi and MiniMax above a size threshold, and use-based restrictions for DeepSeek. A build without a vocabulary's `vocab-*` feature does not contain that vocabulary.
+
+Built with Llama.

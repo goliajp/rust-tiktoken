@@ -1,70 +1,117 @@
 # Third-Party Licenses
 
-This crate embeds tokenizer vocabulary data from several sources.
-Each is subject to its original license as described below.
+This crate embeds tokenizer vocabularies published by other parties. The
+crate's own code is licensed MIT OR Apache-2.0 (LICENSE-MIT, LICENSE-APACHE);
+each vocabulary stays under its publisher's license, listed below. The full
+texts are in the `licenses/` directory next to this file, and the attribution
+notices the licenses require are collected in NOTICE.
 
-## OpenAI tiktoken (cl100k_base, o200k_base, p50k_base, p50k_edit, r50k_base)
+Modification notice: every vocabulary was converted from its published format
+(tiktoken `.tiktoken` files, Hugging Face `tokenizer.json`, Mistral
+`tekken.json`) into this crate's compressed TKV1 format. Token bytes and ranks
+are unchanged; for llama3, glm5 and p50k_base only the tokens beyond the
+vocabulary they extend are stored.
+
+Some licenses attach conditions to how the vocabulary, or the model it belongs
+to, is used. They are quoted under each entry; read the full text before
+relying on a vocabulary in a product.
+
+
+## OpenAI tiktoken — cl100k_base, o200k_base, o200k_harmony, p50k_base, p50k_edit, r50k_base (gpt2)
 
 - Source: https://github.com/openai/tiktoken
-- License: MIT
-- Copyright (c) 2022 OpenAI
+- License: MIT — licenses/openai-tiktoken-MIT.txt
+- Copyright (c) 2022 OpenAI, Shantanu Jain
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions: The above copyright
-notice and this permission notice shall be included in all copies or substantial
-portions of the Software.
 
-## Meta Llama 3 (llama3)
+## Meta Llama 3 — llama3
 
-- Source: https://huggingface.co/meta-llama/Llama-3.1-8B
-- License: Llama 3 Community License Agreement
-- Copyright (c) Meta Platforms, Inc.
+- Source: https://huggingface.co/meta-llama/Meta-Llama-3-8B
+- License: Meta Llama 3 Community License Agreement — licenses/meta-llama3-LICENSE.txt
+- Copyright © Meta Platforms, Inc. All Rights Reserved.
+- Built with Meta Llama 3.
+- Conditions: the agreement must accompany any distribution and the notice in
+  NOTICE must be kept; licensees whose products had more than 700 million
+  monthly active users on the release date need a separate license from Meta
+  (section 2); use must follow the Llama 3 Acceptable Use Policy.
 
-Built with Meta Llama 3.
 
-The tokenizer data is distributed under the Llama 3 Community License Agreement.
-A copy of the license is available at:
-https://github.com/meta-llama/llama3/blob/main/LICENSE
+## Meta Llama 4 — llama4 (also used by Meta's Muse models)
 
-Key requirements:
-- Attribution: "Built with Meta Llama 3" must be prominently displayed
-- A copy of the license agreement must accompany any distribution
+- Source: https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct
+- License: Llama 4 Community License Agreement — licenses/meta-llama4-LICENSE.txt
+- Copyright © Meta Platforms, Inc. All Rights Reserved.
+- Built with Llama.
+- Conditions: the agreement must accompany any distribution, "Built with Llama"
+  must be displayed, and the notice in NOTICE must be kept; licensees whose
+  products had more than 700 million monthly active users on the release date
+  need a separate license from Meta (section 2); use must follow the Llama 4
+  Acceptable Use Policy.
 
-## DeepSeek V3 (deepseek_v3)
 
-- Source: https://huggingface.co/deepseek-ai/DeepSeek-V3
-- License: DeepSeek Model License (code under MIT)
-- Copyright (c) 2024 DeepSeek
+## DeepSeek — deepseek_v3, deepseek_v4
 
-The tokenizer data is distributed under the DeepSeek Model License.
-A copy of the license is available at:
-https://github.com/deepseek-ai/DeepSeek-V3/blob/main/LICENSE-MODEL
+- Source: https://huggingface.co/deepseek-ai/DeepSeek-V3 (deepseek_v4 uses the
+  same vocabulary)
+- License: DeepSeek License Agreement, Version 1.0 — licenses/deepseek-LICENSE-MODEL.txt
+- Copyright (c) 2023 DeepSeek
+- Conditions: the use-based restrictions of paragraph 5 and Attachment A apply
+  to anyone receiving this vocabulary, and must be passed on to anyone you
+  distribute it to, together with a copy of the license (paragraph 4).
 
-Key requirements:
-- Use-based restrictions from Attachment A must be preserved
-- A copy of the license must accompany any distribution
-- Modified files must carry prominent modification notices
 
-## Qwen 2.5 (qwen2)
+## Alibaba Qwen — qwen2, qwen3_5
 
-- Source: https://huggingface.co/Qwen/Qwen2.5-7B
-- License: Apache 2.0
+- Source: https://huggingface.co/Qwen/Qwen2.5-7B (qwen2),
+  https://huggingface.co/Qwen/Qwen3.5-27B (qwen3_5)
+- License: Apache License 2.0 — LICENSE-APACHE
 - Copyright (c) Alibaba Cloud
 
-Licensed under the Apache License, Version 2.0.
-You may obtain a copy of the License at:
-https://www.apache.org/licenses/LICENSE-2.0
 
-## Mistral v3 Tekken (mistral_v3)
+## Mistral AI Tekken v3 — mistral_v3
 
-- Source: https://github.com/mistralai/mistral-common
-- License: Apache 2.0
+- Source: https://huggingface.co/mistralai/Mistral-Nemo-Base-2407
+- License: Apache License 2.0 — LICENSE-APACHE
 - Copyright (c) Mistral AI
 
-Licensed under the Apache License, Version 2.0.
-You may obtain a copy of the License at:
-https://www.apache.org/licenses/LICENSE-2.0
+
+## Mistral AI Tekken v15 — mistral_v15
+
+- Source: https://huggingface.co/mistralai/Mistral-Large-4-1T-A52B
+- License: Mistral Ecosystem Open-Weight License — licenses/mistral-ecosystem-open-weight-LICENSE.txt
+- Attribution notice: 2026 - Mistral
+- Conditions: the license text must be included in all copies; a licensee (or
+  affiliate) that operates a "Model as a Service" business must enter into a
+  separate commercial license with Mistral before using the Model or its
+  derivative works for any commercial purpose (section 2, with the exceptions
+  in section 3).
+
+
+## Moonshot AI Kimi — kimi_k2, kimi_k3
+
+- Source: https://huggingface.co/moonshotai/Kimi-K2-Instruct (`tiktoken.model`;
+  the file in moonshotai/Kimi-K3 is byte-identical)
+- License: Modified MIT License — licenses/moonshot-kimi-k2-LICENSE.txt
+- Copyright (c) 2025 Moonshot AI
+- Conditions: commercial products or services with more than 100 million
+  monthly active users or more than 20 million US dollars in monthly revenue
+  must prominently display "Kimi K2" in their user interface.
+
+
+## Zhipu AI GLM — glm4, glm5
+
+- Source: https://huggingface.co/zai-org/GLM-4.5 (glm4),
+  https://huggingface.co/zai-org/GLM-5.2 (glm5)
+- License: MIT (as declared on both model cards) — licenses/zhipu-glm-MIT.txt,
+  copied from the GLM-5.2 repository
+- Copyright (c) Zhipu AI
+
+
+## MiniMax — minimax_m2
+
+- Source: https://huggingface.co/MiniMaxAI/MiniMax-M2
+- License: Modified MIT License — licenses/minimax-m2-LICENSE.txt
+- Copyright 2025 MiniMax AI
+- Conditions: commercial products or services with more than 100 million
+  monthly active users or more than 30 million US dollars in annual recurring
+  revenue must prominently display "MiniMax M2" in their user interface.
