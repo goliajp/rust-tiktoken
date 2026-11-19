@@ -7,8 +7,8 @@ use super::*;
 // conservative 32K placeholder — verify before capacity planning. Batch bills
 // at 60% of the standard rate; the 2026-11 card lists batch for the K3 series
 // only, and the K2 batch rates below date from 2026-08. The K3 series also
-// charges for cache writes (1× input for a 5-minute TTL, 2× for 1 hour), which
-// is not modelled.
+// charges for cache writes, per lifetime (5 minutes, 1 hour); K2 writes are
+// free.
 
 /// kimi-k3.1-pro — flagship (2026-10-23). Flat rate across the full 1M context.
 const KIMI_K31_PRO: Model = model(
@@ -20,7 +20,8 @@ const KIMI_K31_PRO: Model = model(
     1_048_576,
     32_768,
 )
-.with_batch(1.20, 6.00);
+.with_batch(1.20, 6.00)
+.with_cache_writes(&[CacheWrite::new(5, 2.00), CacheWrite::new(60, 4.00)]);
 
 /// kimi-k3.1-pro-highspeed — the same model served faster, at twice the rate.
 const KIMI_K31_PRO_HIGHSPEED: Model = model(
@@ -31,7 +32,8 @@ const KIMI_K31_PRO_HIGHSPEED: Model = model(
     Some(0.20),
     1_048_576,
     32_768,
-);
+)
+.with_cache_writes(&[CacheWrite::new(5, 4.00), CacheWrite::new(60, 8.00)]);
 
 /// kimi-k3 — previous flagship (2026-07-16). Flat rate across the full 1M context.
 const KIMI_K3_MODEL: Model = model(
@@ -43,7 +45,8 @@ const KIMI_K3_MODEL: Model = model(
     1_048_576,
     32_768,
 )
-.with_batch(1.80, 9.00);
+.with_batch(1.80, 9.00)
+.with_cache_writes(&[CacheWrite::new(5, 3.00), CacheWrite::new(60, 6.00)]);
 
 /// kimi-k2.7-code — dedicated coding SKU. The K2 series closed to new users on
 /// 2026-10-31 and is scheduled to retire at the end of 2026-12.

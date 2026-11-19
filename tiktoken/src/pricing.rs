@@ -7,6 +7,10 @@
 //!
 //! # What changed in the 2026-11 refresh
 //!
+//! - **New billing dimensions** on [`ExtendedPricing`]: cache-write prices per
+//!   lifetime (`cache_writes`), OpenAI's Ultrafast tier (`ultrafast`) and
+//!   background windows (`background`). Anthropic Fast mode is stored as
+//!   `priority`, next to OpenAI's Fast tier.
 //! - **OpenAI**: the GPT-6 family (`gpt-6-astra` / `-sol` / `-luna`,
 //!   `gpt-6.1-sol` / `-terra`, `gpt-6.2-astra` / `-sol`), with Batch, Flex where
 //!   offered, Fast (stored as `priority`) and long-context rates. Flex and Fast
@@ -47,12 +51,14 @@
 //! - OpenAI's pricing page does not publish context windows for the `-pro`,
 //!   `gpt-5.1`, and `gpt-5.2` SKUs; those entries mirror their family's window.
 //! - Specialized OpenAI SKUs (`gpt-5.3-codex`, `*-cyber`, `gpt-6-rosalind`,
-//!   `*-law`, `*-chat-latest`, realtime / audio / image / video models), the
-//!   Ultrafast tier, the 2- and 8-hour background completion windows, and cache
-//!   write charges (OpenAI, Anthropic, Moonshot K3, Qwen 4) are not modelled.
-//! - Anthropic **Fast mode** (Fable / Mythos 5.2 $16 / $80, Opus 5.5 $8 / $40,
-//!   Opus 5 / 4.8 $10 / $50) and the 1.1× `inference_geo: "us"` data-residency
-//!   multiplier are not modelled.
+//!   `*-law`, `*-chat-latest`, realtime / audio / image / video models) are not
+//!   in the table.
+//! - Cache writes are modelled per lifetime (`extended.cache_writes`) but only
+//!   at the standard rate: OpenAI's long-context writes (2×) and Claude Haiku
+//!   5.5's long-prompt writes are not, and `gpt-5.6-sol` publishes only
+//!   promotional write rates, so it has none.
+//! - Anthropic's 1.1× `inference_geo: "us"` data-residency multiplier is not
+//!   modelled.
 //! - Gemini 4 and 3.8 Flash carry no image-token formula.
 
 //! # Caveats
@@ -96,11 +102,16 @@ mod moonshot;
 mod openai;
 mod openai_legacy;
 mod resolve;
+mod tiers;
 mod vision;
 mod voyage;
 mod zhipu;
 
 pub use resolve::{Match, Resolved, resolve_model};
+pub use tiers::{
+    AudioPricing, BackgroundWindow, BatchPricing, CacheWrite, ExtendedPricing, HighTierPricing,
+    TierRates,
+};
 pub use vision::{ImageDetail, VisionPricing};
 
 /// Provider identity
@@ -144,6 +155,7 @@ impl std::fmt::Display for Provider {
 
 /// Pricing tier per 1M tokens (USD).
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct Pricing {
     /// cost per 1M input tokens in USD
     pub input_per_1m: f64,
@@ -151,72 +163,6 @@ pub struct Pricing {
     pub output_per_1m: f64,
     /// cost per 1M cached input tokens in USD (if supported)
     pub cached_input_per_1m: Option<f64>,
-}
-
-/// Per-1M-token rates for a specific OpenAI service tier (Standard, Batch,
-/// Flex, Priority). Reused by [`ExtendedPricing::batch`], `.flex`, and
-/// `.priority`.
-///
-/// Standard tier rates live directly on [`Pricing`] (the model's default).
-#[derive(Debug, Clone, Copy)]
-pub struct TierRates {
-    /// cost per 1M input tokens in USD for this tier
-    pub input_per_1m: f64,
-    /// cost per 1M cached input tokens in USD for this tier (if the tier supports
-    /// prompt caching). Batch tier typically lacks this; Flex and Priority have it.
-    pub cached_input_per_1m: Option<f64>,
-    /// cost per 1M output tokens in USD for this tier
-    pub output_per_1m: f64,
-}
-
-/// Alias kept for backwards compatibility with the 3.2.x API. The `cached_input_per_1m`
-/// field is unused by existing Batch data; new entries can fill it.
-pub type BatchPricing = TierRates;
-
-/// High-tier pricing for input-token-count-based tiers (e.g. Gemini 2.5 Pro).
-/// Applies when input tokens exceed `threshold_tokens`.
-#[derive(Debug, Clone, Copy)]
-pub struct HighTierPricing {
-    pub input_per_1m: f64,
-    pub output_per_1m: f64,
-    pub cached_input_per_1m: Option<f64>,
-    /// switch to this tier when an estimate's input token count is *strictly greater than* this
-    pub threshold_tokens: u32,
-}
-
-/// Audio modality pricing.
-#[derive(Debug, Clone, Copy)]
-pub struct AudioPricing {
-    /// cost per 1M audio input tokens (Gemini 2.5 Flash uses this)
-    pub input_per_1m: Option<f64>,
-    /// cost per minute of audio (some providers bill this way)
-    pub per_minute: Option<f64>,
-}
-
-/// Compute USD cost for `(input_tokens, output_tokens)` at a given tier's
-/// rates. Helper used by `estimate_batch_cost`, `estimate_flex_cost`, and
-/// `estimate_priority_cost`. The cached input rate is not used here; callers
-/// that need cache-aware estimates can split tokens upstream.
-fn tier_cost(input_tokens: u64, output_tokens: u64, t: TierRates) -> f64 {
-    input_tokens as f64 * t.input_per_1m / 1_000_000.0
-        + output_tokens as f64 * t.output_per_1m / 1_000_000.0
-}
-
-/// All extended (non-standard) pricing dimensions. Every field is `Option`;
-/// `Default` produces an all-`None` value.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ExtendedPricing {
-    /// Batch API tier (asynchronous fulfillment, typically ~50% off Standard).
-    pub batch: Option<TierRates>,
-    /// Flex tier (OpenAI 2026+; token rates equal Batch, but with explicit
-    /// cached input row and narrower model availability).
-    pub flex: Option<TierRates>,
-    /// Priority tier (OpenAI 2026+; opt-in premium for faster fulfillment).
-    /// Multiplier is NOT consistent across models — varies per SKU.
-    pub priority: Option<TierRates>,
-    pub high_tier: Option<HighTierPricing>,
-    pub audio: Option<AudioPricing>,
-    pub vision: Option<VisionPricing>,
 }
 
 /// Model metadata including pricing, context window, and output limits.
@@ -297,126 +243,6 @@ impl Model {
         let cached_cost = cached_tokens as f64 * cached_rate / 1_000_000.0;
         let output_cost = output_tokens as f64 * p.output_per_1m / 1_000_000.0;
         input_cost + cached_cost + output_cost
-    }
-
-    /// Estimate cost using batch-API rates. Returns `None` if the model has no
-    /// batch pricing set in `extended.batch`.
-    pub fn estimate_batch_cost(&self, input_tokens: u64, output_tokens: u64) -> Option<f64> {
-        let t = self.extended.batch?;
-        Some(tier_cost(input_tokens, output_tokens, t))
-    }
-
-    /// Estimate cost using Flex tier rates. Returns `None` if the model has no
-    /// flex pricing set in `extended.flex`.
-    pub fn estimate_flex_cost(&self, input_tokens: u64, output_tokens: u64) -> Option<f64> {
-        let t = self.extended.flex?;
-        Some(tier_cost(input_tokens, output_tokens, t))
-    }
-
-    /// Estimate cost using Priority tier rates. Returns `None` if the model has no
-    /// priority pricing set in `extended.priority`.
-    pub fn estimate_priority_cost(&self, input_tokens: u64, output_tokens: u64) -> Option<f64> {
-        let t = self.extended.priority?;
-        Some(tier_cost(input_tokens, output_tokens, t))
-    }
-
-    /// Set the batch-API pricing. Returns a new `Model`. The cached input rate
-    /// defaults to `None`; use [`Self::with_batch_cached`] when the tier ships
-    /// an explicit cached rate.
-    pub const fn with_batch(mut self, input_per_1m: f64, output_per_1m: f64) -> Self {
-        self.extended.batch = Some(TierRates {
-            input_per_1m,
-            cached_input_per_1m: None,
-            output_per_1m,
-        });
-        self
-    }
-
-    /// Set the batch-API pricing with an explicit cached-input rate.
-    pub const fn with_batch_cached(
-        mut self,
-        input_per_1m: f64,
-        cached_input_per_1m: f64,
-        output_per_1m: f64,
-    ) -> Self {
-        self.extended.batch = Some(TierRates {
-            input_per_1m,
-            cached_input_per_1m: Some(cached_input_per_1m),
-            output_per_1m,
-        });
-        self
-    }
-
-    /// Set the Flex tier rates. Pass `cached_input_per_1m: None` if the docs
-    /// page shows `—` for the cached column.
-    pub const fn with_flex(
-        mut self,
-        input_per_1m: f64,
-        cached_input_per_1m: Option<f64>,
-        output_per_1m: f64,
-    ) -> Self {
-        self.extended.flex = Some(TierRates {
-            input_per_1m,
-            cached_input_per_1m,
-            output_per_1m,
-        });
-        self
-    }
-
-    /// Set the Priority tier rates. Pass `cached_input_per_1m: None` if the docs
-    /// page shows `—`. OpenAI Priority is opt-in and offered on a narrow subset
-    /// of models — leave unset for models without a Priority row.
-    pub const fn with_priority(
-        mut self,
-        input_per_1m: f64,
-        cached_input_per_1m: Option<f64>,
-        output_per_1m: f64,
-    ) -> Self {
-        self.extended.priority = Some(TierRates {
-            input_per_1m,
-            cached_input_per_1m,
-            output_per_1m,
-        });
-        self
-    }
-
-    /// Set the high-tier (input-token-count-based) pricing. Returns a new `Model`.
-    pub const fn with_high_tier(
-        mut self,
-        input_per_1m: f64,
-        output_per_1m: f64,
-        cached_input_per_1m: Option<f64>,
-        threshold_tokens: u32,
-    ) -> Self {
-        self.extended.high_tier = Some(HighTierPricing {
-            input_per_1m,
-            output_per_1m,
-            cached_input_per_1m,
-            threshold_tokens,
-        });
-        self
-    }
-
-    /// Set the audio-input per-1M-tokens rate. Returns a new `Model`.
-    pub const fn with_audio_input(mut self, per_1m: f64) -> Self {
-        let prev = match self.extended.audio {
-            Some(a) => a,
-            None => AudioPricing {
-                input_per_1m: None,
-                per_minute: None,
-            },
-        };
-        self.extended.audio = Some(AudioPricing {
-            input_per_1m: Some(per_1m),
-            per_minute: prev.per_minute,
-        });
-        self
-    }
-
-    /// Set the vision pricing variant. Returns a new `Model`.
-    pub const fn with_vision(mut self, v: VisionPricing) -> Self {
-        self.extended.vision = Some(v);
-        self
     }
 
     /// Estimate the USD cost for one image input, end-to-end
@@ -516,9 +342,12 @@ const fn model(
             batch: None,
             flex: None,
             priority: None,
+            ultrafast: None,
             high_tier: None,
             audio: None,
             vision: None,
+            cache_writes: &[],
+            background: &[],
         },
         context_window: ctx,
         max_output: max_out,

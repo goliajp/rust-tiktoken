@@ -8,8 +8,7 @@ use super::*;
 // conservative 32K placeholder.
 
 /// qwen4-max — current flagship (2026-11-16). One rate across the 1M window.
-/// Max output is 131,072 tokens without thinking (262,144 with). Cache writes
-/// ($1.875 for 5 minutes, $3 for 1 hour) are not modelled.
+/// Max output is 131,072 tokens without thinking (262,144 with).
 const QWEN_4_MAX: Model = model(
     "qwen4-max",
     Provider::Alibaba,
@@ -18,7 +17,8 @@ const QWEN_4_MAX: Model = model(
     Some(0.075),
     1_000_000,
     131_072,
-);
+)
+.with_cache_writes(&[CacheWrite::new(5, 1.875), CacheWrite::new(60, 3.00)]);
 
 /// qwen3.8-flash — high-volume tier (2026-08-26). One rate across the 1M window.
 const QWEN_3_8_FLASH: Model = model(

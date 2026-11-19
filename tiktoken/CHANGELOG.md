@@ -32,9 +32,9 @@ entries below.
 ## [5.0.0] - 2026-11-20
 
 The model table and the vocabularies are refreshed to 2026-11: three new
-encodings, 153 priced models (was 116), and corrected model-to-encoding
-mappings. The major version is for one source-level change in the pricing API
-(below).
+encodings, 153 priced models (was 116), corrected model-to-encoding mappings,
+and pricing for cache writes and premium tiers. The major version is for
+source-level changes in the pricing API (below).
 
 ### Breaking
 
@@ -42,6 +42,12 @@ mappings. The major version is for one source-level change in the pricing API
   `AnthropicPatch { max_edge_px, max_tokens }`. If you `match` on it without a
   `_` arm, add one. `AnthropicDivisor` still exists, so code naming it builds,
   but no table entry uses it any more.
+- **The pricing structs are `#[non_exhaustive]`**: `Pricing`, `TierRates`,
+  `HighTierPricing`, `AudioPricing`, `ExtendedPricing`, `Resolved`, and the
+  `Match` enum (`Model` already was). Code outside the crate can no longer
+  build them with struct literals, and a `match` on `Match` needs a `_` arm.
+  This is what lets the table gain billing dimensions in minor releases — this
+  release adds three fields to `ExtendedPricing`.
 - **Token counts change for the model ids listed under "Changed —
   model_to_encoding"**, because those ids now resolve to the vocabulary the
   model actually uses. Recompute stored counts for them.
@@ -120,6 +126,18 @@ the `pricing` module docs and next to each entry; in short:
   entries hold peak-hour rates; off-peak is half.
 - **New tiers**: `with_high_tier` for Claude Haiku 5.5 (prompts over 100K),
   MiniMax M3 (over 512K) and Qwen 3.5 Plus (over 256K).
+- **New billing dimensions** on `ExtendedPricing`, with estimators on `Model`:
+  - `cache_writes` — cache-write prices per lifetime (`CacheWrite`), filled
+    for GPT-6.x and GPT-5.6 Terra / Luna (30 minutes, 12 hours), Claude 4 and
+    later (5 minutes, 1 hour), Kimi K3 / K3.1 and Qwen 4 Max. Read one with
+    `Model::cache_write_per_1m(ttl_minutes)`.
+  - `ultrafast` — OpenAI's tier above Fast, for GPT-6 Astra, 6.1 Sol and 6.2
+    Astra / Sol (`estimate_ultrafast_cost`).
+  - `background` — OpenAI's 2- and 8-hour completion windows (30% and 40% off
+    standard) for GPT-6.2 Astra / Sol, 6.1 Terra and 6 Luna, stored as the
+    published discount (`BackgroundWindow`, `estimate_background_cost`).
+  - Anthropic Fast mode is stored in `priority`, alongside OpenAI's Fast tier:
+    Fable / Mythos 5.2, Opus 5.5, Opus 5, Opus 4.8.
 - **Anthropic image tokens** follow Anthropic's current formula: one token per
   28×28 patch after Anthropic's reference resize, 2,576 px / 4,784 tokens for
   Claude 4.7 and later and 1,568 px / 1,568 tokens before. The old
