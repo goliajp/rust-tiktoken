@@ -190,16 +190,21 @@ const dict: Dict = {
     ja: 'ブラウザまたは Node.js の場合 — このページと同じ WebAssembly パッケージを使います。',
   },
   'inst.docs': {
-    en: 'Both also carry cost estimation for 116 models across 11 providers. Full API reference:',
-    zh: '两者都内置 11 家厂商 116 个模型的成本估算。完整 API 文档：',
-    ja: 'いずれにも 11 プロバイダ・116 モデルのコスト見積もりを同梱しています。API リファレンス：',
+    en: 'Both also carry cost estimation for 153 models across 11 providers. Full API reference:',
+    zh: '两者都内置 11 家厂商 153 个模型的成本估算。完整 API 文档：',
+    ja: 'いずれにも 11 プロバイダ・153 モデルのコスト見積もりを同梱しています。API リファレンス：',
   },
 
   // colophon
   'foot.license': {
-    en: 'Released under MIT OR Apache-2.0',
-    zh: '以 MIT OR Apache-2.0 双许可发布',
-    ja: 'MIT OR Apache-2.0 のデュアルライセンスで公開',
+    en: 'Code released under MIT OR Apache-2.0',
+    zh: '代码以 MIT OR Apache-2.0 双许可发布',
+    ja: 'コードは MIT OR Apache-2.0 のデュアルライセンスで公開',
+  },
+  'foot.vocab': {
+    en: 'Vocabularies stay under their publishers’ licenses',
+    zh: '词表沿用各发布方的许可证',
+    ja: '語彙はそれぞれ公開元のライセンスに従います',
   },
 }
 
