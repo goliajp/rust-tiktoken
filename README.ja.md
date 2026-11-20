@@ -7,9 +7,11 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語** · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** — ブラウザで試す
 
-> **3.5.x からのアップグレード：** 3.6.0 と 3.8.0 は参照実装から乖離していたトークン id を修正しました。キャッシュ済みのトークン数や保存済み id 列は再計算してください。詳細は [CHANGELOG](tiktoken/CHANGELOG.md#upgrading-from-35x--token-id-changes)。
+> **3.5.x からのアップグレード：** 3.6.0、3.8.0 と 5.0.0 は参照実装から乖離していたトークン id を修正しました。キャッシュ済みのトークン数や保存済み id 列は再計算してください。詳細は [CHANGELOG](tiktoken/CHANGELOG.md#upgrading-from-35x--token-id-changes)。
 >
 > **4.0 へのアップグレード：** トークン id と API は変わりません。唯一の破壊的変更は、語彙が既定で有効な `vocab-*` 機能の下に移ったことです。`default-features = false` と書いている依存は、使う語彙を明示してください。
+>
+> **5.0 へのアップグレード：** 破壊的変更は 2 つです。料金関連の構造体と `VisionPricing` が `#[non_exhaustive]` になったため、`match` には `_` の分岐が必要で、構造体をリテラルで作ることもできなくなりました。また Llama 4、Qwen 3.5〜3.8、Mistral Large 4、`deepseek-flash` は実際に使う語彙に対応付けられるようになったため、トークン数が変わります。5.1 は語彙データをベンダーごとの `tiktoken-vocab-*` クレートに移しただけで、ほかは変わりません。
 
 最速の Rust BPE トークナイザーと、その WebAssembly バインディング。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）もサポート。手書きスキャナが ASCII と CJK の両方を扱い、キー長で階層化した語彙と断片の丸ごとメモ化により、**ネイティブで tiktoken-rs の 3.7〜20 倍**、**ブラウザ内で gpt-tokenizer の 1.1〜2.7 倍** 高速——日本語・中国語の文章でも優位です。
 
@@ -37,7 +39,7 @@ API・対応モデル表・ベンチマークは各 crate の README を参照�
 
 ```toml
 [dependencies]
-tiktoken = "4"
+tiktoken = "5"
 ```
 
 ```rust
