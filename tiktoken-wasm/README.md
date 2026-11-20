@@ -18,17 +18,17 @@ npm install @goliapkg/tiktoken-wasm
 ```bash
 # requires wasm-pack: cargo install wasm-pack
 cd tiktoken-wasm
-wasm-pack build --target web --release
+wasm-pack build --target web --release --scope goliapkg
 ```
 
 Output is in `pkg/` — a complete npm-ready package containing:
 - `tiktoken_wasm.js` — ES module with WASM loader
 - `tiktoken_wasm_bg.wasm` — compiled WASM binary (8.96 MB, 8.22 MB gzipped, all 20 vocabularies)
+- `tiktoken_wasm.d.ts` — TypeScript type definitions
 
 Building it yourself, `--no-default-features --features vocab-o200k_base` (or
 any other `vocab-*` / vendor group forwarded from `tiktoken`) drops that to
-1.92 MB / 1.20 MB gzipped.
-- `tiktoken_wasm.d.ts` — TypeScript type definitions
+1.96 MB / 1.22 MB gzipped.
 
 ## Usage
 
@@ -68,7 +68,7 @@ const countST: number = enc.countWithSpecialTokens('hi<|endoftext|>bye')
 console.log(enc.vocabSize)         // 100256
 console.log(enc.numSpecialTokens)  // 5
 
-// by model name — supports OpenAI, Meta, DeepSeek, Qwen, Mistral
+// by model name — OpenAI, Meta, DeepSeek, Qwen, Mistral, Moonshot, Zhipu, MiniMax
 const enc2 = encodingForModel('gpt-4o')
 const encName = modelToEncoding('llama-4-scout')  // "llama4"
 
@@ -126,7 +126,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-List all available encoding names (17 encodings).
+List all available encoding names (20 encodings).
 
 ### `getEncoding(name: string): Encoding`
 
