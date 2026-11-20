@@ -29,6 +29,21 @@ should be recomputed after upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [5.1.1] - 2026-11-21
+
+Documentation only. No code or data changes; the data crates stay at 1.0.0.
+
+### Fixed
+
+- **Install snippets asked for tiktoken 4** — the crates.io page of 5.1.0 told
+  readers to add `tiktoken = "4"` (the Japanese crate README said `"3.8"`),
+  which does not include the encodings and prices the same page describes.
+  Every README now says `"5"`.
+- The Japanese crate README gains the vocabulary-selection section the
+  English and Chinese ones had, and every README gains a 5.0 upgrade note.
+- The default download is stated as 8.0 MB (measured 8,006,851 bytes), not
+  7.9 MB.
+
 ## [5.1.0] - 2026-11-20
 
 The vocabulary data moves out of this crate into eight data crates, one per

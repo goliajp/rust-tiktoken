@@ -5,6 +5,17 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.1] - 2026-11-21
+
+Documentation only, in lockstep with `tiktoken` 5.1.1.
+
+### Fixed
+- The npm README said "17 encodings" (the Japanese one "11"); it is 20.
+- The size of an o200k-only build is re-measured: 1.96 MB, 1.22 MB gzipped
+  (was quoted as 1.92 / 1.20 MB from 4.0).
+- The model-name example and API docs list all eight tokenizing vendors, and
+  the build commands include `--scope goliapkg`.
+
 ## [5.1.0] - 2026-11-20
 
 Version lockstep with `tiktoken` 5.1.0, whose vocabulary data now comes from
