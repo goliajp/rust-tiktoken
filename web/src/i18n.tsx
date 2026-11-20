@@ -121,9 +121,9 @@ const dict: Dict = {
   // encodings
   'enc.heading': { en: 'Supported encodings', zh: '支持的编码', ja: '対応エンコーディング' },
   'enc.blurb': {
-    en: 'GPT-2 through GPT-5.6, plus the open-weights models most implementations leave out: Kimi, GLM, MiniMax, DeepSeek V4, Qwen, Llama and Mistral.',
-    zh: '从 GPT-2 到 GPT-5.6，并覆盖多数实现不做的开源权重模型：Kimi、GLM、MiniMax、DeepSeek V4、Qwen、Llama、Mistral。',
-    ja: 'GPT-2 から GPT-5.6 まで。加えて、多くの実装が対象外とするオープンウェイト系（Kimi・GLM・MiniMax・DeepSeek V4・Qwen・Llama・Mistral）にも対応します。',
+    en: 'GPT-2 through GPT-5.6, and GPT-6 by assumption, plus the open-weights models most implementations leave out: Kimi, GLM, MiniMax, DeepSeek V4, Qwen, Llama and Mistral.',
+    zh: '从 GPT-2 到 GPT-5.6（GPT-6 按推定支持），并覆盖多数实现不做的开源权重模型：Kimi、GLM、MiniMax、DeepSeek V4、Qwen、Llama、Mistral。',
+    ja: 'GPT-2 から GPT-5.6 まで（GPT-6 は推定で対応）。加えて、多くの実装が対象外とするオープンウェイト系（Kimi・GLM・MiniMax・DeepSeek V4・Qwen・Llama・Mistral）にも対応します。',
   },
   'enc.col.encoding': { en: 'Encoding', zh: '编码', ja: 'エンコーディング' },
   'enc.col.vendor': { en: 'Vendor', zh: '厂商', ja: 'ベンダー' },
