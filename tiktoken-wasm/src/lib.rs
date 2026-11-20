@@ -98,7 +98,7 @@ pub fn list_encodings() -> Vec<String> {
 ///
 /// Supported encodings:
 /// - `"cl100k_base"` — GPT-4, GPT-3.5-turbo
-/// - `"o200k_base"` — GPT-4o, GPT-4.1, GPT-5.x, GPT-6.x, o1, o3
+/// - `"o200k_base"` — GPT-4o, GPT-4.1, GPT-5.x, GPT-6.x (unconfirmed), o1, o3, o4-mini
 /// - `"o200k_harmony"` — gpt-oss (harmony chat format)
 /// - `"p50k_base"` — text-davinci-002/003
 /// - `"p50k_edit"` — text-davinci-edit
@@ -108,7 +108,7 @@ pub fn list_encodings() -> Vec<String> {
 /// - `"llama4"` — Meta Llama 4, Muse
 /// - `"deepseek_v3"` — DeepSeek V3/R1
 /// - `"qwen2"` — Qwen 2/2.5/3
-/// - `"qwen3_5"` — Qwen 3.5–3.8
+/// - `"qwen3_5"` — Qwen 3.5–3.8, Qwen 4 (unconfirmed)
 /// - `"mistral_v3"` — Mistral/Codestral/Pixtral
 /// - `"mistral_v15"` — Mistral Large 4
 /// - `"deepseek_v4"`, `"kimi_k2"`, `"kimi_k3"`, `"glm4"`, `"glm5"`, `"minimax_m2"`
@@ -131,7 +131,7 @@ pub fn get_encoding(name: &str) -> Result<Encoding, JsError> {
 
 /// Get an encoding for a model name (e.g. `"gpt-4o"`, `"o3-mini"`, `"llama-4"`, `"deepseek-r1"`).
 ///
-/// Supports models from OpenAI, Meta, DeepSeek, Qwen, and Mistral.
+/// Supports models from OpenAI, Meta, DeepSeek, Qwen, Mistral, Moonshot, Zhipu and MiniMax.
 /// Automatically resolves the model name to the correct encoding.
 /// Throws `Error` for unknown model names.
 #[wasm_bindgen(js_name = encodingForModel)]
@@ -153,7 +153,7 @@ pub fn model_to_encoding(model: &str) -> Option<String> {
 
 /// Estimate cost in USD for a given model, input token count, and output token count.
 ///
-/// Supports OpenAI, Anthropic Claude, Google Gemini, Meta Llama, DeepSeek, Qwen, and Mistral models.
+/// Supports 153 models across 11 providers: OpenAI, Anthropic, Google, Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, MiniMax and Voyage models.
 /// Throws `Error` for unknown model ids.
 #[wasm_bindgen(js_name = estimateCost)]
 pub fn estimate_cost(

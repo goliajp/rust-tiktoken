@@ -85,10 +85,10 @@ Benchmark source: [`benches/`](benches/), [`../bench-compare/`](../bench-compare
 
 ```toml
 [dependencies]
-tiktoken = "4"
+tiktoken = "5"
 
 # optional: multi-threaded encoding for large texts
-tiktoken = { version = "4", features = ["parallel"] }
+tiktoken = { version = "5", features = ["parallel"] }
 ```
 
 ### Picking vocabularies
@@ -110,7 +110,7 @@ with every vocabulary, 2,550,256 with `vocab-cl100k_base` alone.
 The data lives in one crate per vendor (`tiktoken-vocab-openai`, `-meta`,
 `-deepseek`, `-qwen`, `-mistral`, `-moonshot`, `-zhipu`, `-minimax`), pulled in
 by the features above, so cargo only downloads the vendors you enable: about
-1.5 MB for OpenAI alone instead of 7.9 MB for all of them.
+1.5 MB for OpenAI alone instead of 8.0 MB for all of them.
 
 An encoding whose vocabulary is not compiled in is simply absent —
 `list_encodings()` does not list it and `get_encoding()` returns `None`. The
@@ -278,7 +278,7 @@ See [`examples/react-app`](examples/react-app/) for a complete demo.
 ```bash
 # requires wasm-pack: cargo install wasm-pack
 cd tiktoken-wasm
-wasm-pack build --target web --release
+wasm-pack build --target web --release --scope goliapkg
 ```
 
 </details>

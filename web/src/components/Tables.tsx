@@ -3,7 +3,7 @@ import { useT } from '../i18n'
 // Static spec-sheet data. Single source of truth is the repository README /
 // encoding.rs — keep in lockstep when encodings change.
 const ENCODINGS: { name: string; vendor: string; models: string; vocab: string }[] = [
-  { name: 'o200k_base', vendor: 'OpenAI', models: 'GPT-4o, GPT-4.1, GPT-5–5.6 (Sol/Terra/Luna), GPT-6.x, o1, o3, o4-mini', vocab: '199,998' },
+  { name: 'o200k_base', vendor: 'OpenAI', models: 'GPT-4o, GPT-4.1, GPT-5–5.6 (Sol/Terra/Luna), GPT-6.x (unconfirmed), o1, o3, o4-mini', vocab: '199,998' },
   { name: 'o200k_harmony', vendor: 'OpenAI', models: 'gpt-oss (harmony chat format)', vocab: '199,998' },
   { name: 'cl100k_base', vendor: 'OpenAI', models: 'GPT-4, GPT-3.5 Turbo, text-embedding-*', vocab: '100,256' },
   { name: 'p50k_base / p50k_edit', vendor: 'OpenAI', models: 'text-davinci-002/003, code-davinci', vocab: '50,256' },
@@ -13,7 +13,7 @@ const ENCODINGS: { name: string; vendor: string; models: string; vocab: string }
   { name: 'deepseek_v3', vendor: 'DeepSeek', models: 'DeepSeek V3, R1', vocab: '128,000' },
   { name: 'deepseek_v4', vendor: 'DeepSeek', models: 'DeepSeek V4 Pro / Flash, V4.1 Flash', vocab: '128,000' },
   { name: 'qwen2', vendor: 'Alibaba', models: 'Qwen 2.5 / 3', vocab: '151,643' },
-  { name: 'qwen3_5', vendor: 'Alibaba', models: 'Qwen 3.5 – 3.8', vocab: '248,044' },
+  { name: 'qwen3_5', vendor: 'Alibaba', models: 'Qwen 3.5 – 3.8, Qwen 4 (unconfirmed)', vocab: '248,044' },
   { name: 'mistral_v3', vendor: 'Mistral', models: 'Mistral / Mixtral, Large 3, Small 4 (Tekken)', vocab: '131,072' },
   { name: 'mistral_v15', vendor: 'Mistral', models: 'Mistral Large 4 (Tekken v15)', vocab: '204,800' },
   { name: 'kimi_k2', vendor: 'Moonshot', models: 'Kimi K2 / K2.5 / K2.6', vocab: '163,584' },

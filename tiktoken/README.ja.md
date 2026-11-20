@@ -85,11 +85,31 @@ JavaScript トークナイザーと比較。
 
 ```toml
 [dependencies]
-tiktoken = "3.8"
+tiktoken = "5"
 
 # オプション: 大規模テキストのマルチスレッドエンコード
-tiktoken = { version = "3", features = ["parallel"] }
+tiktoken = { version = "5", features = ["parallel"] }
 ```
+
+### 語彙を選ぶ
+
+20 のエンコーディングは既定ですべて有効です（語彙データ 7.8 MB）。既定を外して使うものだけを指定すると、その分だけを含めます：
+
+```toml
+# GPT-4o / GPT-5 だけ — 語彙データは 7.8 MB ではなく 815 KB
+tiktoken = { version = "5", default-features = false, features = ["vocab-o200k_base"] }
+
+# ベンダー単位でまとめて
+tiktoken = { version = "5", default-features = false, features = ["vocab-openai"] }
+```
+
+`examples/count_tokens`（release、Linux x86_64）での実測：全語彙で 9,463,280 バイト、`vocab-cl100k_base` だけなら 2,550,256 バイト。
+
+語彙データはベンダーごとのクレート（`tiktoken-vocab-openai`、`-meta`、`-deepseek`、`-qwen`、`-mistral`、`-moonshot`、`-zhipu`、`-minimax`）にあり、上の feature から取り込まれます。cargo は有効にしたベンダーの分だけをダウンロードします：OpenAI だけなら約 1.5 MB、全部なら 8.0 MB。
+
+組み込まれていないエンコーディングは存在しない扱いになります：`list_encodings()` に出ず、`get_encoding()` は `None` を返します。`pricing` の表は語彙と無関係なので、料金見積もりだけなら `vocab-*` を一つも有効にしないビルドでも使えます。
+
+ベンダー単位の feature：`vocab-openai`、`vocab-meta`、`vocab-deepseek`、`vocab-qwen`、`vocab-mistral`、`vocab-moonshot`、`vocab-zhipu`、`vocab-minimax`、既定の `vocabs-all`。語彙ごとの feature は下の表にあります。
 
 ## クイックスタート
 
@@ -245,7 +265,7 @@ enc.free() // 使用後に WASM メモリを解放
 ```bash
 # wasm-pack が必要: cargo install wasm-pack
 cd tiktoken-wasm
-wasm-pack build --target web --release
+wasm-pack build --target web --release --scope goliapkg
 ```
 
 </details>
