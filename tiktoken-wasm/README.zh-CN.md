@@ -27,6 +27,8 @@ wasm-pack build --target web --release --scope goliapkg
 - `tiktoken_wasm_bg.wasm` —— 编译后的 WASM 二进制（8.96 MB，gzip 后 8.22 MB，含全部 20 份词表）
 - `tiktoken_wasm.d.ts` —— TypeScript 类型声明
 
+自己构建时加 `--no-default-features --features vocab-o200k_base`（或任意从 `tiktoken` 转发过来的 `vocab-*` / 厂商组 feature），体积降到 1.96 MB，gzip 后 1.22 MB。
+
 ## 使用
 
 ### ES Module（浏览器 / Vite / webpack）
@@ -65,7 +67,7 @@ const countST: number = enc.countWithSpecialTokens('hi<|endoftext|>bye')
 console.log(enc.vocabSize)         // 100256
 console.log(enc.numSpecialTokens)  // 5
 
-// 按模型名取编码 —— 支持 OpenAI、Meta、DeepSeek、Qwen、Mistral
+// 按模型名 —— OpenAI、Meta、DeepSeek、Qwen、Mistral、Moonshot、智谱、MiniMax
 const enc2 = encodingForModel('gpt-4o')
 const encName = modelToEncoding('llama-4-scout')  // "llama4"
 
@@ -123,7 +125,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-列出全部可用编码名（共 17 套）。
+列出全部可用编码名（共 20 套）。
 
 ### `getEncoding(name: string): Encoding`
 
@@ -221,7 +223,7 @@ id 的解析方式与 `estimateCost` 一致:按各家 API 实际写法传入(`cl
 | Moonshot | 6 | kimi-k3.1-pro(-highspeed), kimi-k3, kimi-k2.7-code, kimi-k2.6, kimi-k2.5 |
 | Voyage | 8 | voyage-4-large/4/4-lite/code-4, voyage-3-large, voyage-3.5(-lite), voyage-code-3（嵌入模型） |
 
-完整列表以代码为准：运行时调用 `allModels()`。
+完整列表以代码为准：运行时调用 `allModels()`，或者看 [docs.rs](https://docs.rs/tiktoken/latest/tiktoken/pricing/index.html)。Anthropic 和 Google 的模型只提供价格（没有公开的分词器可对照），其余八家同时支持分词。
 
 ## 注意事项
 

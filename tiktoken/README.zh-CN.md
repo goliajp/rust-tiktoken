@@ -84,10 +84,10 @@ JavaScript 分词器。
 
 ```toml
 [dependencies]
-tiktoken = "4"
+tiktoken = "5"
 
 # 可选：大文本多线程编码
-tiktoken = { version = "4", features = ["parallel"] }
+tiktoken = { version = "5", features = ["parallel"] }
 ```
 
 ### 选择词表
@@ -104,7 +104,7 @@ tiktoken = { version = "5", default-features = false, features = ["vocab-openai"
 
 实测 `examples/count_tokens`（release，Linux x86_64）：全词表 9,463,280 字节，仅 `vocab-cl100k_base` 2,550,256 字节。
 
-词表数据按厂商分在各自的 crate 里（`tiktoken-vocab-openai`、`-meta`、`-deepseek`、`-qwen`、`-mistral`、`-moonshot`、`-zhipu`、`-minimax`），由上面的特性引入，所以 cargo 只下载你启用的厂商：只用 OpenAI 约 1.5 MB，全部是 7.9 MB。
+词表数据按厂商分在各自的 crate 里（`tiktoken-vocab-openai`、`-meta`、`-deepseek`、`-qwen`、`-mistral`、`-moonshot`、`-zhipu`、`-minimax`），由上面的特性引入，所以 cargo 只下载你启用的厂商：只用 OpenAI 约 1.5 MB，全部是 8.0 MB。
 
 没编进来的编码就是不存在：`list_encodings()` 不列出它，`get_encoding()` 返回 `None`。`pricing` 表与词表无关，所以只做费用估算时可以一个 `vocab-*` 都不开。
 
@@ -263,7 +263,7 @@ enc.free() // 使用完毕释放 WASM 内存
 ```bash
 # 需要 wasm-pack: cargo install wasm-pack
 cd tiktoken-wasm
-wasm-pack build --target web --release
+wasm-pack build --target web --release --scope goliapkg
 ```
 
 </details>
