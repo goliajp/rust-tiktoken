@@ -7,9 +7,11 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md) · **[tiktoken.golia.jp](https://tiktoken.golia.jp)** —— 浏览器在线体验
 
-> **从 3.5.x 升级？** 3.6.0 与 3.8.0 修正了偏离参考实现的 token id —— 缓存的 token 计数与已存储的 id 序列需要重新计算。详见 [CHANGELOG](tiktoken/CHANGELOG.md#upgrading-from-35x--token-id-changes)。
+> **从 3.5.x 升级？** 3.6.0、3.8.0 与 5.0.0 修正了偏离参考实现的 token id —— 缓存的 token 计数与已存储的 id 序列需要重新计算。详见 [CHANGELOG](tiktoken/CHANGELOG.md#upgrading-from-35x--token-id-changes)。
 >
 > **升级到 4.0？** token id 与 API 都没变。唯一的破坏性变更：词表移到了默认开启的 `vocab-*` feature 之后，写了 `default-features = false` 的依赖需要点名自己用到的词表。
+>
+> **升级到 5.0？** 两处破坏性变更。一是价格相关的结构体和 `VisionPricing` 改成了 `#[non_exhaustive]`：`match` 要加 `_` 分支，也不能再用字面量构造这些结构体。二是 Llama 4、Qwen 3.5–3.8、Mistral Large 4 和 `deepseek-flash` 改为映射到这些模型实际使用的词表，它们的 token 数会变。5.1 把词表数据移到了按厂商划分的 `tiktoken-vocab-*` crate，其余不变。
 
 最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 3.7〜20 倍**，**浏览器内比 gpt-tokenizer 快 1.1〜2.7 倍** —— 中日文散文同样领先。
 
@@ -37,7 +39,7 @@
 
 ```toml
 [dependencies]
-tiktoken = "4"
+tiktoken = "5"
 ```
 
 ```rust
