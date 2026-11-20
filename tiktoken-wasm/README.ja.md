@@ -27,6 +27,8 @@ wasm-pack build --target web --release --scope goliapkg
 - `tiktoken_wasm_bg.wasm` — コンパイル済み WASM バイナリ（8.96 MB、gzip 後 8.22 MB、全 20 語彙を含む）
 - `tiktoken_wasm.d.ts` — TypeScript 型定義
 
+自分でビルドする場合、`--no-default-features --features vocab-o200k_base`（または `tiktoken` から転送される任意の `vocab-*` / ベンダー単位の feature）を付けると 1.96 MB、gzip 後 1.22 MB になります。
+
 ## 使い方
 
 ### ES Module（ブラウザ / Vite / webpack）
@@ -65,7 +67,7 @@ const countST: number = enc.countWithSpecialTokens('hi<|endoftext|>bye')
 console.log(enc.vocabSize)         // 100256
 console.log(enc.numSpecialTokens)  // 5
 
-// モデル名から取得 — OpenAI、Meta、DeepSeek、Qwen、Mistral をサポート
+// モデル名から取得 — OpenAI、Meta、DeepSeek、Qwen、Mistral、Moonshot、Zhipu、MiniMax をサポート
 const enc2 = encodingForModel('gpt-4o')
 const encName = modelToEncoding('llama-4-scout')  // "llama4"
 
@@ -123,7 +125,7 @@ module.exports = {
 
 ### `listEncodings(): string[]`
 
-利用可能なエンコーディング名一覧（11 種類）。
+利用可能なエンコーディング名一覧（20 種類）。
 
 ### `getEncoding(name: string): Encoding`
 
@@ -222,7 +224,7 @@ id は `estimateCost` と同じ方法で解決されるため、各社 API の�
 | Moonshot | 6 | kimi-k3.1-pro(-highspeed), kimi-k3, kimi-k2.7-code, kimi-k2.6, kimi-k2.5 |
 | Voyage | 8 | voyage-4-large/4/4-lite/code-4, voyage-3-large, voyage-3.5(-lite), voyage-code-3（埋め込みモデル） |
 
-完全な一覧はコードが正です：実行時に `allModels()` を呼んでください。
+完全な一覧はコードが正です：実行時に `allModels()` を呼ぶか、[docs.rs](https://docs.rs/tiktoken/latest/tiktoken/pricing/index.html) を参照してください。Anthropic と Google のモデルは料金のみ（照合できる公開トークナイザがないため）で、ほかの 8 社はトークン化も行えます。
 
 ## 注意事項
 
