@@ -13,12 +13,16 @@ mod fast;
 mod filter;
 mod key;
 mod long;
+mod long_derived;
 
 pub(crate) use fast::Entry;
 use fast::FastTable;
 use filter::KeyFilter;
 pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
+use long_derived::LongDerived;
+pub(crate) use long_derived::{LONG_KEY_MAX, LongIds};
+use std::sync::OnceLock;
 
 /// Rank sentinel for "absent" in the direct-indexed tables.
 pub(crate) const ABSENT: u32 = u32::MAX;
@@ -34,6 +38,8 @@ pub struct Vocab {
     // in front of the merge's substring probes into `fast`
     filter: KeyFilter,
     long: LongTable,
+    // merge results of longer pieces, created on first use
+    long_derived: OnceLock<LongDerived>,
     // indexed by rank: (offset, len) into the arena, for decode
     decoder: Box<[(u32, u16)]>,
 }
@@ -93,6 +99,7 @@ impl Vocab {
             fast: FastTable::build(&fast_keys),
             filter,
             long,
+            long_derived: OnceLock::new(),
             arena,
             single,
             pair,
@@ -148,6 +155,25 @@ impl Vocab {
         self.fast.entry(lo, hi)
     }
 
+    /// Entry of a piece's packed key in its home line. The key must come
+    /// from utf-8 text.
+    #[inline(always)]
+    pub(crate) fn home_entry(&self, lo: u64, hi: u64) -> Option<Entry> {
+        self.fast.home_entry(lo, hi)
+    }
+
+    /// Write an entry's ids at `out`, and up to two arbitrary words after
+    /// them.
+    ///
+    /// # Safety
+    ///
+    /// `out` has room for `max(3, e.len())` ids.
+    #[inline(always)]
+    pub(crate) unsafe fn write_entry(&self, e: Entry, out: *mut u32) {
+        // SAFETY: passed on from the caller
+        unsafe { self.fast.write_ids(e, out) }
+    }
+
     /// Append an entry's ids to `out`.
     #[inline]
     pub(crate) fn extend_entry(&self, e: Entry, out: &mut Vec<u32>) {
@@ -161,6 +187,20 @@ impl Vocab {
         self.fast.insert_derived(lo, hi, ids)
     }
 
+    /// The shared merge result of a piece longer than [`FAST_KEY_MAX`].
+    #[inline]
+    pub(crate) fn long_ids(&self, piece: &[u8]) -> Option<LongIds<'_>> {
+        self.long_derived.get()?.get(piece)
+    }
+
+    /// Share the ids of a piece of 16 to [`LONG_KEY_MAX`] bytes with every
+    /// thread; false when the table refuses it.
+    pub(crate) fn insert_long(&self, piece: &[u8], ids: &[u32]) -> bool {
+        self.long_derived
+            .get_or_init(LongDerived::new)
+            .insert(piece, ids)
+    }
+
     /// Whether the shared table still takes derived entries.
     #[inline]
     pub(crate) fn accepts_derived(&self) -> bool {
@@ -170,6 +210,9 @@ impl Vocab {
     /// Drop all derived entries. Caller guarantees no concurrent use.
     pub(crate) fn clear_derived(&self) {
         self.fast.clear_derived();
+        if let Some(t) = self.long_derived.get() {
+            t.clear();
+        }
     }
 
     /// Rank of a 1-byte key, or [`ABSENT`].

@@ -5,13 +5,15 @@
 //!   result published as a derived entry, so every later occurrence, on any
 //!   thread, is one probe. Once the shared table is full these pieces go
 //!   through the thread-local cache instead.
-//! - longer: a long-token lookup, then the thread-local cache (up to its key
-//!   limit), then a plain merge.
+//! - longer, up to 255 bytes: the shared table of long merge results; on a
+//!   miss, a long-token lookup or a merge, published there for every thread.
+//!   Once that table refuses entries they go through the thread-local cache.
+//! - longer still: a plain merge.
 
 use crate::CoreBpe;
 use crate::merge::{self, SMALL_MAX};
 use crate::piece_cache;
-use crate::vocab::{ABSENT, Entry, Vocab};
+use crate::vocab::{ABSENT, Entry, LONG_KEY_MAX, LongIds, Vocab};
 
 /// Packed key of a piece of up to 15 bytes, or `None` for longer ones.
 pub(crate) type Key = Option<(u64, u64)>;
@@ -35,6 +37,7 @@ trait Sink {
     type Out;
     fn entry(self, vocab: &Vocab, e: Entry) -> Self::Out;
     fn ids(self, ids: &[u32]) -> Self::Out;
+    fn long(self, ids: LongIds<'_>) -> Self::Out;
 }
 
 impl Sink for &mut Vec<u32> {
@@ -46,6 +49,10 @@ impl Sink for &mut Vec<u32> {
     #[inline(always)]
     fn ids(self, ids: &[u32]) {
         self.extend_from_slice(ids);
+    }
+    #[inline(always)]
+    fn long(self, ids: LongIds<'_>) {
+        ids.extend_into(self);
     }
 }
 
@@ -59,6 +66,10 @@ impl Sink for Count {
     }
     #[inline(always)]
     fn ids(self, ids: &[u32]) -> usize {
+        ids.len()
+    }
+    #[inline(always)]
+    fn long(self, ids: LongIds<'_>) -> usize {
         ids.len()
     }
 }
@@ -83,8 +94,29 @@ fn resolve<S: Sink>(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, sink: 
             };
             return piece_cache::with_ids(cache_id, piece, fill, |ids| sink.ids(ids));
         }
-    } else if let Some(id) = vocab.get(piece) {
-        return sink.ids(&[id]);
+    } else {
+        if let Some(ids) = vocab.long_ids(piece) {
+            return sink.long(ids);
+        }
+        if piece.len() <= LONG_KEY_MAX {
+            let mut buf = [0u32; LONG_KEY_MAX];
+            let n = match vocab.get(piece) {
+                Some(id) => {
+                    buf[0] = id;
+                    1
+                }
+                None => merge_checked(piece, vocab, &mut buf),
+            };
+            let ids = &buf[..n];
+            if vocab.insert_long(piece, ids) {
+                return sink.ids(ids);
+            }
+            let fill = |b: &mut [u32; piece_cache::KEY_MAX]| {
+                b[..n].copy_from_slice(ids);
+                n
+            };
+            return piece_cache::with_ids(cache_id, piece, fill, |ids| sink.ids(ids));
+        }
     }
     if piece.len() <= piece_cache::KEY_MAX {
         let fill = |buf: &mut [u32; piece_cache::KEY_MAX]| merge_checked(piece, vocab, buf);

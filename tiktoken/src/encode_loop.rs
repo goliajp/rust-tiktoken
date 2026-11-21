@@ -20,7 +20,7 @@ use crate::encode_miss;
 use crate::pretokenize::window::{CaseRules, Cl100kRules};
 use crate::pretokenize::windowed::{self, PieceSink};
 use crate::pretokenize::{PreTokenizer, ScalarPreTokenizer, WindowKind};
-use crate::vocab::{FAST_KEY_MAX, KEY_READ, Vocab, key_in, key_of, key_padded};
+use crate::vocab::{Entry, FAST_KEY_MAX, KEY_READ, LongIds, Vocab, key_in, key_of, key_padded};
 
 // a real key never has a zero high word
 const NO_KEY: (u64, u64) = (0, 0);
@@ -219,9 +219,61 @@ impl PieceSink for EncodeSink<'_, '_> {
             Err(key) => self.miss(&buf[start..end], key),
         }
     }
+
+    #[inline(always)]
+    fn dense_piece(&mut self, buf: &[u8], start: usize, end: usize) {
+        match probe_entry(self.engine.vocab, buf, start, end) {
+            Ok(e) => {
+                debug_assert!(self.len + 15 <= self.cap);
+                // SAFETY: `window` came right before and left room for 64
+                // ids, and a piece of up to 15 bytes has at most 15
+                unsafe { self.engine.vocab.write_entry(e, self.ptr.add(self.len)) };
+                self.len += e.len();
+            }
+            Err(NO_KEY) => {
+                let piece = &buf[start..end];
+                match self.engine.vocab.long_ids(piece) {
+                    Some(ids) => self.long(ids),
+                    None => self.miss(piece, NO_KEY),
+                }
+            }
+            Err(key) => self.miss(&buf[start..end], key),
+        }
+    }
+}
+
+/// The home-line entry of a piece, derived entries included; otherwise the
+/// key for the miss path.
+#[inline(always)]
+fn probe_entry(vocab: &Vocab, buf: &[u8], start: usize, end: usize) -> Result<Entry, (u64, u64)> {
+    let len = end - start;
+    if len > FAST_KEY_MAX {
+        return Err(NO_KEY);
+    }
+    let (lo, hi) = key_padded(buf, start, len);
+    vocab.home_entry(lo, hi).ok_or((lo, hi))
 }
 
 impl EncodeSink<'_, '_> {
+    #[inline(always)]
+    fn long(&mut self, ids: LongIds<'_>) {
+        let n = ids.len();
+        if self.cap - self.len < n {
+            self.sync();
+            self.out.reserve(n);
+            self.ptr = self.out.as_mut_ptr();
+            self.cap = self.out.capacity();
+        }
+        for (k, id) in ids.iter().enumerate() {
+            // SAFETY: room for `n` ids was made above
+            unsafe { self.ptr.add(self.len + k).write(id) };
+        }
+        self.len += n;
+        if self.cap - self.len < 64 {
+            self.grow();
+        }
+    }
+
     #[inline(never)]
     fn miss(&mut self, piece: &[u8], key: (u64, u64)) {
         self.sync();
@@ -248,6 +300,21 @@ impl PieceSink for CountSink<'_> {
     fn piece(&mut self, buf: &[u8], start: usize, end: usize) {
         match probe(self.engine.vocab, buf, start, end) {
             Ok(_) => self.count += 1,
+            Err(key) => self.count += self.engine.count_piece(&buf[start..end], key),
+        }
+    }
+
+    #[inline(always)]
+    fn dense_piece(&mut self, buf: &[u8], start: usize, end: usize) {
+        match probe_entry(self.engine.vocab, buf, start, end) {
+            Ok(e) => self.count += e.len(),
+            Err(NO_KEY) => {
+                let piece = &buf[start..end];
+                self.count += match self.engine.vocab.long_ids(piece) {
+                    Some(ids) => ids.len(),
+                    None => self.engine.count_piece(piece, NO_KEY),
+                }
+            }
             Err(key) => self.count += self.engine.count_piece(&buf[start..end], key),
         }
     }

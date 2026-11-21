@@ -43,7 +43,7 @@ pub(crate) const WS: u8 = 0x20;
 
 /// Category byte of a code point. `cp` must be a Unicode scalar value.
 #[inline(always)]
-pub(crate) fn category(cp: u32) -> u8 {
+pub(crate) const fn category(cp: u32) -> u8 {
     let block = tables::STAGE1[(cp >> tables::SHIFT) as usize] as usize;
     tables::STAGE2[(block << tables::SHIFT) | (cp as usize & tables::LOW_MASK)]
 }
@@ -208,3 +208,27 @@ pub(crate) fn class_at(map: &FamilyMap, b: &[u8], i: usize) -> (u8, usize) {
     let (cp, len) = decode(b, i);
     (map[category(cp) as usize], len)
 }
+
+/// One bit per code point below 0x10000, set when its class bits under a
+/// family map give `want` under `mask`.
+pub(crate) type BmpBits = [u64; 1024];
+
+const fn bmp_bits(map: &FamilyMap, mask: u8, want: u8) -> BmpBits {
+    let mut t = [0u64; 1024];
+    let mut cp = 0;
+    while cp < 0x10000 {
+        if map[category(cp as u32) as usize] & mask == want {
+            t[cp / 64] |= 1 << (cp % 64);
+        }
+        cp += 1;
+    }
+    t
+}
+
+/// Letters under [`MAP_BASE`].
+pub(crate) static LETTERS: BmpBits = bmp_bits(&MAP_BASE, C_LETTER, C_LETTER);
+/// Letters under [`MAP_QWEN35`].
+pub(crate) static LETTERS_QWEN35: BmpBits = bmp_bits(&MAP_QWEN35, C_LETTER, C_LETTER);
+/// Chars in both case classes that cannot lead a word, under [`MAP_BASE`].
+pub(crate) static BOTH_CASES: BmpBits =
+    bmp_bits(&MAP_BASE, C_UPPER | C_LOWER | C_PREFIX, C_UPPER | C_LOWER);
