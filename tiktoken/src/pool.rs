@@ -315,7 +315,7 @@ impl Pool {
                 return e;
             }
             k = k.wrapping_add(1);
-            if k % 64 == 0 && t0.elapsed() >= spin {
+            if k.is_multiple_of(64) && t0.elapsed() >= spin {
                 break;
             }
             std::hint::spin_loop();
