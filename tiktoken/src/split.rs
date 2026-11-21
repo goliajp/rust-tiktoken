@@ -5,8 +5,8 @@
 //! own gives the same pieces as the whole scan does on either side. Every
 //! split pattern decides a piece from the text after its start, except two
 //! lookarounds: `\s+(?!\S)` at a piece end and mistral_v15's digit rule,
-//! which looks at the previous char. The three rules below hold for all
-//! twenty patterns:
+//! which looks at the previous char. The three rules below hold for the
+//! split pattern of every encoding:
 //!
 //! 1. `text[b-1]` is an ASCII letter and `text[b]` a space or `\n`. A piece
 //!    holding a letter comes from a letter or contraction rule, and none of
