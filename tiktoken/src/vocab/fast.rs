@@ -246,7 +246,13 @@ impl FastTable {
     /// token sitting there.
     #[inline(always)]
     pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
-        self.home_probe().home(lo, hi)
+        // the plain multiplier: a per-call probe would spill its opaque one
+        HomeProbe {
+            lines: &self.lines,
+            shift: self.shift,
+            mul: HASH_MUL,
+        }
+        .home(lo, hi)
     }
 
     /// The key's id if it is a vocabulary token, wherever it sits on its
