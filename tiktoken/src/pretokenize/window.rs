@@ -64,6 +64,32 @@ impl Masks {
         (m, r + wl == limit)
     }
 
+    /// [`load`](Self::load) for a window that ends inside the classified
+    /// bytes (`r + 64 <= limit`), so it holds `64 - r % 8` bytes.
+    #[inline(always)]
+    pub(crate) fn load_body<const CASE: bool, const W: usize>(maps: &Bitmaps<W>, r: usize) -> Self {
+        let base = maps.window_base(r);
+        let sh = r & 7;
+        // SAFETY: the 8 bytes at `base + map * 8 * W` are the ones
+        // `maps.window(map, r)` reads
+        let get = |map: usize| {
+            u64::from_le(unsafe { base.add(map * 8 * W).cast::<u64>().read_unaligned() }) >> sh
+        };
+        Self {
+            l: get(M_L),
+            lw: if CASE { get(M_LW) } else { 0 },
+            n: get(M_N),
+            w: get(M_W),
+            nl: get(M_NL),
+            sp: get(M_SP),
+            ap: get(M_AP),
+            sl: if CASE { get(M_SL) } else { 0 },
+            hard: get(M_HARD),
+            cont: get(M_CONT),
+            v: u64::MAX >> sh,
+        }
+    }
+
     /// Valid bytes: inside the window and below the first hard byte.
     #[inline(always)]
     pub(super) fn valid(&self) -> (u64, bool) {

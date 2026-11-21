@@ -184,6 +184,30 @@ fn hand_picked_texts_at_every_offset() {
     }
 }
 
+/// Chunks are decided by several chains that start at a letter followed by
+/// whitespace near the middle of the chunk; put that start, and tricky text
+/// right after it, at every offset around the place the search begins.
+#[test]
+fn chain_starts_at_every_offset() {
+    // no letter in the filler, so the first candidate is the one placed
+    let head = "1.2; (3) 45 ";
+    let texts = [
+        " don't  \n\n  x \t\ty  \r\n x' 'll",
+        "\n\n\r\n  HTMLParser parserHTML 1234567 é",
+        "\r“quoted” ‘it’s’ 世界 \u{3000}\u{3000}x ٣٤ a\u{301}b",
+        "   \t  \n",
+    ];
+    for t in texts {
+        for at in 1920..2120 {
+            let mut text: String = head.chars().cycle().take(at - 1).collect();
+            text.push('a');
+            text.push_str(t);
+            text.push_str(&filler(at, 3000));
+            check_all(&text);
+        }
+    }
+}
+
 /// Long random texts, so pieces straddle windows and 4096-byte chunks.
 #[test]
 fn long_random_texts() {

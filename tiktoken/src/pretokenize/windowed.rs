@@ -1,11 +1,13 @@
 //! Split a text into pieces with the window rules.
 //!
 //! The body of the text is classified [`CHUNK`] bytes at a time, from the
-//! current piece start, and decided one window at a time while a whole window
-//! fits in the chunk; the next chunk opens at the first undecided start. The
+//! current piece start, and its windows decided (see `chains.rs`) while a
+//! whole window fits in the chunk; the next chunk opens at the first undecided
+//! start. The
 //! last bytes go through a zero-padded stack copy, so that every piece start
 //! handed to the sink has [`KEY_READ`] readable bytes after it.
 
+use super::chains::decide_chunk;
 use super::classify::{BODY_WORDS, Bitmaps, CHUNK, classify};
 use super::window::{Masks, WindowRules};
 use super::{PreTokenizer, ScalarPreTokenizer};
@@ -52,12 +54,12 @@ pub(crate) fn split<R: WindowRules, S: PieceSink>(
             let cont = classify_for::<R, BODY_WORDS>(bytes, pos, blocks, &mut maps);
             let stop = limit - 63;
             pos += if cont {
-                windows::<R, true, S, BODY_WORDS>(
-                    pre, &maps, text, bytes, pos, limit, stop, false, sink,
+                decide_chunk::<R, true, S, BODY_WORDS>(
+                    pre, &maps, text, bytes, pos, limit, stop, sink,
                 )
             } else {
-                windows::<R, false, S, BODY_WORDS>(
-                    pre, &maps, text, bytes, pos, limit, stop, false, sink,
+                decide_chunk::<R, false, S, BODY_WORDS>(
+                    pre, &maps, text, bytes, pos, limit, stop, sink,
                 )
             };
         }
@@ -133,14 +135,16 @@ fn windows<R: WindowRules, const CONT: bool, S: PieceSink, const W: usize>(
 
 /// End of the piece at `pos` by the scalar scanner.
 #[inline(never)]
-fn scalar_end(pre: &ScalarPreTokenizer, text: &str, pos: usize) -> usize {
+pub(super) fn scalar_end(pre: &ScalarPreTokenizer, text: &str, pos: usize) -> usize {
     pre.next_match(text, pos).map_or(text.len(), |(_, end)| end)
 }
 
 /// Pieces of `text` from `pos` by the scalar scanner, until one ends at or
 /// past `until`. `buf` holds the same bytes as `text`, with at least
 /// [`KEY_READ`] readable bytes from `until`.
-#[inline(never)]
+// inlined: a call taking `&mut S` would make the sink escape, and keep its
+// fields in memory in every piece loop of the caller
+#[inline(always)]
 fn scalar_span<S: PieceSink>(
     pre: &ScalarPreTokenizer,
     text: &str,
