@@ -1,4 +1,4 @@
-//! The per-piece encode and count loop.
+//! The per-piece encode and count loops.
 //!
 //! Each pre-token piece of 1..=15 bytes is packed into a two-word key and
 //! checked against its home line in the vocabulary's fast table; that answers
@@ -6,9 +6,10 @@
 //! further down their probe chain, longer pieces, pieces that need a BPE
 //! merge) leaves the loop through an out-of-line call.
 //!
-//! Encode and count share one non-generic loop: with a single caller, the
-//! scanner's `next_match` is inlined into it, which a second copy of the loop
-//! prevented.
+//! The two loops are written out separately on purpose. The scanner's
+//! `next_match` is inlined into each of them in this shape; folding them into
+//! one generic or `Option`-driven loop changed that and cost up to 20% on
+//! some inputs. `count` stays `#[inline]` so it can inline into its caller.
 
 use crate::merge;
 use crate::piece_cache;
@@ -26,24 +27,11 @@ pub(crate) struct Engine<'a> {
 
 impl Engine<'_> {
     pub(crate) fn encode_into(&self, text: &str, out: &mut Vec<u32>) {
-        self.run(text, Some(out));
-    }
-
-    pub(crate) fn count(&self, text: &str) -> usize {
-        self.run(text, None)
-    }
-
-    /// Appends the tokens to `out` when given; otherwise returns their count.
-    #[inline(never)]
-    fn run(&self, text: &str, mut out: Option<&mut Vec<u32>>) -> usize {
         let bytes = text.as_bytes();
-        // the shift-based tail load needs 16 readable bytes
         let wide = bytes.len() >= KEY_READ;
-        let mut count = 0;
         let mut pos = 0;
         while let Some((start, end)) = self.pre.next_match(text, pos) {
             pos = end;
-            // 1..=FAST_KEY_MAX in one compare; an empty match falls through
             let mut key = NO_KEY;
             if (end - start).wrapping_sub(1) < FAST_KEY_MAX {
                 key = if wide {
@@ -52,18 +40,35 @@ impl Engine<'_> {
                     key_of(&bytes[start..end])
                 };
                 if let Some(id) = self.vocab.get_home(key.0, key.1) {
-                    match out {
-                        Some(ref mut v) => v.push(id),
-                        None => count += 1,
-                    }
+                    out.push(id);
                     continue;
                 }
             }
-            let piece = &bytes[start..end];
-            match out {
-                Some(ref mut v) => self.encode_piece(piece, key, v),
-                None => count += self.count_piece(piece, key),
+            self.encode_piece(&bytes[start..end], key, out);
+        }
+    }
+
+    #[inline]
+    pub(crate) fn count(&self, text: &str) -> usize {
+        let bytes = text.as_bytes();
+        let wide = bytes.len() >= KEY_READ;
+        let mut count = 0;
+        let mut pos = 0;
+        while let Some((start, end)) = self.pre.next_match(text, pos) {
+            pos = end;
+            let mut key = NO_KEY;
+            if (end - start).wrapping_sub(1) < FAST_KEY_MAX {
+                key = if wide {
+                    key_in(bytes, start, end)
+                } else {
+                    key_of(&bytes[start..end])
+                };
+                if self.vocab.get_home(key.0, key.1).is_some() {
+                    count += 1;
+                    continue;
+                }
             }
+            count += self.count_piece(&bytes[start..end], key);
         }
         count
     }
