@@ -251,7 +251,9 @@ impl EncodeSink<'_, '_> {
         self.sync();
         self.engine.encode_piece(piece, key, self.out);
         self.len = self.out.len();
-        self.out.reserve(64);
+        if self.out.capacity() - self.len < 64 {
+            self.out.reserve(64);
+        }
         self.ptr = self.out.as_mut_ptr();
         self.cap = self.out.capacity();
     }
