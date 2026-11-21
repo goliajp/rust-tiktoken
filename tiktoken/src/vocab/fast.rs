@@ -11,7 +11,8 @@
 //! Derived entries: a piece that is not a token but merges into 2..=15 ids
 //! is published into a free slot by whichever thread merges it first, up to
 //! `derived_cap` entries. Their stored `hi` carries [`MULTI`], so vocabulary
-//! lookups (exact `hi` compare) never see them. Up to three ids sit in the
+//! lookups (exact `hi` compare) never see them; the encode loop looks for
+//! them in the home line only after its token probe missed. Up to three ids sit in the
 //! slot; more go to a shared append-only arena.
 //!
 //! Publication: a writer claims an empty slot by swapping `hi` from 0 to
@@ -63,6 +64,14 @@ impl FastSlot {
     fn id(&self) -> u32 {
         self.w0.load(Ordering::Relaxed) as u32
     }
+
+    #[inline(always)]
+    fn entry(&self) -> Entry {
+        Entry {
+            w0: self.w0.load(Ordering::Relaxed),
+            w1: self.w1.load(Ordering::Relaxed),
+        }
+    }
 }
 
 /// The ids of a table entry, as read from its slot.
@@ -76,6 +85,57 @@ impl Entry {
     #[inline(always)]
     pub(crate) fn len(&self) -> usize {
         ((self.w0 >> COUNT_SHIFT) & 0xFF) as usize
+    }
+
+    /// The first id; with [`rest`](Self::rest), the ids when there are at
+    /// most [`INLINE`] of them.
+    #[inline(always)]
+    pub(crate) fn first(&self) -> u32 {
+        self.w0 as u32
+    }
+
+    /// The second and third ids, little-endian, zero where absent.
+    #[inline(always)]
+    pub(crate) fn rest(&self) -> u64 {
+        self.w1
+    }
+
+    /// Whether the ids are in the entry itself rather than the arena.
+    #[inline(always)]
+    pub(crate) fn is_inline(&self) -> bool {
+        self.len() <= INLINE
+    }
+}
+
+/// The home-line lookup of a [`FastTable`] by value, for loops that call out
+/// of line often: its fields stay in registers across the calls, where a
+/// lookup through `&FastTable` reloads them.
+#[derive(Clone, Copy)]
+pub(crate) struct HomeProbe<'a> {
+    lines: &'a [FastLine],
+    shift: u32,
+}
+
+impl<'a> HomeProbe<'a> {
+    #[inline(always)]
+    fn line(self, lo: u64, hi: u64) -> &'a FastLine {
+        let idx = (hash(lo, hi) >> self.shift) as usize;
+        debug_assert!(idx < self.lines.len());
+        // SAFETY: the hash's top `64 - shift` bits index the power-of-two table
+        unsafe { self.lines.get_unchecked(idx) }
+    }
+
+    /// Same as [`FastTable::home`].
+    #[inline(always)]
+    pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
+        let [a, b] = &self.line(lo, hi).0;
+        if a.matches(lo, hi) {
+            Some(a.id())
+        } else if b.matches(lo, hi) {
+            Some(b.id())
+        } else {
+            None
+        }
     }
 }
 
@@ -147,15 +207,30 @@ impl FastTable {
         (hash(lo, hi) >> self.shift) as usize
     }
 
+    #[inline(always)]
+    pub(crate) fn home_probe(&self) -> HomeProbe<'_> {
+        HomeProbe {
+            lines: &self.lines,
+            shift: self.shift,
+        }
+    }
+
     /// The id stored in the key's home line, if the key is a vocabulary
     /// token sitting there.
     #[inline(always)]
     pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
-        let [a, b] = &self.lines[self.home_index(lo, hi)].0;
-        if a.matches(lo, hi) {
-            Some(a.id())
-        } else if b.matches(lo, hi) {
-            Some(b.id())
+        self.home_probe().home(lo, hi)
+    }
+
+    /// The derived entry for the key in its home line, if one sits there.
+    /// The key must come from utf-8 text; the all-zero key finds nothing.
+    #[inline(always)]
+    pub(crate) fn home_derived(&self, lo: u64, hi: u64) -> Option<Entry> {
+        let [a, b] = &self.home_probe().line(lo, hi).0;
+        if a.matches(lo, hi | MULTI) {
+            Some(a.entry())
+        } else if b.matches(lo, hi | MULTI) {
+            Some(b.entry())
         } else {
             None
         }

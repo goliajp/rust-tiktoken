@@ -14,8 +14,8 @@ mod filter;
 mod key;
 mod long;
 
-pub(crate) use fast::Entry;
 use fast::FastTable;
+pub(crate) use fast::{Entry, HomeProbe};
 use filter::KeyFilter;
 pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
@@ -116,11 +116,24 @@ impl Vocab {
         (rank != ABSENT).then_some(rank)
     }
 
+    /// [`get_home`](Self::get_home) as a value to keep in registers.
+    #[inline(always)]
+    pub(crate) fn home_probe(&self) -> HomeProbe<'_> {
+        self.fast.home_probe()
+    }
+
     /// Rank of the packed key, looking only at its home slot. `None` does not
     /// mean absent: the caller falls back to [`get`](Self::get).
     #[inline(always)]
     pub(crate) fn get_home(&self, lo: u64, hi: u64) -> Option<u32> {
         self.fast.home(lo, hi)
+    }
+
+    /// Derived entry of a piece's packed key in its home line; `None` does
+    /// not mean absent. The key must come from utf-8 text.
+    #[inline(always)]
+    pub(crate) fn home_derived(&self, lo: u64, hi: u64) -> Option<Entry> {
+        self.fast.home_derived(lo, hi)
     }
 
     /// Rank of `buf[at..at + len]` or [`ABSENT`], where `buf` stays readable
