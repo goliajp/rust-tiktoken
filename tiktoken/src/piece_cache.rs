@@ -1,7 +1,5 @@
-//! Thread-local memo of whole pieces → token ids, for what the shared table
-//! does not hold: pieces longer than its 15-byte keys, and any piece once the
-//! shared table stops accepting entries. CJK prose clauses are the main
-//! users; they repeat from sentence to sentence.
+//! Thread-local memo of whole pieces → token ids, for what the shared tables
+//! no longer take once they are full.
 //!
 //! Layout: a direct-mapped array of 16-byte slots (hash, arena offset) and an
 //! arena of records `[len | n << 16] [owner lo] [owner hi] [key bytes,

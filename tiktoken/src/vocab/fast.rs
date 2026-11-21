@@ -28,6 +28,9 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use super::key::hash;
 
+#[path = "fast_read.rs"]
+mod read;
+
 const OPEN_LO: u64 = u64::MAX;
 // a real hi has a length of at most 15 in its top byte, plus at most MULTI
 const BUSY_HI: u64 = u64::MAX;
@@ -209,24 +212,6 @@ impl FastTable {
                 }
             }
             idx = (idx + 1) & mask;
-        }
-    }
-
-    /// Append the entry's ids to `out`.
-    #[inline]
-    pub(crate) fn extend(&self, e: Entry, out: &mut Vec<u32>) {
-        let n = e.len();
-        if n <= INLINE {
-            let ids = [e.w0 as u32, e.w1 as u32, (e.w1 >> 32) as u32];
-            out.extend_from_slice(&ids[..n]);
-        } else {
-            let off = e.w0 as u32 as usize;
-            // the slot's Acquire load of lo made these writes visible
-            out.extend(
-                self.arena[off..off + n]
-                    .iter()
-                    .map(|w| w.load(Ordering::Relaxed)),
-            );
         }
     }
 

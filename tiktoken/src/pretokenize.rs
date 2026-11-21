@@ -25,6 +25,7 @@ mod classify_wasm;
 #[cfg(target_arch = "x86_64")]
 mod classify_x86;
 mod deepseek;
+mod dense;
 mod digits;
 mod o200k;
 mod scalar;
@@ -40,6 +41,8 @@ pub(crate) mod windowed;
 mod reference;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_dense;
 #[cfg(test)]
 mod tests_exhaustive;
 #[cfg(test)]
