@@ -157,9 +157,7 @@ pub(super) fn scalar_end(pre: &ScalarPreTokenizer, text: &str, pos: usize) -> us
 /// Pieces of `text` from `pos` by the scalar scanner, until one ends at or
 /// past `until`. `buf` holds the same bytes as `text`, with at least
 /// [`KEY_READ`] readable bytes from `until`.
-// inlined: a call taking `&mut S` would make the sink escape, and keep its
-// fields in memory in every piece loop of the caller
-#[inline(always)]
+#[inline(never)]
 fn scalar_span<S: PieceSink>(
     pre: &ScalarPreTokenizer,
     text: &str,
