@@ -1,11 +1,13 @@
 //! Split a text into pieces with the window rules.
 //!
 //! The body of the text is classified [`CHUNK`] bytes at a time, from the
-//! current piece start, and decided one window at a time while a whole window
-//! fits in the chunk; the next chunk opens at the first undecided start. The
+//! current piece start, and its windows decided (see `chains.rs`) while a
+//! whole window fits in the chunk; the next chunk opens at the first undecided
+//! start. The
 //! last bytes go through a zero-padded stack copy, so that every piece start
 //! handed to the sink has [`KEY_READ`] readable bytes after it.
 
+use super::chains::decide_chunk;
 use super::classify::{BODY_WORDS, Bitmaps, CHUNK, classify};
 use super::window::{Masks, WindowRules};
 use super::{PreTokenizer, ScalarPreTokenizer, dense};
@@ -23,6 +25,21 @@ pub(crate) trait PieceSink {
     #[inline(always)]
     fn dense_piece(&mut self, buf: &[u8], start: usize, end: usize) {
         self.piece(buf, start, end);
+    }
+
+    /// The pieces `buf[start + offs[i]..start + offs[i + 1]]` in order, with
+    /// [`KEY_READ`] readable bytes from each start.
+    #[inline(always)]
+    fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
+        let mut i = 0;
+        while i + 1 < offs.len() {
+            self.window();
+            let end = (i + 64).min(offs.len() - 1);
+            for j in i..end {
+                self.piece(buf, start + offs[j] as usize, start + offs[j + 1] as usize);
+            }
+            i = end;
+        }
     }
 }
 
@@ -58,12 +75,12 @@ pub(crate) fn split<R: WindowRules, S: PieceSink>(
             let cont = classify_for::<R, BODY_WORDS>(bytes, pos, blocks, &mut maps);
             let stop = limit - 63;
             pos += if cont {
-                windows::<R, true, S, BODY_WORDS>(
-                    pre, &maps, text, bytes, pos, limit, stop, false, sink,
+                decide_chunk::<R, true, S, BODY_WORDS>(
+                    pre, &maps, text, bytes, pos, limit, stop, sink,
                 )
             } else {
-                windows::<R, false, S, BODY_WORDS>(
-                    pre, &maps, text, bytes, pos, limit, stop, false, sink,
+                decide_chunk::<R, false, S, BODY_WORDS>(
+                    pre, &maps, text, bytes, pos, limit, stop, sink,
                 )
             };
         }
@@ -139,7 +156,7 @@ fn windows<R: WindowRules, const CONT: bool, S: PieceSink, const W: usize>(
 
 /// End of the piece at `pos` by the scalar scanner.
 #[inline(never)]
-fn scalar_end(pre: &ScalarPreTokenizer, text: &str, pos: usize) -> usize {
+pub(super) fn scalar_end(pre: &ScalarPreTokenizer, text: &str, pos: usize) -> usize {
     pre.next_match(text, pos).map_or(text.len(), |(_, end)| end)
 }
 
@@ -173,6 +190,15 @@ fn load_for<R: WindowRules, const W: usize>(
 #[inline(always)]
 fn dense(chunk: &[u8]) -> bool {
     let probe = &chunk[..chunk.len().min(DENSE_PROBE)];
+    // most text is ASCII: one pass of ors before counting anything
+    let any = probe
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .fold(0, |a, w| a | u64::from_le_bytes(*w));
+    if any & 0x8080_8080_8080_8080 == 0 {
+        return false;
+    }
     let hi: u32 = probe
         .as_chunks::<8>()
         .0

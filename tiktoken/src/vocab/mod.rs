@@ -17,8 +17,8 @@ mod long;
 mod long_derived;
 
 pub(crate) use atoms::{Atoms, char_len};
-pub(crate) use fast::Entry;
 use fast::FastTable;
+pub(crate) use fast::{Entry, Home, HomeProbe};
 use filter::KeyFilter;
 pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
@@ -126,6 +126,12 @@ impl Vocab {
             _ => return self.long.get(&self.arena, token),
         };
         (rank != ABSENT).then_some(rank)
+    }
+
+    /// [`get_home`](Self::get_home) as a value to keep in registers.
+    #[inline(always)]
+    pub(crate) fn home_probe(&self) -> HomeProbe<'_> {
+        self.fast.home_probe()
     }
 
     /// Rank of the packed key, looking only at its home slot. `None` does not

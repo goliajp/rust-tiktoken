@@ -143,6 +143,15 @@ impl<const W: usize> Bitmaps<W> {
         u64::from_le(w) >> (r & 7)
     }
 
+    /// [`window`](Self::window) of every map at `r` from one address: the
+    /// unshifted 64 bits of `map` are at byte `map * 8 * W` from the result.
+    #[inline(always)]
+    pub(crate) fn window_base(&self, r: usize) -> *const u8 {
+        debug_assert!(r / 64 + 1 < W);
+        // SAFETY: in bounds of map 0, as for `window`
+        unsafe { self.words.as_ptr().cast::<u8>().add(r >> 3) }
+    }
+
     #[inline(always)]
     pub(crate) fn store_word(&mut self, map: usize, k: usize, v: u64) {
         self.set(map, k, v.to_le());

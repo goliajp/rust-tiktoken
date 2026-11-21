@@ -11,8 +11,10 @@
 //! Derived entries: a piece that is not a token but merges into 2..=15 ids
 //! is published into a free slot by whichever thread merges it first, up to
 //! `derived_cap` entries. Their stored `hi` carries [`MULTI`], so vocabulary
-//! lookups (exact `hi` compare) never see them. Up to three ids sit in the
-//! slot; more go to a shared append-only arena.
+//! lookups (exact `hi` compare) never see them; the encode loop tests for
+//! them in the home line after its token test fails ([`HomeProbe::lookup`]),
+//! and further down the chain with [`FastTable::entry`]. Up to three ids sit
+//! in the slot; more go to a shared append-only arena.
 //!
 //! Publication: a writer claims an empty slot by swapping `hi` from 0 to
 //! `BUSY_HI`, writes the ids and the real `hi`, and stores `lo` last with
@@ -26,7 +28,7 @@
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use super::key::hash;
+use super::key::{HASH_MUL, hash, hash_with};
 
 #[path = "fast_read.rs"]
 mod read;
@@ -66,6 +68,14 @@ impl FastSlot {
     fn id(&self) -> u32 {
         self.w0.load(Ordering::Relaxed) as u32
     }
+
+    #[inline(always)]
+    fn entry(&self) -> Entry {
+        Entry {
+            w0: self.w0.load(Ordering::Relaxed),
+            w1: self.w1.load(Ordering::Relaxed),
+        }
+    }
 }
 
 /// The ids of a table entry, as read from its slot.
@@ -80,6 +90,82 @@ impl Entry {
     pub(crate) fn len(&self) -> usize {
         ((self.w0 >> COUNT_SHIFT) & 0xFF) as usize
     }
+
+    /// The first id; with [`rest`](Self::rest), the ids when there are at
+    /// most [`INLINE`] of them.
+    #[inline(always)]
+    pub(crate) fn first(&self) -> u32 {
+        self.w0 as u32
+    }
+
+    /// The second and third ids, little-endian, zero where absent.
+    #[inline(always)]
+    pub(crate) fn rest(&self) -> u64 {
+        self.w1
+    }
+
+    /// Whether the ids are in the entry itself rather than the arena.
+    #[inline(always)]
+    pub(crate) fn is_inline(&self) -> bool {
+        self.len() <= INLINE
+    }
+}
+
+/// The home-line lookup of a [`FastTable`] by value, for loops that call out
+/// of line often: its fields stay in registers across the calls, where a
+/// lookup through `&FastTable` reloads them.
+#[derive(Clone, Copy)]
+pub(crate) struct HomeProbe<'a> {
+    lines: &'a [FastLine],
+    shift: u32,
+    // opaque, so that the multiply takes it from a register rather than
+    // building the constant for every key
+    mul: u64,
+}
+
+impl<'a> HomeProbe<'a> {
+    #[inline(always)]
+    fn line(self, lo: u64, hi: u64) -> &'a FastLine {
+        let idx = (hash_with(lo, hi, self.mul) >> self.shift) as usize;
+        debug_assert!(idx < self.lines.len());
+        // SAFETY: the hash's top `64 - shift` bits index the power-of-two table
+        unsafe { self.lines.get_unchecked(idx) }
+    }
+
+    /// Same as [`FastTable::home`].
+    #[inline(always)]
+    pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
+        match self.lookup(lo, hi) {
+            Home::Token(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// The key's home line: a token, a derived entry, or neither. The token
+    /// test is the same as [`home`](Self::home)'s; derived entries are only
+    /// looked for after it fails.
+    #[inline(always)]
+    pub(crate) fn lookup(&self, lo: u64, hi: u64) -> Home {
+        let [a, b] = &self.line(lo, hi).0;
+        if a.matches(lo, hi) {
+            Home::Token(a.id())
+        } else if b.matches(lo, hi) {
+            Home::Token(b.id())
+        } else if a.matches(lo, hi | MULTI) {
+            Home::Derived(a.entry())
+        } else if b.matches(lo, hi | MULTI) {
+            Home::Derived(b.entry())
+        } else {
+            Home::Miss
+        }
+    }
+}
+
+/// What a key's home line holds for it.
+pub(crate) enum Home {
+    Token(u32),
+    Derived(Entry),
+    Miss,
 }
 
 pub(crate) struct FastTable {
@@ -150,18 +236,26 @@ impl FastTable {
         (hash(lo, hi) >> self.shift) as usize
     }
 
+    #[inline(always)]
+    pub(crate) fn home_probe(&self) -> HomeProbe<'_> {
+        HomeProbe {
+            lines: &self.lines,
+            shift: self.shift,
+            mul: std::hint::black_box(HASH_MUL),
+        }
+    }
+
     /// The id stored in the key's home line, if the key is a vocabulary
     /// token sitting there.
     #[inline(always)]
     pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
-        let [a, b] = &self.lines[self.home_index(lo, hi)].0;
-        if a.matches(lo, hi) {
-            Some(a.id())
-        } else if b.matches(lo, hi) {
-            Some(b.id())
-        } else {
-            None
+        // the plain multiplier: a per-call probe would spill its opaque one
+        HomeProbe {
+            lines: &self.lines,
+            shift: self.shift,
+            mul: HASH_MUL,
         }
+        .home(lo, hi)
     }
 
     /// The key's id if it is a vocabulary token, wherever it sits on its

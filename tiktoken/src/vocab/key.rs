@@ -96,7 +96,16 @@ pub(crate) fn key_in(bytes: &[u8], start: usize, end: usize) -> (u64, u64) {
 
 #[inline(always)]
 pub(crate) fn hash(lo: u64, hi: u64) -> u64 {
-    (lo ^ hi.rotate_left(27)).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+    hash_with(lo, hi, HASH_MUL)
+}
+
+pub(crate) const HASH_MUL: u64 = 0x9E37_79B9_7F4A_7C15;
+
+/// [`hash`] with its multiplier passed in, for loops that keep it in a
+/// register.
+#[inline(always)]
+pub(crate) fn hash_with(lo: u64, hi: u64, mul: u64) -> u64 {
+    (lo ^ hi.rotate_left(27)).wrapping_mul(mul)
 }
 
 /// Hash for keys longer than [`FAST_KEY_MAX`]: the length and three 8-byte

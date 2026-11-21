@@ -7,6 +7,7 @@
 //! inline; whatever they cannot decide goes to the complete scanner.
 
 mod bitops;
+mod chains;
 mod cl100k;
 pub(crate) mod classify;
 #[cfg(target_arch = "aarch64")]
