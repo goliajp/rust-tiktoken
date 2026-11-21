@@ -34,7 +34,7 @@ pub fn p50k_base() -> CoreBpe {
         encoder,
         special,
         P50K_PATTERN,
-        FastPath::None,
+        FastPath::P50k,
         WhitespaceRules::Generic,
     )
 }
@@ -54,7 +54,7 @@ pub fn p50k_edit() -> CoreBpe {
         encoder,
         special,
         P50K_PATTERN,
-        FastPath::None,
+        FastPath::P50k,
         WhitespaceRules::Generic,
     )
 }
@@ -128,7 +128,7 @@ pub fn r50k_base() -> CoreBpe {
         encoder,
         special,
         P50K_PATTERN,
-        FastPath::None,
+        FastPath::P50k,
         WhitespaceRules::Generic,
     )
 }

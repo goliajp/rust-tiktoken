@@ -5,3 +5,7 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 26ed0b95ea167a5757e7deff0ad7bd6b7381315f245d7e311171a42c4ee9ae12 # shrinks to text = "0²"
+cc 1728169c1aaef31c50bf1ab68172a42a28866d33352f8058d34c1f9a8a5aea6a # shrinks to text = ".\r/"
+cc 8cb81b0729e73ccdb3b06eb572e3183dba055df00e3af845b413af0fc07345f5 # shrinks to text = "!\r/"
+cc 2a4a8cc5bd27f8769f9e2391ba725c4f72ca455c630f3c61449e35c823fc081c # shrinks to text = "𒑵a"
+cc 0bf4f8bdccbd1ee7994e45b1970a077987ddf0a5a21ba52bda219478f2c4d772 # shrinks to text = ",\r/"

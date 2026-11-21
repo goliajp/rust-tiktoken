@@ -1,9 +1,9 @@
-use regex::Regex;
 use rustc_hash::FxHashMap;
 
 use crate::merge;
 use crate::piece_cache;
-use crate::pretokenize::{FastPath, PreTokenizer, RegexPreTokenizer, WhitespaceRules};
+use crate::pretokenize::{FastPath, PreTokenizer, ScalarPreTokenizer, WhitespaceRules};
+use crate::special::SpecialMatcher;
 use crate::vocab::Vocab;
 
 /// A Byte Pair Encoding tokenizer engine.
@@ -33,8 +33,8 @@ pub struct CoreBpe {
     cache_id: u64,
     special_encoder: FxHashMap<Vec<u8>, u32>,
     special_decoder: FxHashMap<u32, Vec<u8>>,
-    pre_tokenizer: RegexPreTokenizer,
-    special_regex: Option<Regex>,
+    pre_tokenizer: ScalarPreTokenizer,
+    special_matcher: Option<SpecialMatcher>,
 }
 
 impl CoreBpe {
@@ -45,22 +45,8 @@ impl CoreBpe {
         fast: FastPath,
         ws: WhitespaceRules,
     ) -> Self {
-        let pre_tokenizer = RegexPreTokenizer::new(pattern, fast, ws);
-
-        let special_regex = if special_encoder.is_empty() {
-            None
-        } else {
-            debug_assert!(
-                special_encoder.keys().all(|k| !k.is_empty()),
-                "special token keys must not be empty"
-            );
-            let pat = special_encoder
-                .keys()
-                .map(|k| regex::escape(&String::from_utf8_lossy(k)))
-                .collect::<Vec<_>>()
-                .join("|");
-            Some(Regex::new(&pat).expect("invalid special regex"))
-        };
+        let pre_tokenizer = ScalarPreTokenizer::new(pattern, fast, ws);
+        let special_matcher = SpecialMatcher::new(&special_encoder);
 
         let special_decoder = special_encoder
             .iter()
@@ -76,7 +62,7 @@ impl CoreBpe {
             special_encoder,
             special_decoder,
             pre_tokenizer,
-            special_regex,
+            special_matcher,
         }
     }
 
@@ -114,29 +100,20 @@ impl CoreBpe {
     /// ```
     #[must_use]
     pub fn encode_with_special_tokens(&self, text: &str) -> Vec<u32> {
-        let special_regex = match &self.special_regex {
-            Some(r) => r,
+        let special = match &self.special_matcher {
+            Some(m) => m,
             None => return self.encode(text),
         };
 
         let mut result = Vec::with_capacity(text.len() / 3);
         let mut start = 0;
 
-        for mat in special_regex.find_iter(text) {
-            if mat.start() > start {
-                self.encode_into(&text[start..mat.start()], &mut result);
+        while let Some((s, e, token)) = special.find(text.as_bytes(), start) {
+            if s > start {
+                self.encode_into(&text[start..s], &mut result);
             }
-            let piece = &text.as_bytes()[mat.start()..mat.end()];
-            if let Some(&token) = self.special_encoder.get(piece) {
-                result.push(token);
-            } else {
-                debug_assert!(
-                    false,
-                    "special regex matched {:?} but no encoder entry found",
-                    String::from_utf8_lossy(piece)
-                );
-            }
-            start = mat.end();
+            result.push(token);
+            start = e;
         }
 
         if start < text.len() {
@@ -232,20 +209,20 @@ impl CoreBpe {
     /// [`encode_with_special_tokens`](Self::encode_with_special_tokens).
     #[must_use]
     pub fn count_with_special_tokens(&self, text: &str) -> usize {
-        let special_regex = match &self.special_regex {
-            Some(r) => r,
+        let special = match &self.special_matcher {
+            Some(m) => m,
             None => return self.count(text),
         };
 
         let mut total = 0;
         let mut start = 0;
 
-        for mat in special_regex.find_iter(text) {
-            if mat.start() > start {
-                total += self.count(&text[start..mat.start()]);
+        while let Some((s, e, _)) = special.find(text.as_bytes(), start) {
+            if s > start {
+                total += self.count(&text[start..s]);
             }
             total += 1; // special token = 1 token
-            start = mat.end();
+            start = e;
         }
 
         if start < text.len() {
@@ -348,6 +325,16 @@ impl CoreBpe {
         self.special_encoder.len()
     }
 
+    #[cfg(test)]
+    pub(crate) fn special_tokens(&self) -> &FxHashMap<Vec<u8>, u32> {
+        &self.special_encoder
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pre_tokenizer(&self) -> &ScalarPreTokenizer {
+        &self.pre_tokenizer
+    }
+
     /// Main encoding hot loop. Iterates pre-tokenizer matches over the input,
     /// then for each matched piece: (1) try direct vocab lookup (fast path for
     /// known tokens), (2) fall back to BPE merge for unknown multi-byte pieces.
@@ -389,7 +376,7 @@ mod tests {
             encoder,
             special,
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         )
     }
@@ -402,7 +389,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("x");
@@ -419,7 +406,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("ab");
@@ -435,7 +422,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("ab");
@@ -477,7 +464,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("def");
@@ -492,7 +479,7 @@ mod tests {
             encoder,
             FxHashMap::default(),
             r"[\s\S]+",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         assert!(bpe.decode_to_string(&[0]).is_err());
@@ -515,7 +502,7 @@ mod tests {
             encoder,
             special,
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode_with_special_tokens("x<|end|>y");
@@ -532,7 +519,7 @@ mod tests {
             encoder,
             special,
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let decoded = bpe.decode(&[0, 99]);
@@ -551,7 +538,7 @@ mod tests {
             ranks.clone(),
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("abc");
@@ -564,7 +551,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens2 = bpe2.encode("abcd");
@@ -586,7 +573,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         assert_eq!(bpe.encode("abcx"), vec![1]);
@@ -601,7 +588,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         assert_eq!(bpe.count("ab"), 2);
@@ -619,7 +606,7 @@ mod tests {
             encoder,
             special,
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
 
@@ -646,7 +633,7 @@ mod tests {
             encoder,
             special,
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode_with_special_tokens("a<|s|>b");
