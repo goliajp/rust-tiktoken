@@ -11,9 +11,9 @@
 //! Derived entries: a piece that is not a token but merges into 2..=15 ids
 //! is published into a free slot by whichever thread merges it first, up to
 //! `derived_cap` entries. Their stored `hi` carries [`MULTI`], so vocabulary
-//! lookups (exact `hi` compare) never see them; the encode loop looks for
-//! them in the home line only after its token probe missed. Up to three ids sit in the
-//! slot; more go to a shared append-only arena.
+//! lookups (exact `hi` compare) never see them; the encode loop looks them
+//! up with [`FastTable::entry`] after its token probe missed. Up to three ids
+//! sit in the slot; more go to a shared append-only arena.
 //!
 //! Publication: a writer claims an empty slot by swapping `hi` from 0 to
 //! `BUSY_HI`, writes the ids and the real `hi`, and stores `lo` last with
@@ -27,7 +27,7 @@
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use super::key::hash;
+use super::key::{HASH_MUL, hash, hash_with};
 
 const OPEN_LO: u64 = u64::MAX;
 // a real hi has a length of at most 15 in its top byte, plus at most MULTI
@@ -63,14 +63,6 @@ impl FastSlot {
     #[inline(always)]
     fn id(&self) -> u32 {
         self.w0.load(Ordering::Relaxed) as u32
-    }
-
-    #[inline(always)]
-    fn entry(&self) -> Entry {
-        Entry {
-            w0: self.w0.load(Ordering::Relaxed),
-            w1: self.w1.load(Ordering::Relaxed),
-        }
     }
 }
 
@@ -114,12 +106,15 @@ impl Entry {
 pub(crate) struct HomeProbe<'a> {
     lines: &'a [FastLine],
     shift: u32,
+    // opaque, so that the multiply takes it from a register rather than
+    // building the constant for every key
+    mul: u64,
 }
 
 impl<'a> HomeProbe<'a> {
     #[inline(always)]
     fn line(self, lo: u64, hi: u64) -> &'a FastLine {
-        let idx = (hash(lo, hi) >> self.shift) as usize;
+        let idx = (hash_with(lo, hi, self.mul) >> self.shift) as usize;
         debug_assert!(idx < self.lines.len());
         // SAFETY: the hash's top `64 - shift` bits index the power-of-two table
         unsafe { self.lines.get_unchecked(idx) }
@@ -212,6 +207,7 @@ impl FastTable {
         HomeProbe {
             lines: &self.lines,
             shift: self.shift,
+            mul: std::hint::black_box(HASH_MUL),
         }
     }
 
@@ -220,20 +216,6 @@ impl FastTable {
     #[inline(always)]
     pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
         self.home_probe().home(lo, hi)
-    }
-
-    /// The derived entry for the key in its home line, if one sits there.
-    /// The key must come from utf-8 text; the all-zero key finds nothing.
-    #[inline(always)]
-    pub(crate) fn home_derived(&self, lo: u64, hi: u64) -> Option<Entry> {
-        let [a, b] = &self.home_probe().line(lo, hi).0;
-        if a.matches(lo, hi | MULTI) {
-            Some(a.entry())
-        } else if b.matches(lo, hi | MULTI) {
-            Some(b.entry())
-        } else {
-            None
-        }
     }
 
     /// The key's id if it is a vocabulary token, wherever it sits on its

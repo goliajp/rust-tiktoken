@@ -216,11 +216,12 @@ pub(super) fn finish(mut s: u64, c: &Core, v: u64, eot: bool) -> (u64, u32) {
         return (s, len);
     }
     // a whitespace run reaching the end may hold more newlines, or be
-    // followed by a non-space: only its first start is final
-    let top = 1u64 << (len - 1);
-    if c.w1 & top != 0 {
-        s &= !(fill_down(top, c.w1) & !c.ws);
-    }
+    // followed by a non-space: only its first start is final. The run is
+    // what lies above the highest valid non-whitespace byte (none when that
+    // byte is the top one)
+    let z = v & !c.w1;
+    let run = v & !u64::MAX.checked_shr(z.leading_zeros()).unwrap_or(0);
+    s &= !(run & !c.ws);
     (s, 63 - s.leading_zeros())
 }
 

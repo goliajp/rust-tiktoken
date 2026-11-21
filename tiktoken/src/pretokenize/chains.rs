@@ -178,45 +178,43 @@ fn step<R: WindowRules, const CONT: bool, const W: usize>(
     r + cut as usize
 }
 
-/// Most piece starts a chunk's bitmap can hold, plus room for the unrolled
-/// writes of [`flatten`].
-const POS_CAP: usize = super::classify::CHUNK + 64 + 16;
+/// Piece starts handed to the sink at a time. The buffer lives on the stack,
+/// and a small one keeps a fresh thread's first call from touching more
+/// stack pages.
+const POS_BATCH: usize = 512;
+/// [`POS_BATCH`] plus one word's starts and the overshoot of [`flatten`].
+const POS_CAP: usize = POS_BATCH + 64 + 8;
 
-/// Offsets of the set bits of the first `words` words of `starts`, in
-/// order, into `pos`; returns how many. Writes in groups of eight, so the
-/// loop branches on the count rather than once per bit.
+/// Appends the offsets of the set bits of `word` (word `k` of the bitmap) to
+/// `pos` after `n` entries; returns the new count. Writes in groups of eight,
+/// so the loop branches on the count rather than once per bit.
 #[inline(always)]
-fn flatten<const W: usize>(starts: &Starts<W>, words: usize, pos: *mut u16) -> usize {
-    debug_assert!(64 * W + 16 <= POS_CAP);
-    let mut n = 0;
-    for (k, &word) in starts.0.iter().enumerate().take(words) {
-        let mut m = word;
-        let cnt = m.count_ones() as usize;
-        let base = 64 * k as u16;
-        let put = |n: usize, m: &mut u64| {
-            // a spent word writes base + 64, past the count and ignored
-            debug_assert!(n < POS_CAP);
-            // SAFETY: `pos` has room for POS_CAP >= 64 * W + 16 entries, and
-            // no word writes more than 8 past the bits it holds
-            unsafe { pos.add(n).write(base + m.trailing_zeros() as u16) };
-            *m &= m.wrapping_sub(1);
-        };
-        for j in 0..8 {
-            put(n + j, &mut m);
-        }
-        if cnt > 8 {
-            for j in 8..16 {
-                put(n + j, &mut m);
-            }
-            let mut j = 16;
-            while m != 0 {
-                put(n + j, &mut m);
-                j += 1;
-            }
-        }
-        n += cnt;
+fn flatten(word: u64, k: usize, pos: *mut u16, n: usize) -> usize {
+    debug_assert!(n <= POS_BATCH);
+    let mut m = word;
+    let cnt = m.count_ones() as usize;
+    let base = 64 * k as u16;
+    let put = |j: usize, m: &mut u64| {
+        // a spent word writes base + 64, past the count and ignored
+        debug_assert!(n + j < POS_CAP);
+        // SAFETY: n <= POS_BATCH, and a word writes at most 64 + 8 entries
+        unsafe { pos.add(n + j).write(base + m.trailing_zeros() as u16) };
+        *m &= m.wrapping_sub(1);
+    };
+    for j in 0..8 {
+        put(j, &mut m);
     }
-    n
+    if cnt > 8 {
+        for j in 8..16 {
+            put(j, &mut m);
+        }
+        let mut j = 16;
+        while m != 0 {
+            put(j, &mut m);
+            j += 1;
+        }
+    }
+    n + cnt
 }
 
 /// Hand the pieces between consecutive starts below `reach` to `sink`, the
@@ -231,20 +229,22 @@ fn walk<S: PieceSink, const W: usize>(
 ) {
     let mut pos = MaybeUninit::<[u16; POS_CAP]>::uninit();
     let pos = pos.as_mut_ptr().cast::<u16>();
-    let n = flatten(starts, reach.div_ceil(64).min(W), pos);
-    // SAFETY (all reads of `pos`): `flatten` wrote entries 0..n
-    debug_assert!(n >= 1 && unsafe { pos.read() } == 0);
-    let mut i = 0;
-    while i + 1 < n {
-        sink.window();
-        let group = (n - 1 - i).min(64);
-        for j in i..i + group {
-            let (a, b) = unsafe { (pos.add(j).read(), pos.add(j + 1).read()) };
-            sink.piece(buf, start + a as usize, start + b as usize);
+    let mut n = 0;
+    for (k, &word) in starts.0.iter().enumerate().take(reach.div_ceil(64)) {
+        n = flatten(word, k, pos, n);
+        if n >= POS_BATCH {
+            // SAFETY: entries 0..n are written
+            let offs = unsafe { std::slice::from_raw_parts(pos, n) };
+            sink.pieces(buf, start, offs);
+            // SAFETY: as above; the last start opens the next batch
+            unsafe { pos.write(pos.add(n - 1).read()) };
+            n = 1;
         }
-        i += group;
     }
+    // SAFETY: entries 0..n are written, and bit 0 put the chunk start first
+    let offs = unsafe { std::slice::from_raw_parts(pos, n) };
+    debug_assert!(n >= 1);
+    sink.pieces(buf, start, offs);
     sink.window();
-    let last = unsafe { pos.add(n - 1).read() };
-    sink.piece(buf, start + last as usize, start + reach);
+    sink.piece(buf, start + offs[n - 1] as usize, start + reach);
 }

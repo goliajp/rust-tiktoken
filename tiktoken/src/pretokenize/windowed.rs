@@ -20,6 +20,21 @@ pub(crate) trait PieceSink {
     /// The piece `buf[start..end]`; `buf` has at least `start + KEY_READ`
     /// bytes, those past the piece being arbitrary.
     fn piece(&mut self, buf: &[u8], start: usize, end: usize);
+
+    /// The pieces `buf[start + offs[i]..start + offs[i + 1]]` in order, with
+    /// [`KEY_READ`] readable bytes from each start.
+    #[inline(always)]
+    fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
+        let mut i = 0;
+        while i + 1 < offs.len() {
+            self.window();
+            let end = (i + 64).min(offs.len() - 1);
+            for j in i..end {
+                self.piece(buf, start + offs[j] as usize, start + offs[j + 1] as usize);
+            }
+            i = end;
+        }
+    }
 }
 
 /// Texts shorter than this go through the tail copy alone.

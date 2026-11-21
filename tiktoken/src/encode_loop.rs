@@ -184,8 +184,10 @@ fn probe(home: &HomeProbe<'_>, buf: &[u8], start: usize, end: usize) -> Result<u
 /// ids' worth and advances by at most three.
 const ROOM: usize = 3 * 64;
 
-/// Writes ids through a raw pointer; every window first makes room for its
-/// at most 64 pieces of up to three inline ids each.
+/// Writes ids through a raw pointer. Batches of pieces go through a leaf loop
+/// that writes one id per piece, after making room for the batch; single
+/// pieces come after a [`window`](PieceSink::window) call that makes room for
+/// 64 pieces of up to three inline ids each.
 ///
 /// The out-of-line paths take the fields by value rather than `&mut self`,
 /// so that the sink does not escape and its fields stay in registers in the
@@ -226,13 +228,68 @@ impl<'e, 'v> EncodeSink<'e, 'v> {
     }
 }
 
-/// Make room for a window after `len` ids.
+/// Make room for `need` more ids after `len` ids.
 #[cold]
 #[inline(never)]
-fn grow(out: &mut Vec<u32>, len: usize) {
+fn grow(out: &mut Vec<u32>, len: usize, need: usize) {
     // SAFETY: `len` ids were written below the capacity
     unsafe { out.set_len(len) };
-    out.reserve(ROOM.max(len / 2));
+    out.reserve(need.max(len / 2));
+}
+
+/// Writes the ids of consecutive pieces `offs[i]..offs[i + 1]` from `i` on
+/// while the home-line probe answers them, one id each after `len` ids at
+/// `ptr`. Stops at the first piece it does not answer, and returns that
+/// piece's index (`offs.len() - 1` when all are done), the new length and
+/// the piece's key. A leaf, so the loop keeps everything in registers.
+#[inline(never)]
+fn encode_hits(
+    home: HomeProbe<'_>,
+    buf: &[u8],
+    start: usize,
+    offs: &[u16],
+    mut i: usize,
+    ptr: *mut u32,
+    mut len: usize,
+) -> (usize, usize, (u64, u64)) {
+    while i + 1 < offs.len() {
+        // SAFETY: i + 1 < offs.len()
+        let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
+        match probe(&home, buf, start + a as usize, start + b as usize) {
+            Ok(id) => {
+                // SAFETY: the caller made room for one id per piece
+                unsafe { ptr.add(len).write(id) };
+                len += 1;
+                i += 1;
+            }
+            Err(key) => return (i, len, key),
+        }
+    }
+    (i, len, NO_KEY)
+}
+
+/// The counting twin of [`encode_hits`].
+#[inline(never)]
+fn count_hits(
+    home: HomeProbe<'_>,
+    buf: &[u8],
+    start: usize,
+    offs: &[u16],
+    mut i: usize,
+    mut count: usize,
+) -> (usize, usize, (u64, u64)) {
+    while i + 1 < offs.len() {
+        // SAFETY: i + 1 < offs.len()
+        let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
+        match probe(&home, buf, start + a as usize, start + b as usize) {
+            Ok(_) => {
+                count += 1;
+                i += 1;
+            }
+            Err(key) => return (i, count, key),
+        }
+    }
+    (i, count, NO_KEY)
 }
 
 /// A piece the home-line probe did not answer, written after `len` ids at
@@ -246,7 +303,12 @@ fn encode_miss(
     piece: &[u8],
     key: (u64, u64),
 ) -> usize {
-    if let Some(e) = engine.vocab.home_derived(key.0, key.1)
+    let entry = if key != NO_KEY {
+        engine.vocab.entry(key.0, key.1)
+    } else {
+        None
+    };
+    if let Some(e) = entry
         && e.is_inline()
     {
         debug_assert!(len + 3 <= out.capacity());
@@ -261,7 +323,10 @@ fn encode_miss(
     }
     // SAFETY: `len` ids were written below the capacity
     unsafe { out.set_len(len) };
-    engine.encode_piece(piece, key, out);
+    match entry {
+        Some(e) => engine.vocab.extend_entry(e, out),
+        None => engine.encode_piece(piece, key, out),
+    }
     if out.capacity() - out.len() < ROOM {
         out.reserve(ROOM);
     }
@@ -272,8 +337,29 @@ impl PieceSink for EncodeSink<'_, '_> {
     #[inline(always)]
     fn window(&mut self) {
         if self.cap - self.len < ROOM {
-            grow(self.out, self.len);
+            grow(self.out, self.len, ROOM);
             self.reload();
+        }
+    }
+
+    #[inline(always)]
+    fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
+        let mut i = 0;
+        while i + 1 < offs.len() {
+            let need = (offs.len() - i).max(ROOM);
+            if self.cap - self.len < need {
+                grow(self.out, self.len, need);
+                self.reload();
+            }
+            let (at, len, key) = encode_hits(self.home, buf, start, offs, i, self.ptr, self.len);
+            self.len = len;
+            i = at;
+            if i + 1 < offs.len() {
+                let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
+                self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
+                self.reload();
+                i += 1;
+            }
         }
     }
 
@@ -305,15 +391,32 @@ struct CountSink<'e> {
 /// Ids of a piece the home-line probe did not answer.
 #[inline(never)]
 fn count_miss(engine: &Engine<'_>, piece: &[u8], key: (u64, u64)) -> usize {
-    match engine.vocab.home_derived(key.0, key.1) {
-        Some(e) => e.len(),
-        None => engine.count_piece(piece, key),
+    if key != NO_KEY
+        && let Some(e) = engine.vocab.entry(key.0, key.1)
+    {
+        return e.len();
     }
+    engine.count_piece(piece, key)
 }
 
 impl PieceSink for CountSink<'_> {
     #[inline(always)]
     fn window(&mut self) {}
+
+    #[inline(always)]
+    fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
+        let mut i = 0;
+        while i + 1 < offs.len() {
+            let (at, count, key) = count_hits(self.home, buf, start, offs, i, self.count);
+            self.count = count;
+            i = at;
+            if i + 1 < offs.len() {
+                let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
+                self.count += count_miss(self.engine, piece, key);
+                i += 1;
+            }
+        }
+    }
 
     #[inline(always)]
     fn piece(&mut self, buf: &[u8], start: usize, end: usize) {

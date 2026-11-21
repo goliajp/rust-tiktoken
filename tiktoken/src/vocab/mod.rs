@@ -129,13 +129,6 @@ impl Vocab {
         self.fast.home(lo, hi)
     }
 
-    /// Derived entry of a piece's packed key in its home line; `None` does
-    /// not mean absent. The key must come from utf-8 text.
-    #[inline(always)]
-    pub(crate) fn home_derived(&self, lo: u64, hi: u64) -> Option<Entry> {
-        self.fast.home_derived(lo, hi)
-    }
-
     /// Rank of `buf[at..at + len]` or [`ABSENT`], where `buf` stays readable
     /// for [`KEY_READ`] bytes from `at` (the merge pads its scratch copy).
     #[inline]
