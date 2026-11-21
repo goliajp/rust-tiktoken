@@ -139,6 +139,36 @@ mod tests {
         }
     }
 
+    /// Against the regex alternation the matcher replaced, on text that
+    /// glues every literal of every encoding to fragments of the others.
+    #[test]
+    fn matches_the_regex_alternation() {
+        for &name in crate::list_encodings() {
+            let specials = crate::get_encoding(name).unwrap().special_tokens();
+            let m = SpecialMatcher::new(specials).unwrap();
+            let pat: Vec<String> = specials
+                .keys()
+                .map(|k| regex::escape(std::str::from_utf8(k).unwrap()))
+                .collect();
+            let re = regex::Regex::new(&pat.join("|")).unwrap();
+            let mut text = String::new();
+            for (i, k) in specials.keys().enumerate().take(400) {
+                let k = std::str::from_utf8(k).unwrap();
+                let cut = k.char_indices().nth(k.chars().count() / 2).unwrap().0;
+                text.push_str(&k[..cut]);
+                text.push_str(["x", "<", "[", "你", " "][i % 5]);
+                text.push_str(k);
+                text.push_str(&k[cut..]);
+            }
+            let want: Vec<(usize, usize, u32)> = re
+                .find_iter(&text)
+                .map(|x| (x.start(), x.end(), specials[x.as_str().as_bytes()]))
+                .collect();
+            assert!(!want.is_empty());
+            assert_eq!(all(&m, &text), want, "{name}");
+        }
+    }
+
     /// The longest-first rule equals the regex alternation it replaced only
     /// while no literal is a prefix of another.
     #[test]
