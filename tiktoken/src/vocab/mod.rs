@@ -10,10 +10,13 @@
 //! Decoding indexes a contiguous arena by rank.
 
 mod fast;
+mod filter;
 mod key;
 mod long;
 
+pub(crate) use fast::Entry;
 use fast::FastTable;
+use filter::KeyFilter;
 pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
 
@@ -28,6 +31,8 @@ pub struct Vocab {
     // rank by (first byte << 8 | second byte), for 2-byte keys
     pair: Box<[u32]>,
     fast: FastTable,
+    // in front of the merge's substring probes into `fast`
+    filter: KeyFilter,
     long: LongTable,
     // indexed by rank: (offset, len) into the arena, for decode
     decoder: Box<[(u32, u16)]>,
@@ -83,8 +88,10 @@ impl Vocab {
 
         let arena = arena.into_boxed_slice();
         let long = LongTable::build(&arena, &long_items);
+        let filter = KeyFilter::build(fast_keys.iter().map(|&(lo, hi, _)| key::hash(lo, hi)));
         Self {
             fast: FastTable::build(&fast_keys),
+            filter,
             long,
             arena,
             single,
@@ -116,24 +123,53 @@ impl Vocab {
         self.fast.home(lo, hi)
     }
 
-    /// Rank of the packed key, wherever it sits on its probe chain.
-    #[inline]
-    pub(crate) fn get_key(&self, lo: u64, hi: u64) -> Option<u32> {
-        self.fast.get(lo, hi)
-    }
-
     /// Rank of `buf[at..at + len]` or [`ABSENT`], where `buf` stays readable
     /// for [`KEY_READ`] bytes from `at` (the merge pads its scratch copy).
     #[inline]
     pub(crate) fn rank_padded(&self, buf: &[u8], at: usize, len: usize) -> u32 {
         if len <= FAST_KEY_MAX {
             let (lo, hi) = key_padded(buf, at, len);
-            self.fast.get(lo, hi).unwrap_or(ABSENT)
+            let h = key::hash(lo, hi);
+            if !self.filter.may_contain(h) {
+                return ABSENT;
+            }
+            self.fast.get_hashed(lo, hi, h).unwrap_or(ABSENT)
         } else {
             self.long
                 .get(&self.arena, &buf[at..at + len])
                 .unwrap_or(ABSENT)
         }
+    }
+
+    /// Entry of a piece's packed key: a token's id or the ids of a derived
+    /// entry. The key must come from utf-8 text.
+    #[inline]
+    pub(crate) fn entry(&self, lo: u64, hi: u64) -> Option<Entry> {
+        self.fast.entry(lo, hi)
+    }
+
+    /// Append an entry's ids to `out`.
+    #[inline]
+    pub(crate) fn extend_entry(&self, e: Entry, out: &mut Vec<u32>) {
+        self.fast.extend(e, out);
+    }
+
+    /// Share the merge result of a piece that is not a token with every
+    /// thread; false when the shared table is full.
+    #[inline]
+    pub(crate) fn insert_derived(&self, lo: u64, hi: u64, ids: &[u32]) -> bool {
+        self.fast.insert_derived(lo, hi, ids)
+    }
+
+    /// Whether the shared table still takes derived entries.
+    #[inline]
+    pub(crate) fn accepts_derived(&self) -> bool {
+        self.fast.accepts_derived()
+    }
+
+    /// Drop all derived entries. Caller guarantees no concurrent use.
+    pub(crate) fn clear_derived(&self) {
+        self.fast.clear_derived();
     }
 
     /// Rank of a 1-byte key, or [`ABSENT`].
@@ -145,6 +181,12 @@ impl Vocab {
     /// Look up the rank of a 2-byte key without slicing: the merge loop's
     /// initial adjacent-pair scan, which is the single hottest lookup class.
     #[inline]
+    pub(crate) fn rank_pair(&self, a: u8, b: u8) -> u32 {
+        self.pair[(a as usize) << 8 | b as usize]
+    }
+
+    #[inline]
+    #[cfg(test)]
     pub(crate) fn get_pair(&self, a: u8, b: u8) -> Option<u32> {
         let rank = self.pair[(a as usize) << 8 | b as usize];
         (rank != ABSENT).then_some(rank)
@@ -152,6 +194,7 @@ impl Vocab {
 
     /// Check if a token byte sequence exists in the vocabulary.
     #[inline]
+    #[cfg(test)]
     pub(crate) fn contains_key(&self, token: &[u8]) -> bool {
         self.get(token).is_some()
     }

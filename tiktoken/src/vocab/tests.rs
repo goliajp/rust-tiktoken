@@ -210,6 +210,8 @@ fn test_every_builtin_vocabulary_entry_is_found() {
                 let end = KEY_READ + key.len();
                 let (lo, hi) = key_in(&text, KEY_READ, end);
                 assert_eq!(vocab.fast.get(lo, hi), Some(rank), "{name}");
+                // the merge filter has no false negatives
+                assert!(vocab.filter.may_contain(key::hash(lo, hi)), "{name}");
                 if let Some(home) = vocab.get_home(lo, hi) {
                     assert_eq!(home, rank, "{name}");
                 }
@@ -283,4 +285,103 @@ fn test_lowest_rank_owns_its_home_slot() {
     assert_eq!(vocab.fast.is_home(lo, hi), Some(true));
     let (lo, hi) = key_of(b"absent");
     assert_eq!(vocab.fast.is_home(lo, hi), None);
+}
+
+fn ids_of(vocab: &Vocab, key: (u64, u64)) -> Option<Vec<u32>> {
+    let e = vocab.entry(key.0, key.1)?;
+    let mut out = vec![];
+    vocab.extend_entry(e, &mut out);
+    assert_eq!(out.len(), e.len());
+    Some(out)
+}
+
+#[test]
+fn derived_entries_are_found_only_as_entries() {
+    let entries: Vec<(Vec<u8>, u32)> = (0u32..1000)
+        .map(|i| (format!("t{i}").into_bytes(), i))
+        .collect();
+    let vocab = Vocab::from_entries(entries);
+    let cap = vocab.fast.derived_cap() as usize;
+    assert!(cap > 100);
+    let key = |i: usize| key_of(format!("d{i:0>width$}", width = 1 + i % 14).as_bytes());
+    let ids = |i: usize| -> Vec<u32> { (0..2 + i % 14).map(|j| (i * 31 + j) as u32).collect() };
+    // entries of more than three ids may also be refused when their arena
+    // runs out; the rest must all be taken until the table is full
+    let mut stored = vec![];
+    let mut i = 0;
+    while vocab.accepts_derived() {
+        let (lo, hi) = key(i);
+        if vocab.insert_derived(lo, hi, &ids(i)) {
+            // publishing the same key again changes nothing
+            vocab.insert_derived(lo, hi, &[7, 7]);
+            stored.push(i);
+        } else {
+            assert!(ids(i).len() > 3, "{i}");
+            assert_eq!(ids_of(&vocab, (lo, hi)), None);
+        }
+        i += 1;
+        assert!(i < 100 * cap);
+    }
+    assert_eq!(stored.len(), cap);
+    assert!(!vocab.insert_derived(1, 1 << 56, &[1, 2]));
+    for &i in &stored {
+        let (lo, hi) = key(i);
+        assert_eq!(ids_of(&vocab, (lo, hi)), Some(ids(i)), "{i}");
+        // vocabulary lookups never see a derived entry
+        assert_eq!(vocab.fast.get(lo, hi), None);
+        assert_eq!(vocab.get_home(lo, hi), None);
+    }
+    for i in 0..1000u32 {
+        let k = format!("t{i}");
+        assert_eq!(vocab.get(k.as_bytes()), Some(i));
+        assert_eq!(ids_of(&vocab, key_of(k.as_bytes())), Some(vec![i]));
+    }
+    vocab.clear_derived();
+    assert!(vocab.accepts_derived());
+    for &i in &stored {
+        assert_eq!(ids_of(&vocab, key(i)), None);
+    }
+    for i in 0..1000u32 {
+        assert_eq!(vocab.get(format!("t{i}").as_bytes()), Some(i));
+    }
+    let (lo, hi) = key(3);
+    assert!(vocab.insert_derived(lo, hi, &ids(3)));
+    assert_eq!(ids_of(&vocab, (lo, hi)), Some(ids(3)));
+}
+
+#[test]
+fn derived_entries_published_concurrently_read_back_whole() {
+    let entries: Vec<(Vec<u8>, u32)> = (0u32..200)
+        .map(|i| (format!("t{i}").into_bytes(), i))
+        .collect();
+    let vocab = Vocab::from_entries(entries);
+    let keys: Vec<Vec<u8>> = (0..48)
+        .map(|i| format!("p{i:0>w$}", w = 1 + i % 13).into_bytes())
+        .collect();
+    // the ids are a function of the key, so whichever thread wins a race
+    // publishes the same value
+    let ids = |k: &[u8]| -> Vec<u32> {
+        let seed = k.iter().fold(0u32, |a, &b| a.wrapping_mul(31) ^ b as u32) & 0xFFFF;
+        (0..2 + k.len() % 7).map(|j| seed + j as u32).collect()
+    };
+    std::thread::scope(|s| {
+        for t in 0..4 {
+            let (vocab, keys) = (&vocab, &keys);
+            s.spawn(move || {
+                for round in 0..2 {
+                    for (i, k) in keys.iter().enumerate() {
+                        let key = key_of(k);
+                        if (i + t + round) % 2 == 0 && ids_of(vocab, key).is_none() {
+                            vocab.insert_derived(key.0, key.1, &ids(k));
+                        } else if let Some(got) = ids_of(vocab, key) {
+                            assert_eq!(got, ids(k));
+                        }
+                    }
+                }
+            });
+        }
+    });
+    for k in &keys {
+        assert_eq!(ids_of(&vocab, key_of(k)), Some(ids(k)));
+    }
 }

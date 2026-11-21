@@ -1,4 +1,4 @@
-use rustc_hash::FxHashMap;
+use crate::hash::FxHashMap;
 
 use crate::encode_loop::Engine;
 use crate::piece_cache;
@@ -37,7 +37,7 @@ const PARALLEL_MIN: usize = 32 * 1024;
 /// assert_eq!(enc.count("hello world"), 2);
 /// ```
 pub struct CoreBpe {
-    vocab: Vocab,
+    pub(crate) vocab: Vocab,
     /// Identity for the thread-local piece cache — a nonce, never an address.
     cache_id: u64,
     special_encoder: FxHashMap<Vec<u8>, u32>,

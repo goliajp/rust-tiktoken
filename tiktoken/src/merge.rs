@@ -1,322 +1,247 @@
-//! Heap-accelerated BPE merge algorithm.
+//! The BPE merge for one piece, with tiktoken's rule: adjacent parts merge
+//! when their concatenation is a token, the lowest rank first, ties to the
+//! leftmost. A merged part's id is the rank that formed it, so the result
+//! needs no lookup per output token.
 //!
-//! Implements byte-pair encoding merging using a min-heap (`BinaryHeap<Reverse>`)
-//! combined with a doubly-linked list for O(n log n) complexity. The heap tracks
-//! candidate merges by rank; the linked list enables O(1) neighbor updates when
-//! a merge removes a position. Lazy deletion handles stale heap entries.
+//! Pieces of up to [`SMALL_MAX`] bytes merge in stack arrays: a linked list
+//! of parts by byte position, the rank of each part joined with its
+//! successor, and a scan for the leftmost minimum each round. Longer pieces
+//! use a min-heap with lazy deletion.
 
 use crate::vocab::{ABSENT, KEY_READ, Vocab};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
-/// Pieces up to this byte length use the stack-allocated linear-scan merge
-/// (`byte_pair_merge_small`) instead of the heap-based algorithm. After
-/// pre-tokenization the overwhelming majority of pieces are short (word-sized),
-/// where the heap's allocation + bookkeeping overhead dominates. The heap
-/// algorithm only pays off on long, rarely-occurring pieces.
-const LINEAR_THRESHOLD: usize = 32;
+/// Longest piece merged in stack arrays.
+pub(crate) const SMALL_MAX: usize = 128;
+// pieces up to these lengths use arrays sized for them
+const TINY_MAX: usize = 16;
+const MID_MAX: usize = 48;
 
-/// BPE merge: find the optimal partition of `piece` into sub-tokens.
-///
-/// Returns a list of split points (byte offsets into `piece`), e.g.
-/// `[0, 3, 5]` means the piece is split into `piece[0..3]` and `piece[3..5]`.
-///
-/// Uses a min-heap + doubly-linked list for O(n log n) merging,
-/// compared to the v2 algorithm's O(n * m) linear scan.
-pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
+/// Leftmost minimum of `r`; `u32::MAX` when `r` holds nothing smaller.
+#[inline(always)]
+fn argmin(r: &[u32]) -> (usize, u32) {
+    let min = r.iter().fold(u32::MAX, |a, &b| a.min(b));
+    if min == u32::MAX {
+        return (0, min);
+    }
+    (r.iter().position(|&x| x == min).unwrap_or(0), min)
+}
+
+// long pieces keep the minimum of each block of ranks, so a round scans the
+// block minima and one block instead of every rank
+const BLOCK: usize = 16;
+const BLOCKS: usize = SMALL_MAX / BLOCK;
+
+#[inline(always)]
+fn block_min(rank: &[u32], b: usize) -> u32 {
+    rank[b * BLOCK..(b + 1) * BLOCK]
+        .iter()
+        .fold(u32::MAX, |a, &x| a.min(x))
+}
+
+/// Merge `piece` (`2..=N` bytes) and write the ids of its parts to `ids`;
+/// returns the part count. A byte missing from the vocabulary yields
+/// [`ABSENT`] for its part.
+#[inline(always)]
+fn merge_n<const N: usize>(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
     let n = piece.len();
-    debug_assert!(
-        n <= u32::MAX as usize,
-        "piece length {} exceeds u32 index range",
-        n
-    );
-
-    if n == 0 {
-        return vec![0];
+    debug_assert!((2..=N).contains(&n) && N >= KEY_READ && ids.len() >= n);
+    // twice the piece's room, so every substring key loads with two word reads
+    let mut buf = [[0u8; N]; 2];
+    buf.as_flattened_mut()[..n].copy_from_slice(piece);
+    let buf = buf.as_flattened();
+    // next[i]: start of the part after the one at byte i (n at the end);
+    // prev[i]: start of the part before it
+    let mut next = [0u8; N];
+    let mut prev = [0u8; N];
+    // rank[i]: rank of the part at i joined with its successor, MAX if none
+    let mut rank = [u32::MAX; N];
+    for i in 0..n {
+        next[i] = (i + 1) as u8;
+        prev[i] = i.wrapping_sub(1) as u8;
+        ids[i] = vocab.rank_single(piece[i]);
     }
-
-    // fast path: 1 byte
-    if n == 1 {
-        return vec![0, 1];
+    for i in 0..n - 1 {
+        rank[i] = vocab.rank_pair(piece[i], piece[i + 1]);
     }
-
-    // fast path: 2 bytes
-    if n == 2 {
-        if vocab.contains_key(piece) {
-            return vec![0, 2];
+    let span = |a: usize, b: usize| vocab.rank_padded(buf, a, b - a);
+    let blocked = N > MID_MAX;
+    let mut mins = [u32::MAX; BLOCKS];
+    let n_blocks = (n - 1).div_ceil(BLOCK);
+    if blocked {
+        for (b, m) in mins[..n_blocks].iter_mut().enumerate() {
+            *m = block_min(&rank, b);
         }
-        return vec![0, 1, 2];
     }
-
-    // short pieces: linear scan with stack-allocated scratch (no heap, no Vec
-    // bookkeeping). This is the common case after pre-tokenization.
-    if n <= LINEAR_THRESHOLD {
-        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
-        let plen = byte_pair_merge_small(piece, vocab, &mut parts, &mut ids);
-        return parts[..plen].iter().map(|&p| p as usize).collect();
+    loop {
+        let (k, r) = if blocked {
+            let (b, r) = argmin(&mins[..n_blocks]);
+            let at = b * BLOCK;
+            (at + argmin(&rank[at..at + BLOCK]).0, r)
+        } else {
+            argmin(&rank[..n - 1])
+        };
+        if r == u32::MAX {
+            break;
+        }
+        ids[k] = r;
+        let j = next[k] as usize;
+        rank[j] = u32::MAX;
+        let nj = next[j] as usize;
+        next[k] = nj as u8;
+        rank[k] = if nj < n {
+            prev[nj] = k as u8;
+            span(k, next[nj] as usize)
+        } else {
+            u32::MAX
+        };
+        let mut p = k;
+        if k > 0 {
+            p = prev[k] as usize;
+            rank[p] = span(p, nj);
+        }
+        if blocked {
+            // the changed ranks sit at p <= k < j
+            let (lo, hi) = (p / BLOCK, j / BLOCK);
+            for (b, m) in mins.iter_mut().enumerate().take(hi + 1).skip(lo) {
+                *m = block_min(&rank, b);
+            }
+        }
     }
+    // compact in place: the c-th live part starts at a byte >= c
+    let (mut i, mut c) = (0, 0);
+    while i < n {
+        ids[c] = ids[i];
+        c += 1;
+        i = next[i] as usize;
+    }
+    c
+}
 
-    // padded copy so every substring key loads with two word reads
+/// Merge a piece of `1..=SMALL_MAX` bytes into `ids`; returns the id count.
+#[inline]
+pub(crate) fn merge_small(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
+    match piece.len() {
+        1 => {
+            ids[0] = vocab.rank_single(piece[0]);
+            1
+        }
+        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids),
+        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids),
+        _ => merge_n::<SMALL_MAX>(piece, vocab, ids),
+    }
+}
+
+/// Heap merge for pieces of any length of at least 2 bytes; appends the
+/// part ids to `out`.
+fn merge_heap(piece: &[u8], vocab: &Vocab, out: &mut Vec<u32>) {
+    let n = piece.len();
+    debug_assert!(n >= 2 && n <= u32::MAX as usize);
     let mut buf = Vec::with_capacity(n + KEY_READ);
     buf.extend_from_slice(piece);
     buf.resize(n + KEY_READ, 0);
 
-    // doubly-linked list over byte positions 0..n
-    // next[i] = next active position after i
-    // prev[i] = previous active position before i
     let mut next: Vec<u32> = (1..=n as u32).collect();
     let mut prev: Vec<u32> = (0..n).map(|i| i.saturating_sub(1) as u32).collect();
-
-    // rank_at[i] = rank of the pair (i, next[i]), or u32::MAX if not mergeable
-    let mut rank_at: Vec<u32> = vec![u32::MAX; n];
-
-    // min-heap: (rank, position)
+    let mut ids: Vec<u32> = piece.iter().map(|&b| vocab.rank_single(b)).collect();
+    let mut rank_at = vec![u32::MAX; n];
     let mut heap: BinaryHeap<Reverse<(u32, u32)>> = BinaryHeap::new();
-
-    // initialize: compute ranks for all adjacent pairs
     for i in 0..n - 1 {
-        if let Some(rank) = vocab.get_pair(piece[i], piece[i + 1]) {
-            rank_at[i] = rank;
-            heap.push(Reverse((rank, i as u32)));
+        let r = vocab.rank_pair(piece[i], piece[i + 1]);
+        if r != ABSENT {
+            rank_at[i] = r;
+            heap.push(Reverse((r, i as u32)));
         }
     }
-
-    let mut active_count = n;
 
     while let Some(Reverse((rank, pos))) = heap.pop() {
         let pos = pos as usize;
-
-        // lazy deletion: skip if this entry is stale
+        // lazy deletion: the pair changed since this entry was pushed
         if rank_at[pos] != rank {
             continue;
         }
-
-        let next_pos = next[pos] as usize;
-        if next_pos >= n {
-            continue;
-        }
-
-        if active_count <= 1 {
-            break;
-        }
-
-        // merge: remove next_pos from the linked list
-        let after = next[next_pos] as usize;
+        let j = next[pos] as usize;
+        let after = next[j] as usize;
+        ids[pos] = rank;
         next[pos] = after as u32;
-        if after < n {
-            prev[after] = pos as u32;
-        }
-        rank_at[next_pos] = u32::MAX; // mark deleted
-        active_count -= 1;
-
-        // recompute rank for the merged pair at pos
-        // pair at pos is now: piece[pos..after] + piece[after..next[after]]
+        rank_at[j] = u32::MAX;
         rank_at[pos] = u32::MAX;
         if after < n {
-            let after_next = next[after] as usize;
-            let new_rank = vocab.rank_padded(&buf, pos, after_next - pos);
-            if after_next <= n && new_rank != ABSENT {
-                rank_at[pos] = new_rank;
-                heap.push(Reverse((new_rank, pos as u32)));
+            prev[after] = pos as u32;
+            let end = next[after] as usize;
+            let r = vocab.rank_padded(&buf, pos, end - pos);
+            if r != ABSENT {
+                rank_at[pos] = r;
+                heap.push(Reverse((r, pos as u32)));
             }
         }
-
-        // recompute rank for predecessor
         if pos > 0 {
-            let prev_pos = prev[pos] as usize;
-            rank_at[prev_pos] = u32::MAX;
-            let pos_next = next[pos] as usize;
-            debug_assert!(pos_next <= n);
-            let new_rank = vocab.rank_padded(&buf, prev_pos, pos_next - prev_pos);
-            if pos_next > pos && new_rank != ABSENT {
-                rank_at[prev_pos] = new_rank;
-                heap.push(Reverse((new_rank, prev_pos as u32)));
+            let p = prev[pos] as usize;
+            let r = vocab.rank_padded(&buf, p, after - p);
+            rank_at[p] = r;
+            if r != ABSENT {
+                heap.push(Reverse((r, p as u32)));
             }
         }
     }
 
-    // collect result: walk the linked list
-    let mut parts = Vec::with_capacity(active_count + 1);
-    let mut i = 0usize;
+    let mut i = 0;
     while i < n {
-        parts.push(i);
+        out.push(ids[i]);
         i = next[i] as usize;
     }
-    parts.push(n);
+}
+
+/// Part boundaries of `piece`: byte offsets from 0 to its length.
+#[cfg(test)]
+pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
+    let mut ids = Vec::new();
+    if !piece.is_empty() {
+        bpe_encode(piece, vocab, &mut ids);
+    }
+    let mut parts = vec![0];
+    for &id in &ids {
+        let len = vocab.try_decode(id).map_or(1, <[u8]>::len);
+        parts.push(parts.last().unwrap() + len);
+    }
     parts
 }
 
-/// Linear-scan BPE merge for short pieces (`n <= LINEAR_THRESHOLD`).
-///
-/// Equivalent to the heap-based [`byte_pair_merge`] but keeps all scratch state
-/// in fixed-size stack arrays, avoiding the heap allocation and three `Vec`s the
-/// general algorithm needs. The logic mirrors the v2 reference implementation
-/// (find global min rank, merge, recompute the two affected neighbor ranks),
-/// which is O(n*m) but with a tiny constant factor that beats the heap on the
-/// short pieces that dominate real input.
-///
-/// Caller guarantees `3 <= n <= LINEAR_THRESHOLD`.
-///
-/// Fills `parts` with the sub-token boundary offsets and `ids` with the token
-/// id of each part, and returns how many boundaries are valid, so callers
-/// that only need the token *count* never allocate. A part's id is the rank
-/// of the merge that produced it, or the single-byte rank ([`ABSENT`] when the
-/// vocabulary lacks that byte).
-#[allow(clippy::needless_range_loop)] // index loops mirror the Viterbi reference; clearer than iterators
-fn byte_pair_merge_small(
-    piece: &[u8],
-    vocab: &Vocab,
-    parts: &mut [u32; LINEAR_THRESHOLD + 1],
-    ids: &mut [u32; LINEAR_THRESHOLD + 1],
-) -> usize {
-    let n = piece.len();
-    // padded copy so every substring key loads with two word reads
-    let mut buf = [0u8; LINEAR_THRESHOLD + KEY_READ];
-    buf[..n].copy_from_slice(piece);
-
-    // parts[i] = byte offset of the i-th sub-token boundary; plen entries valid.
-    // ranks[i] = rank of the pair (parts[i], parts[i+2]) or u32::MAX if unmergeable.
-    let mut ranks = [u32::MAX; LINEAR_THRESHOLD + 1];
-    for i in 0..=n {
-        parts[i] = i as u32;
-    }
-    for i in 0..n {
-        ids[i] = vocab.rank_single(piece[i]);
-    }
-    let mut plen = n + 1;
-
-    // initialize ranks for all adjacent single-byte pairs
-    for i in 0..n.saturating_sub(1) {
-        ranks[i] = vocab.get_pair(piece[i], piece[i + 1]).unwrap_or(u32::MAX);
-    }
-
-    loop {
-        if plen <= 2 {
-            break;
-        }
-
-        // find the lowest-rank mergeable pair
-        let mut min_rank = u32::MAX;
-        let mut min_idx = 0;
-        for i in 0..plen - 1 {
-            if ranks[i] < min_rank {
-                min_rank = ranks[i];
-                min_idx = i;
-            }
-        }
-        if min_rank == u32::MAX {
-            break;
-        }
-
-        // merge: drop boundary parts[min_idx+1] (and its rank slot)
-        ids[min_idx] = min_rank;
-        for j in min_idx + 1..plen - 1 {
-            parts[j] = parts[j + 1];
-            ranks[j] = ranks[j + 1];
-            ids[j] = ids[j + 1];
-        }
-        plen -= 1;
-
-        // recompute the rank of the pair spanning parts[a]..parts[b]
-        let rank_of = |a: usize, b: usize| {
-            if b < plen {
-                let start = parts[a] as usize;
-                vocab.rank_padded(&buf, start, parts[b] as usize - start)
-            } else {
-                u32::MAX
-            }
-        };
-        // the merged pair at min_idx, then its predecessor
-        ranks[min_idx] = rank_of(min_idx, min_idx + 2);
-        if min_idx > 0 {
-            ranks[min_idx - 1] = rank_of(min_idx - 1, min_idx + 1);
-        }
-    }
-
-    plen
-}
-
-/// BPE-encode a piece, writing tokens directly to result.
+/// BPE-encode a piece, appending its tokens to `out`.
 ///
 /// # Panics
 ///
-/// Panics if a single byte or merged sub-token is missing from `vocab`.
-/// Callers must ensure the vocabulary contains all 256 single bytes.
-pub fn bpe_encode(piece: &[u8], vocab: &Vocab, result: &mut Vec<u32>) {
-    let n = piece.len();
-    if n == 1 {
-        result.push(vocab.get(piece).expect("single byte not in vocab"));
-        return;
+/// Panics if a byte of the piece is missing from the vocabulary.
+pub fn bpe_encode(piece: &[u8], vocab: &Vocab, out: &mut Vec<u32>) {
+    let from = out.len();
+    if piece.len() <= SMALL_MAX {
+        let mut ids = [0u32; SMALL_MAX];
+        let k = merge_small(piece, vocab, &mut ids);
+        out.extend_from_slice(&ids[..k]);
+    } else {
+        merge_heap(piece, vocab, out);
     }
-    if (3..=LINEAR_THRESHOLD).contains(&n) {
-        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
-        let plen = byte_pair_merge_small(piece, vocab, &mut parts, &mut ids);
-        for &id in &ids[..plen - 1] {
-            assert!(id != ABSENT, "single byte not in vocab");
-            result.push(id);
-        }
-        return;
-    }
-
-    let parts = byte_pair_merge(piece, vocab);
-
-    for i in 0..parts.len() - 1 {
-        let key = &piece[parts[i]..parts[i + 1]];
-        result.push(vocab.get(key).expect("merged token not in vocab"));
-    }
+    assert!(!out[from..].contains(&ABSENT), "single byte not in vocab");
 }
 
-/// BPE-encode a piece into a fixed buffer, returning the token count.
-///
-/// # Panics
-///
-/// Panics if `buf` is shorter than the token count (callers pass a buffer of
-/// `piece.len()`, the worst case of one token per byte) or if the vocabulary
-/// is missing a single byte or merged sub-token.
-pub fn bpe_encode_buf(piece: &[u8], vocab: &Vocab, buf: &mut [u32]) -> usize {
-    let n = piece.len();
-    if n == 1 {
-        buf[0] = vocab.get(piece).expect("single byte not in vocab");
-        return 1;
-    }
-    if (3..=LINEAR_THRESHOLD).contains(&n) {
-        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
-        let plen = byte_pair_merge_small(piece, vocab, &mut parts, &mut ids);
-        for (dst, &id) in buf[..plen - 1].iter_mut().zip(&ids) {
-            assert!(id != ABSENT, "single byte not in vocab");
-            *dst = id;
-        }
-        return plen - 1;
-    }
-    let parts = byte_pair_merge(piece, vocab);
-    for i in 0..parts.len() - 1 {
-        let key = &piece[parts[i]..parts[i + 1]];
-        buf[i] = vocab.get(key).expect("merged token not in vocab");
-    }
-    parts.len() - 1
-}
-
-/// Count tokens in a piece without allocating a token vector.
+/// Count the tokens of a piece without keeping them.
+#[cfg(test)]
 pub fn bpe_count(piece: &[u8], vocab: &Vocab) -> usize {
-    let n = piece.len();
-    if n == 1 {
-        return 1;
+    if piece.len() <= SMALL_MAX {
+        let mut ids = [0u32; SMALL_MAX];
+        merge_small(piece, vocab, &mut ids)
+    } else {
+        let mut out = Vec::new();
+        merge_heap(piece, vocab, &mut out);
+        out.len()
     }
-    if (3..=LINEAR_THRESHOLD).contains(&n) {
-        let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
-        return byte_pair_merge_small(piece, vocab, &mut parts, &mut ids) - 1;
-    }
-    byte_pair_merge(piece, vocab).len() - 1
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rustc_hash::FxHashMap;
+    use crate::hash::FxHashMap;
 
     fn make_vocab(entries: Vec<(Vec<u8>, u32)>) -> Vocab {
         Vocab::from_entries(entries)
@@ -490,6 +415,51 @@ mod tests {
                 "mismatch for piece: {:?}",
                 std::str::from_utf8(piece).unwrap_or("<non-utf8>")
             );
+        }
+    }
+
+    #[cfg(feature = "vocab-cl100k_base")]
+    #[test]
+    fn random_pieces_match_v2_at_every_length_class() {
+        let hashmap = crate::encoding::parse_tiktoken_data_for_test();
+        let entries: Vec<_> = hashmap.iter().map(|(k, &v)| (k.clone(), v)).collect();
+        let vocab = Vocab::from_entries(entries);
+        let alphabets: [&[char]; 4] = [
+            &['a', 'e', 'i', 'n', 's', 't', 'r', 'o', ' ', 'E', 'q'],
+            &[
+                '的', '一', '是', '了', '我', '不', '人', '在', '他', '有', '这', '中', '大', '来',
+                '上', '国',
+            ],
+            &[
+                'こ', 'ん', 'に', 'ち', 'は', 'ト', 'ー', 'ク', 'ン', '語', '彙',
+            ],
+            &[
+                'م', 'ر', 'ح', 'ب', 'ا', 'ل', 'ع', '안', '녕', '하', '세', '요', '1', '!', '\n',
+            ],
+        ];
+        let mut x = 0x2545_F491_4F6C_DD1Du64;
+        let mut next = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        for case in 0..6000 {
+            let alpha = alphabets[case % alphabets.len()];
+            let target = 1 + (next() % 200) as usize;
+            let mut s = String::new();
+            while s.len() < target {
+                s.push(alpha[(next() % alpha.len() as u64) as usize]);
+            }
+            let piece = s.as_bytes();
+            assert_eq!(
+                byte_pair_merge(piece, &vocab),
+                v2_byte_pair_merge(piece, &hashmap),
+                "{s:?}"
+            );
+            let mut ids = vec![];
+            bpe_encode(piece, &vocab, &mut ids);
+            assert_eq!(bpe_count(piece, &vocab), ids.len());
         }
     }
 

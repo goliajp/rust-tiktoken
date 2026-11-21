@@ -9,7 +9,7 @@
 //!
 //! Pattern source: <https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py>
 
-use rustc_hash::FxHashMap;
+use crate::hash::FxHashMap;
 
 use crate::bpe::CoreBpe;
 use crate::pretokenize::{FastPath, WhitespaceRules};
