@@ -1,12 +1,13 @@
-//! Window decisions for one classified chunk, as independent chains.
+//! Window decisions for one classified chunk, as two independent chains.
 //!
 //! Each window opens at the previous window's cut, so a single chain of
 //! windows runs at the latency of one decision per window. The chunk is
-//! instead cut at piece starts that need no decision (an ASCII letter
-//! followed by a space or a newline: no rule of any pattern takes a letter
-//! and the whitespace after it into one piece) and each part is decided by
-//! its own chain, the chains interleaved so that their windows overlap. The
-//! chains record piece starts in one bitmap, which is then walked in order.
+//! instead cut near its middle at a piece start that needs no decision (an
+//! ASCII letter followed by a space or a newline: no rule of any pattern
+//! takes a letter and the whitespace after it into one piece), and each half
+//! is decided by its own chain, a window of one after a window of the other,
+//! so that the two overlap. The chains record piece starts in one bitmap,
+//! which is then walked in order.
 
 use std::mem::MaybeUninit;
 
@@ -15,9 +16,7 @@ use super::classify::{Bitmaps, M_CONT, M_L, M_LW, M_NL, M_SP};
 use super::window::{Masks, WindowRules};
 use super::windowed::{PieceSink, scalar_end};
 
-/// Chains per chunk.
-const CHAINS: usize = 2;
-/// Words searched for a chain boundary from its nominal position.
+/// Words searched for the second chain's start from the middle.
 const SEARCH_WORDS: usize = 4;
 
 /// Bit `i` of word `i / 64` set: byte `i` from the chunk start begins a piece.
@@ -108,47 +107,33 @@ pub(super) fn decide_chunk<R: WindowRules, const CONT: bool, S: PieceSink, const
     stop: usize,
     sink: &mut S,
 ) -> usize {
-    // chain i decides from r[i] while r[i] < run[i], keeping starts below
-    // end[i]; the last chain runs to `stop` and keeps everything
-    let mut r = [0usize; CHAINS];
-    let mut run = [0usize; CHAINS];
-    let mut end = [usize::MAX; CHAINS];
-    let mut n = 1;
-    for i in 1..CHAINS {
-        let at = stop * i / CHAINS;
-        if let Some(b) = boundary::<W>(R::CASE, maps, at, r[n - 1], stop) {
-            run[n - 1] = b;
-            end[n - 1] = b;
-            r[n] = b;
-            n += 1;
-        }
-    }
-    run[n - 1] = stop;
+    // chain a decides from 0 while its window start is below `mid`, keeping
+    // starts below `end_a`, and chain b from `mid` while below `stop`,
+    // keeping everything; with no start found near the middle, chain a does
+    // it all
+    let (mid, end_a) = match boundary::<W>(R::CASE, maps, stop / 2, 0, stop) {
+        Some(b) => (b, b),
+        None => (stop, usize::MAX),
+    };
     // window bits stay below `limit`, and `or_at` writes one word past
     let mut starts = Starts::<W>::new(limit / 64 + 1);
-    loop {
-        let mut active = false;
-        for i in 0..CHAINS {
-            if r[i] < run[i] {
-                active = true;
-                r[i] = step::<R, CONT, W>(
-                    pre,
-                    maps,
-                    text,
-                    buf,
-                    start,
-                    limit,
-                    r[i],
-                    end[i],
-                    &mut starts,
-                );
-            }
-        }
-        if !active {
-            break;
-        }
+    let mut step = |r: usize, end: usize| {
+        step::<R, CONT, W>(pre, maps, text, buf, start, limit, r, end, &mut starts)
+    };
+    // plain locals, not arrays indexed in a loop: a chain's next start must
+    // stay in a register, or every window waits on a store and a reload
+    let (mut ra, mut rb) = (0, mid);
+    while ra < mid && rb < stop {
+        ra = step(ra, end_a);
+        rb = step(rb, usize::MAX);
     }
-    let reach = r[n - 1];
+    while ra < mid {
+        ra = step(ra, end_a);
+    }
+    while rb < stop {
+        rb = step(rb, usize::MAX);
+    }
+    let reach = if mid < stop { rb } else { ra };
     walk(&starts, buf, start, reach, sink);
     reach
 }
