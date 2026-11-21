@@ -4,9 +4,9 @@ use crate::encode_loop::Engine;
 use crate::piece_cache;
 use crate::pretokenize::{FastPath, ScalarPreTokenizer, WhitespaceRules};
 use crate::special::SpecialMatcher;
-use crate::vocab::Vocab;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::{pool, split};
+use crate::split;
+use crate::vocab::Vocab;
 
 /// Texts at least this long are cut into chunks and encoded on the worker
 /// pool (see [`set_parallelism`](crate::set_parallelism)). Measured on a
@@ -93,7 +93,7 @@ impl CoreBpe {
         #[cfg(not(target_arch = "wasm32"))]
         if text.len() >= PARALLEL_MIN {
             let mut result = Vec::new();
-            self.encode_chunked(text, split::CHUNK, None, &mut result);
+            split::encode(&self.engine(), text, split::CHUNK, None, &mut result);
             return result;
         }
         let mut result = Vec::with_capacity(text.len() / 3);
@@ -201,7 +201,7 @@ impl CoreBpe {
     pub fn count(&self, text: &str) -> usize {
         #[cfg(not(target_arch = "wasm32"))]
         if text.len() >= PARALLEL_MIN {
-            return self.count_chunked(text, split::CHUNK, None);
+            return split::count(&self.engine(), text, split::CHUNK, None);
         }
         self.engine().count(text)
     }
@@ -291,65 +291,10 @@ impl CoreBpe {
     fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
         #[cfg(not(target_arch = "wasm32"))]
         if text.len() >= PARALLEL_MIN {
-            self.encode_chunked(text, split::CHUNK, None, result);
+            split::encode(&self.engine(), text, split::CHUNK, None, result);
             return;
         }
         self.engine().encode_into(text, result);
-    }
-
-    /// Thread count and chunk boundaries for a parallel run, or `None` to
-    /// stay on this thread. At most `max_chunks` chunks, three per thread
-    /// by default.
-    #[cfg(not(target_arch = "wasm32"))]
-    fn plan(text: &str, chunk: usize, max_chunks: Option<usize>) -> Option<(usize, Vec<usize>)> {
-        let threads = pool::threads();
-        if threads <= 1 {
-            return None;
-        }
-        let max_chunks = max_chunks.unwrap_or(threads * 3);
-        let cuts = split::cuts(text.as_bytes(), chunk, max_chunks);
-        (cuts.len() > 2).then_some((threads, cuts))
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[inline(never)]
-    fn encode_chunked(
-        &self,
-        text: &str,
-        chunk: usize,
-        max_chunks: Option<usize>,
-        result: &mut Vec<u32>,
-    ) {
-        let engine = self.engine();
-        if let Some((threads, cuts)) = Self::plan(text, chunk, max_chunks) {
-            let parts = pool::run(cuts.len() - 1, threads, |i| {
-                let part = &text[cuts[i]..cuts[i + 1]];
-                let mut out = Vec::with_capacity(part.len() / 3);
-                engine.encode_into(part, &mut out);
-                out
-            });
-            if let Some(parts) = parts {
-                pool::concat_into(&parts, threads, result);
-                return;
-            }
-        }
-        result.reserve(text.len() / 3);
-        engine.encode_into(text, result);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[inline(never)]
-    fn count_chunked(&self, text: &str, chunk: usize, max_chunks: Option<usize>) -> usize {
-        let engine = self.engine();
-        if let Some((threads, cuts)) = Self::plan(text, chunk, max_chunks) {
-            let parts = pool::run(cuts.len() - 1, threads, |i| {
-                engine.count(&text[cuts[i]..cuts[i + 1]])
-            });
-            if let Some(parts) = parts {
-                return parts.iter().sum();
-            }
-        }
-        engine.count(text)
     }
 
     /// [`encode`](Self::encode)'s parallel path at any length, with chunks of
@@ -359,7 +304,7 @@ impl CoreBpe {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn __encode_chunks(&self, text: &str, chunk: usize) -> Vec<u32> {
         let mut result = Vec::new();
-        self.encode_chunked(text, chunk, Some(usize::MAX), &mut result);
+        split::encode(&self.engine(), text, chunk, Some(usize::MAX), &mut result);
         result
     }
 
@@ -367,7 +312,7 @@ impl CoreBpe {
     #[doc(hidden)]
     #[cfg(not(target_arch = "wasm32"))]
     pub fn __count_chunks(&self, text: &str, chunk: usize) -> usize {
-        self.count_chunked(text, chunk, Some(usize::MAX))
+        split::count(&self.engine(), text, chunk, Some(usize::MAX))
     }
 }
 

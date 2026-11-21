@@ -1,4 +1,4 @@
-//! Where to cut a long text so that its chunks encode independently.
+//! Encoding a long text as independent chunks, and where to cut it.
 //!
 //! A cut at `b` is valid when the single-threaded scan of the whole text has
 //! a piece starting at `b`, and scanning `text[..b]` and `text[b..]` on their
@@ -24,8 +24,67 @@
 //! The char before `b` is a letter or a newline under all three, which the
 //! digit rule treats like the start of the text.
 
+use crate::encode_loop::Engine;
+use crate::pool;
+
 /// Nominal chunk length in bytes.
 pub(crate) const CHUNK: usize = 8 * 1024;
+
+/// Encode `text` as chunks on the pool, appending to `result`; falls back to
+/// this thread when parallelism is 1, the text has no cut points, or the pool
+/// is busy. At most `max_chunks` chunks, three per thread by default.
+#[inline(never)]
+pub(crate) fn encode(
+    engine: &Engine<'_>,
+    text: &str,
+    chunk: usize,
+    max_chunks: Option<usize>,
+    result: &mut Vec<u32>,
+) {
+    if let Some((threads, cuts)) = plan(text, chunk, max_chunks) {
+        let parts = pool::run(cuts.len() - 1, threads, |i| {
+            let part = &text[cuts[i]..cuts[i + 1]];
+            let mut out = Vec::with_capacity(part.len() / 3);
+            engine.encode_into(part, &mut out);
+            out
+        });
+        if let Some(parts) = parts {
+            pool::concat_into(&parts, threads, result);
+            return;
+        }
+    }
+    result.reserve(text.len() / 3);
+    engine.encode_into(text, result);
+}
+
+/// The counting twin of [`encode`].
+#[inline(never)]
+pub(crate) fn count(
+    engine: &Engine<'_>,
+    text: &str,
+    chunk: usize,
+    max_chunks: Option<usize>,
+) -> usize {
+    if let Some((threads, cuts)) = plan(text, chunk, max_chunks) {
+        let parts = pool::run(cuts.len() - 1, threads, |i| {
+            engine.count(&text[cuts[i]..cuts[i + 1]])
+        });
+        if let Some(parts) = parts {
+            return parts.iter().sum();
+        }
+    }
+    engine.count(text)
+}
+
+/// Thread count and chunk boundaries, or `None` to stay on this thread.
+fn plan(text: &str, chunk: usize, max_chunks: Option<usize>) -> Option<(usize, Vec<usize>)> {
+    let threads = pool::threads();
+    if threads <= 1 {
+        return None;
+    }
+    let cuts = cuts(text.as_bytes(), chunk, max_chunks.unwrap_or(threads * 3));
+    (cuts.len() > 2).then_some((threads, cuts))
+}
 
 /// Chunk boundaries of `b`: `0`, the cuts in increasing order, `b.len()`.
 /// Aims for `min(len / chunk, max_chunks)` chunks; a nominal cut moves
