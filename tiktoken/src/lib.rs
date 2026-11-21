@@ -50,6 +50,8 @@ mod merge;
 mod piece_cache;
 mod pretokenize;
 pub mod pricing;
+mod special;
+mod unicode;
 mod vocab;
 
 pub use bpe::CoreBpe;

@@ -2,7 +2,9 @@
 //!
 //! Each encoding consists of:
 //! - A `.tkv.zst` data file (see [`parse_tkv`] for the format), embedded at compile time
-//! - A regex pattern that splits input text into pieces before BPE processing
+//! - A regex pattern that splits input text into pieces before BPE processing,
+//!   implemented by a hand-written scanner (`FastPath`); the pattern string is
+//!   the definition the scanner is tested against
 //! - A set of special tokens (e.g. `<|endoftext|>`) with designated token ids
 //!
 //! Pattern source: <https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py>
@@ -89,9 +91,8 @@ pub(crate) const GLM5_CHAIN: &[&[u8]] = &[GLM4_TKV, GLM5_TAIL_TKV];
 pub(crate) const P50K_BASE_CHAIN: &[&[u8]] = &[R50K_BASE_TKV, P50K_BASE_TAIL_TKV];
 
 // cl100k pattern: handles English contractions, Unicode letters/numbers, punctuation, whitespace.
-// original tiktoken uses `\s+(?!\S)|\s+` but we use plain `\s+` and emulate the negative
-// lookahead in bpe.rs::adjust_whitespace_end — this lets us use the `regex` crate's DFA engine
-// instead of a slower backtracking engine like fancy-regex or pcre2.
+// original tiktoken uses `\s+(?!\S)|\s+`; the patterns here spell plain `\s+` so the `regex`
+// crate accepts them, and the scanners and their test reference implement the lookahead.
 pub(crate) const CL100K_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
 
 // o200k pattern: similar to cl100k but with finer Unicode category distinctions
@@ -148,8 +149,8 @@ const LLAMA4_PATTERN: &str = MINIMAX_M2_PATTERN;
 // dedicated leading `[\p{Han}]+` branch, then o200k-style case-splitting rules
 // whose letter classes use set intersection to exclude Han (so CJK never mixes
 // into a case-split word), then the digit/punct/whitespace rules shared with
-// o200k. The original ends `\s+(?!\S)|\s+`; the lookahead is emulated via
-// `WhitespaceRules::NewlineFirst` like the other patterns.
+// o200k. The original ends `\s+(?!\S)|\s+`, written here as `\s+` like the
+// other patterns.
 pub(crate) const KIMI_PATTERN: &str = concat!(
     r"[\p{Han}]+",
     r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+",
@@ -200,8 +201,8 @@ pub(crate) const MISTRAL_V3_PATTERN: &str = concat!(
 // mistral v15 (Tekken v15, Mistral Large 4) pattern: v3's, except digits. The
 // upstream rule `\p{N}{1,3}(?=(?:\p{N}{3})*(?!\p{N}))|\p{N}{1,2}` groups a digit
 // run in threes from the right; the lookahead is out of the `regex` crate's
-// reach, so `FastPath::Tekken15` cuts digit runs before the regex runs, and
-// the regex only needs to classify them.
+// reach, so `FastPath::Tekken15` cuts digit runs before any other rule, and
+// the pattern here only needs to classify them.
 pub(crate) const MISTRAL_V15_PATTERN: &str = concat!(
     r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+",
     r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*",
