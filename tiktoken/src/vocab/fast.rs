@@ -11,9 +11,10 @@
 //! Derived entries: a piece that is not a token but merges into 2..=15 ids
 //! is published into a free slot by whichever thread merges it first, up to
 //! `derived_cap` entries. Their stored `hi` carries [`MULTI`], so vocabulary
-//! lookups (exact `hi` compare) never see them; the encode loop looks them
-//! up with [`FastTable::entry`] after its token probe missed. Up to three ids
-//! sit in the slot; more go to a shared append-only arena.
+//! lookups (exact `hi` compare) never see them; the encode loop tests for
+//! them in the home line after its token test fails ([`HomeProbe::lookup`]),
+//! and further down the chain with [`FastTable::entry`]. Up to three ids sit
+//! in the slot; more go to a shared append-only arena.
 //!
 //! Publication: a writer claims an empty slot by swapping `hi` from 0 to
 //! `BUSY_HI`, writes the ids and the real `hi`, and stores `lo` last with
@@ -63,6 +64,14 @@ impl FastSlot {
     #[inline(always)]
     fn id(&self) -> u32 {
         self.w0.load(Ordering::Relaxed) as u32
+    }
+
+    #[inline(always)]
+    fn entry(&self) -> Entry {
+        Entry {
+            w0: self.w0.load(Ordering::Relaxed),
+            w1: self.w1.load(Ordering::Relaxed),
+        }
     }
 }
 
@@ -123,15 +132,37 @@ impl<'a> HomeProbe<'a> {
     /// Same as [`FastTable::home`].
     #[inline(always)]
     pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
-        let [a, b] = &self.line(lo, hi).0;
-        if a.matches(lo, hi) {
-            Some(a.id())
-        } else if b.matches(lo, hi) {
-            Some(b.id())
-        } else {
-            None
+        match self.lookup(lo, hi) {
+            Home::Token(id) => Some(id),
+            _ => None,
         }
     }
+
+    /// The key's home line: a token, a derived entry, or neither. The token
+    /// test is the same as [`home`](Self::home)'s; derived entries are only
+    /// looked for after it fails.
+    #[inline(always)]
+    pub(crate) fn lookup(&self, lo: u64, hi: u64) -> Home {
+        let [a, b] = &self.line(lo, hi).0;
+        if a.matches(lo, hi) {
+            Home::Token(a.id())
+        } else if b.matches(lo, hi) {
+            Home::Token(b.id())
+        } else if a.matches(lo, hi | MULTI) {
+            Home::Derived(a.entry())
+        } else if b.matches(lo, hi | MULTI) {
+            Home::Derived(b.entry())
+        } else {
+            Home::Miss
+        }
+    }
+}
+
+/// What a key's home line holds for it.
+pub(crate) enum Home {
+    Token(u32),
+    Derived(Entry),
+    Miss,
 }
 
 pub(crate) struct FastTable {

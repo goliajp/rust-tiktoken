@@ -20,7 +20,7 @@ use crate::encode_miss;
 use crate::pretokenize::window::{CaseRules, Cl100kRules};
 use crate::pretokenize::windowed::{self, PieceSink};
 use crate::pretokenize::{PreTokenizer, ScalarPreTokenizer, WindowKind};
-use crate::vocab::{FAST_KEY_MAX, HomeProbe, KEY_READ, Vocab, key_in, key_of, key_padded};
+use crate::vocab::{FAST_KEY_MAX, Home, HomeProbe, KEY_READ, Vocab, key_in, key_of, key_padded};
 
 // a real key never has a zero high word
 const NO_KEY: (u64, u64) = (0, 0);
@@ -161,6 +161,24 @@ static KEY_MASKS: KeyMasks = {
     KeyMasks(m)
 };
 
+/// The key of `buf[start..end]` (equal to [`key_padded`]'s), or `None` past
+/// [`FAST_KEY_MAX`] bytes.
+#[inline(always)]
+fn piece_key(buf: &[u8], start: usize, end: usize) -> Option<(u64, u64)> {
+    let len = end - start;
+    if len > FAST_KEY_MAX {
+        return None;
+    }
+    debug_assert!(start + KEY_READ <= buf.len());
+    // SAFETY: the sink contract leaves KEY_READ bytes readable from `start`
+    let w = unsafe { buf.as_ptr().add(start).cast::<[u64; 2]>().read_unaligned() };
+    let m = &KEY_MASKS.0[len];
+    let lo = u64::from_le(w[0]) & m[0];
+    let hi = (u64::from_le(w[1]) & m[1]) | ((len as u64) << 56);
+    debug_assert_eq!((lo, hi), key_padded(buf, start, len));
+    Some((lo, hi))
+}
+
 /// The fast-table probe of a piece: `Ok(id)` on a token hit in the home line,
 /// otherwise the key to hand to the miss path (`NO_KEY` past
 /// [`FAST_KEY_MAX`] bytes). The key equals [`key_padded`]'s.
@@ -238,10 +256,11 @@ fn grow(out: &mut Vec<u32>, len: usize, need: usize) {
 }
 
 /// Writes the ids of consecutive pieces `offs[i]..offs[i + 1]` from `i` on
-/// while the home-line probe answers them, one id each after `len` ids at
-/// `ptr`. Stops at the first piece it does not answer, and returns that
-/// piece's index (`offs.len() - 1` when all are done), the new length and
-/// the piece's key. A leaf, so the loop keeps everything in registers.
+/// while their home lines answer them (a token, or a derived entry of up to
+/// three ids), after `len` ids at `ptr`. Stops at the first piece it does
+/// not answer, and returns that piece's index (`offs.len() - 1` when all are
+/// done), the new length and the piece's key. A leaf, so the loop keeps
+/// everything in registers.
 #[inline(never)]
 fn encode_hits(
     home: HomeProbe<'_>,
@@ -255,15 +274,28 @@ fn encode_hits(
     while i + 1 < offs.len() {
         // SAFETY: i + 1 < offs.len()
         let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
-        match probe(&home, buf, start + a as usize, start + b as usize) {
-            Ok(id) => {
-                // SAFETY: the caller made room for one id per piece
+        let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
+            return (i, len, NO_KEY);
+        };
+        // SAFETY (writes): the caller made room for three ids per piece
+        match home.lookup(lo, hi) {
+            Home::Token(id) => {
                 unsafe { ptr.add(len).write(id) };
                 len += 1;
-                i += 1;
             }
-            Err(key) => return (i, len, key),
+            // ids past the entry's count are overwritten later or left past
+            // the end
+            Home::Derived(e) if e.is_inline() => {
+                unsafe {
+                    let p = ptr.add(len);
+                    p.write(e.first());
+                    p.add(1).cast::<u64>().write_unaligned(e.rest().to_le());
+                }
+                len += e.len();
+            }
+            _ => return (i, len, (lo, hi)),
         }
+        i += 1;
     }
     (i, len, NO_KEY)
 }
@@ -281,13 +313,15 @@ fn count_hits(
     while i + 1 < offs.len() {
         // SAFETY: i + 1 < offs.len()
         let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
-        match probe(&home, buf, start + a as usize, start + b as usize) {
-            Ok(_) => {
-                count += 1;
-                i += 1;
-            }
-            Err(key) => return (i, count, key),
+        let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
+            return (i, count, NO_KEY);
+        };
+        match home.lookup(lo, hi) {
+            Home::Token(_) => count += 1,
+            Home::Derived(e) => count += e.len(),
+            Home::Miss => return (i, count, (lo, hi)),
         }
+        i += 1;
     }
     (i, count, NO_KEY)
 }
@@ -346,7 +380,7 @@ impl PieceSink for EncodeSink<'_, '_> {
     fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
         let mut i = 0;
         while i + 1 < offs.len() {
-            let need = (offs.len() - i).max(ROOM);
+            let need = (3 * (offs.len() - i)).max(ROOM);
             if self.cap - self.len < need {
                 grow(self.out, self.len, need);
                 self.reload();
