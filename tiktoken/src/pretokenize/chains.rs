@@ -162,7 +162,13 @@ fn step<R: WindowRules, const CONT: bool, const W: usize>(
     debug_assert!(base < buf.len());
     // SAFETY: the window lies inside the classified bytes of `buf`
     let win = unsafe { buf.get_unchecked(base..) };
-    let (s, cut) = R::decide::<CONT>(&m, false, win);
+    // most windows of a chunk with some non-ASCII bytes have none of their
+    // own, and the rules without continuation bytes are much shorter
+    let (s, cut) = if CONT && m.cont & m.v != 0 {
+        R::decide::<true>(&m, false, win)
+    } else {
+        R::decide::<false>(&m, false, win)
+    };
     if cut == 0 {
         starts.or_at(r, 1);
         let e = scalar_end(pre, text, base) - start;
