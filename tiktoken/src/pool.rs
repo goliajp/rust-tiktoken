@@ -7,9 +7,8 @@
 //! too, so a job uses `threads - 1` pool workers.
 //!
 //! After a job a worker spins for twice the job's duration (at most
-//! [`SPIN_MAX`]) so back-to-back calls find it awake, then parks. A parked
-//! pool is woken as a tree: the caller unparks two workers and every worker
-//! that joins unparks two more.
+//! [`SPIN_MAX`]) so back-to-back calls find it awake, then parks; the caller
+//! of the next job unparks it.
 
 use std::any::Any;
 use std::cell::UnsafeCell;
@@ -143,6 +142,39 @@ pub(crate) fn run<R: Send>(
     )
 }
 
+/// Append the concatenation of `parts` to `out`, copying the parts on the
+/// pool. A fresh output buffer of this size is not yet mapped, and its first
+/// touch costs a page fault per page; spreading the copy spreads the faults.
+pub(crate) fn concat_into(parts: &[Vec<u32>], threads: usize, out: &mut Vec<u32>) {
+    let mut offsets = Vec::with_capacity(parts.len());
+    let mut total = 0;
+    for p in parts {
+        offsets.push(total);
+        total += p.len();
+    }
+    out.reserve(total);
+    let base = out.len();
+    let dst = SendPtr(out.as_mut_ptr().wrapping_add(base));
+    let copy = |i: usize| {
+        let dst = &dst;
+        // SAFETY: `reserve` made room for `total` elements past `base`, and
+        // part `i` goes to its own range `offsets[i]..offsets[i] + len`
+        unsafe {
+            std::ptr::copy_nonoverlapping(parts[i].as_ptr(), dst.0.add(offsets[i]), parts[i].len())
+        };
+    };
+    if run(parts.len(), threads, copy).is_none() {
+        (0..parts.len()).for_each(copy);
+    }
+    // SAFETY: every element in `base..base + total` was written above
+    unsafe { out.set_len(base + total) };
+}
+
+struct SendPtr(*mut u32);
+
+// SAFETY: the threads behind it write disjoint ranges
+unsafe impl Sync for SendPtr {}
+
 struct Slot<R>(UnsafeCell<Option<R>>);
 
 // SAFETY: each slot is written by one thread and read after the job is done
@@ -196,6 +228,16 @@ struct Worker {
     sleeping: AtomicBool,
 }
 
+impl Worker {
+    fn wake(&self) {
+        if self.sleeping.swap(false, SeqCst)
+            && let Some(t) = self.thread.get()
+        {
+            t.unpark();
+        }
+    }
+}
+
 struct Pool {
     busy: AtomicBool,
     epoch: Padded<AtomicU64>,
@@ -233,8 +275,11 @@ impl Pool {
         let ptr = (job as *const Job<'_>).cast_mut().cast::<Job<'static>>();
         self.job.store(ptr, SeqCst);
         self.epoch.0.fetch_add(1, SeqCst);
-        self.wake(0, workers);
-        self.wake(1, workers);
+        // a wake-up tree (each woken worker waking two more) measured no
+        // faster than waking everyone from here
+        for w in &self.workers[..workers] {
+            w.wake();
+        }
         job.work();
         job.wait_done();
         self.job.store(std::ptr::null_mut(), SeqCst);
@@ -273,18 +318,6 @@ impl Pool {
         have.min(want)
     }
 
-    fn wake(&self, idx: usize, limit: usize) {
-        if idx >= limit {
-            return;
-        }
-        let w = &self.workers[idx];
-        if w.sleeping.swap(false, SeqCst)
-            && let Some(t) = w.thread.get()
-        {
-            t.unpark();
-        }
-    }
-
     fn worker_main(&'static self, idx: usize, mut seen: u64) {
         let mut spin = Duration::ZERO;
         loop {
@@ -296,8 +329,6 @@ impl Pool {
             if let Some(job) = unsafe { ptr.as_ref() }
                 && idx < job.workers
             {
-                self.wake(2 * idx + 2, job.workers);
-                self.wake(2 * idx + 3, job.workers);
                 job.work();
                 spin = (job.start.elapsed() * 2).min(SPIN_MAX);
             }

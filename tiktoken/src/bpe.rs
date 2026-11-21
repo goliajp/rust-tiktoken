@@ -327,10 +327,7 @@ impl CoreBpe {
                 out
             });
             if let Some(parts) = parts {
-                result.reserve(parts.iter().map(Vec::len).sum());
-                for part in &parts {
-                    result.extend_from_slice(part);
-                }
+                pool::concat_into(&parts, threads, result);
                 return;
             }
         }
