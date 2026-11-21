@@ -46,7 +46,9 @@
 
 mod bpe;
 mod encode_loop;
+mod encode_miss;
 pub mod encoding;
+mod hash;
 mod merge;
 mod piece_cache;
 mod pretokenize;

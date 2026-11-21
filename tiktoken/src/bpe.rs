@@ -1,4 +1,4 @@
-use rustc_hash::FxHashMap;
+use crate::hash::FxHashMap;
 
 use crate::encode_loop::Engine;
 #[cfg(feature = "parallel")]
@@ -319,8 +319,26 @@ impl CoreBpe {
     }
 
     #[cfg(test)]
+    pub(crate) fn vocab(&self) -> &Vocab {
+        &self.vocab
+    }
+
+    #[cfg(test)]
     pub(crate) fn pre_tokenizer(&self) -> &ScalarPreTokenizer {
         &self.pre_tokenizer
+    }
+
+    /// Forget the merge results this instance shares between threads, so
+    /// the next encode of any text starts as if none had been seen. For
+    /// benchmarks of first-pass encoding; not part of the API.
+    ///
+    /// # Safety
+    ///
+    /// No other thread may encode with this instance until it returns; a
+    /// concurrent encode may return wrong tokens.
+    #[doc(hidden)]
+    pub unsafe fn __reset_shared_cache(&self) {
+        self.vocab.clear_derived();
     }
 
     fn engine(&self) -> Engine<'_> {

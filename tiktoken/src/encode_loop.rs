@@ -11,8 +11,7 @@
 //! one generic or `Option`-driven loop changed that and cost up to 20% on
 //! some inputs. `count` stays `#[inline]` so it can inline into its caller.
 
-use crate::merge;
-use crate::piece_cache;
+use crate::encode_miss;
 use crate::pretokenize::{PreTokenizer, ScalarPreTokenizer};
 use crate::vocab::{FAST_KEY_MAX, KEY_READ, Vocab, key_in, key_of};
 
@@ -73,41 +72,18 @@ impl Engine<'_> {
         count
     }
 
-    /// Rank of a piece whose home-line probe missed, reusing its packed key.
     #[inline(always)]
-    fn rank(&self, piece: &[u8], key: (u64, u64)) -> Option<u32> {
-        if key == NO_KEY {
-            self.vocab.get(piece)
-        } else {
-            self.vocab.get_key(key.0, key.1)
-        }
+    fn miss_key(key: (u64, u64)) -> encode_miss::Key {
+        (key != NO_KEY).then_some(key)
     }
 
     #[inline(never)]
     fn encode_piece(&self, piece: &[u8], key: (u64, u64), out: &mut Vec<u32>) {
-        let vocab = self.vocab;
-        if let Some(token) = self.rank(piece, key) {
-            out.push(token);
-        } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
-            piece_cache::encode_piece(self.cache_id, piece, out, |buf| {
-                merge::bpe_encode_buf(piece, vocab, buf)
-            });
-        } else {
-            merge::bpe_encode(piece, vocab, out);
-        }
+        encode_miss::encode(self.vocab, self.cache_id, piece, Self::miss_key(key), out);
     }
 
     #[inline(never)]
     fn count_piece(&self, piece: &[u8], key: (u64, u64)) -> usize {
-        let vocab = self.vocab;
-        if self.rank(piece, key).is_some() {
-            1
-        } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
-            piece_cache::count_piece(self.cache_id, piece, |buf| {
-                merge::bpe_encode_buf(piece, vocab, buf)
-            })
-        } else {
-            merge::bpe_count(piece, vocab)
-        }
+        encode_miss::count(self.vocab, self.cache_id, piece, Self::miss_key(key))
     }
 }

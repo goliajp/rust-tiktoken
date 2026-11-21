@@ -68,7 +68,6 @@ vocab-minimax_m2 = ["dep:tiktoken-vocab-minimax", "tiktoken-vocab-minimax/minima
 
 [dependencies]
 rayon = { version = "^1", optional = true }
-rustc-hash = "^2"
 ruzstd = "^0.9"
 tiktoken-vocab-openai = { version = "1.0.0", path = "../vocabs/openai", optional = true }
 tiktoken-vocab-meta = { version = "1.0.0", path = "../vocabs/meta", optional = true }
