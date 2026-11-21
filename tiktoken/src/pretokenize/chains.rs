@@ -21,24 +21,41 @@ const CHAINS: usize = 2;
 const SEARCH_WORDS: usize = 4;
 
 /// Bit `i` of word `i / 64` set: byte `i` from the chunk start begins a piece.
-pub(super) struct Starts<const W: usize>([u64; W]);
+/// Only the first `len` words are in use (and initialized).
+pub(super) struct Starts<const W: usize> {
+    words: MaybeUninit<[u64; W]>,
+    len: usize,
+}
 
 impl<const W: usize> Starts<W> {
+    /// `len` zeroed words.
     #[inline(always)]
-    pub(super) fn new() -> Self {
-        Self([0; W])
+    pub(super) fn new(len: usize) -> Self {
+        debug_assert!(len <= W);
+        let mut words = MaybeUninit::<[u64; W]>::uninit();
+        // SAFETY: the first `len` of the W words
+        unsafe { words.as_mut_ptr().cast::<u64>().write_bytes(0, len) };
+        Self { words, len }
     }
 
-    /// Or in `s`, bit 0 standing for byte `at`. Needs `at / 64 + 1 < W`.
+    /// The words in use.
+    #[inline(always)]
+    fn words(&self) -> &[u64] {
+        // SAFETY: `new` initialized the first `len` words
+        unsafe { std::slice::from_raw_parts(self.words.as_ptr().cast::<u64>(), self.len) }
+    }
+
+    /// Or in `s`, bit 0 standing for byte `at`. Needs `at / 64 + 1 < len`.
     #[inline(always)]
     fn or_at(&mut self, at: usize, s: u64) {
         let (k, sh) = (at >> 6, (at & 63) as u32);
-        debug_assert!(k + 1 < W);
-        // SAFETY: the caller keeps `at` below `64 * (W - 1)`
+        debug_assert!(k + 1 < self.len);
+        // SAFETY: the caller keeps `at` below `64 * (len - 1)`
         unsafe {
-            *self.0.get_unchecked_mut(k) |= s << sh;
+            let w = self.words.as_mut_ptr().cast::<u64>();
+            *w.add(k) |= s << sh;
             // two shifts: a shift by 64 is not a no-op
-            *self.0.get_unchecked_mut(k + 1) |= (s >> 1) >> (63 - sh);
+            *w.add(k + 1) |= (s >> 1) >> (63 - sh);
         }
     }
 }
@@ -107,7 +124,8 @@ pub(super) fn decide_chunk<R: WindowRules, const CONT: bool, S: PieceSink, const
         }
     }
     run[n - 1] = stop;
-    let mut starts = Starts::<W>::new();
+    // window bits stay below `limit`, and `or_at` writes one word past
+    let mut starts = Starts::<W>::new(limit / 64 + 1);
     loop {
         let mut active = false;
         for i in 0..CHAINS {
@@ -230,7 +248,7 @@ fn walk<S: PieceSink, const W: usize>(
     let mut pos = MaybeUninit::<[u16; POS_CAP]>::uninit();
     let pos = pos.as_mut_ptr().cast::<u16>();
     let mut n = 0;
-    for (k, &word) in starts.0.iter().enumerate().take(reach.div_ceil(64)) {
+    for (k, &word) in starts.words().iter().enumerate().take(reach.div_ceil(64)) {
         n = flatten(word, k, pos, n);
         if n >= POS_BATCH {
             // SAFETY: entries 0..n are written
