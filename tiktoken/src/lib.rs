@@ -232,7 +232,7 @@ pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
 /// Set how many threads one `encode` / `count` call may use on a long text,
 /// the calling thread included.
 ///
-/// Texts of 64 KiB and more are cut into chunks and encoded on a
+/// Texts of 32 KiB and more are cut into chunks and encoded on a
 /// process-wide pool of worker threads, created on the first such call. The
 /// default is the number of performance cores (all cores where the system
 /// does not tell them apart), or the `TIKTOKEN_THREADS` environment variable

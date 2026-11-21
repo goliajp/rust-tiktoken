@@ -9,9 +9,11 @@ use crate::vocab::Vocab;
 use crate::{pool, split};
 
 /// Texts at least this long are cut into chunks and encoded on the worker
-/// pool (see [`set_parallelism`](crate::set_parallelism)).
+/// pool (see [`set_parallelism`](crate::set_parallelism)). Measured on a
+/// 10-performance-core M4 Pro, four 8 KiB chunks already beat one thread
+/// 2-3x, including when the workers are parked and must be woken first.
 #[cfg(not(target_arch = "wasm32"))]
-const PARALLEL_MIN: usize = 64 * 1024;
+const PARALLEL_MIN: usize = 32 * 1024;
 
 /// A Byte Pair Encoding tokenizer engine.
 ///

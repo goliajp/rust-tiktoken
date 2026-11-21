@@ -6,7 +6,7 @@
 use std::sync::LazyLock;
 
 const SERIAL: usize = usize::MAX;
-const PARALLEL_MIN: usize = 64 * 1024;
+const PARALLEL_MIN: usize = 32 * 1024;
 
 static FIXTURE_TEXTS: LazyLock<Vec<String>> = LazyLock::new(|| {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
