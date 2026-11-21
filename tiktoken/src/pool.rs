@@ -101,79 +101,89 @@ pub(crate) fn run<R: Send>(
     threads: usize,
     f: impl Fn(usize) -> R + Sync,
 ) -> Option<Vec<R>> {
+    Some(session()?.run(n, threads, |i, _| f(i)))
+}
+
+/// Hold the pool for several jobs in a row, or `None` if it is busy.
+pub(crate) fn session() -> Option<Session> {
     let pool = POOL.get_or_init(Pool::new);
-    if pool
-        .busy
+    pool.busy
         .compare_exchange(false, true, Acquire, Relaxed)
-        .is_err()
-    {
-        return None;
+        .is_ok()
+        // lazily: a `Session` built and dropped on failure would release
+        // the holder's claim
+        .then(|| Session { pool })
+}
+
+/// The pool, held until dropped; no other thread can start a job meanwhile.
+pub(crate) struct Session {
+    pool: &'static Pool,
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.pool.busy.store(false, Release);
     }
-    let workers = threads.min(n).min(MAX_THREADS).saturating_sub(1);
-    let slots: Vec<Slot<R>> = (0..n).map(|_| Slot(UnsafeCell::new(None))).collect();
-    let call = |i: usize| {
-        let r = f(i);
-        // SAFETY: index `i` is claimed by exactly one thread
-        unsafe { *slots[i].0.get() = Some(r) };
-    };
-    let job = Job {
-        next: AtomicUsize::new(0),
-        n,
-        pending: AtomicUsize::new(n),
-        workers,
-        start: Instant::now(),
-        run: &call,
-        panic: Mutex::new(None),
-    };
-    pool.dispatch(&job);
-    pool.busy.store(false, Release);
-    if let Some(p) = job
-        .panic
-        .into_inner()
-        .unwrap_or_else(PoisonError::into_inner)
-    {
-        panic::resume_unwind(p);
-    }
-    Some(
+}
+
+impl Session {
+    /// Run `f(i, me)` for `i` in `0..n` and return the results in index
+    /// order. `me` names the thread that runs the call: 0 for the caller,
+    /// `1..threads` for pool workers, the same in every job of the session.
+    /// A panic in any call is re-raised here after every other index has
+    /// finished.
+    pub(crate) fn run<R: Send>(
+        &self,
+        n: usize,
+        threads: usize,
+        f: impl Fn(usize, usize) -> R + Sync,
+    ) -> Vec<R> {
+        let slots: Vec<Slot<R>> = (0..n).map(|_| Slot(UnsafeCell::new(None))).collect();
+        let call = |i: usize, me: usize| {
+            let r = f(i, me);
+            // SAFETY: index `i` is claimed by exactly one thread
+            unsafe { *slots[i].0.get() = Some(r) };
+        };
+        self.exec(n, threads, false, &call);
         slots
             .into_iter()
             .map(|s| s.0.into_inner().unwrap_or_else(|| unreachable!()))
-            .collect(),
-    )
-}
-
-/// Append the concatenation of `parts` to `out`, copying the parts on the
-/// pool. A fresh output buffer of this size is not yet mapped, and its first
-/// touch costs a page fault per page; spreading the copy spreads the faults.
-pub(crate) fn concat_into(parts: &[Vec<u32>], threads: usize, out: &mut Vec<u32>) {
-    let mut offsets = Vec::with_capacity(parts.len());
-    let mut total = 0;
-    for p in parts {
-        offsets.push(total);
-        total += p.len();
+            .collect()
     }
-    out.reserve(total);
-    let base = out.len();
-    let dst = SendPtr(out.as_mut_ptr().wrapping_add(base));
-    let copy = |i: usize| {
-        let dst = &dst;
-        // SAFETY: `reserve` made room for `total` elements past `base`, and
-        // part `i` goes to its own range `offsets[i]..offsets[i] + len`
-        unsafe {
-            std::ptr::copy_nonoverlapping(parts[i].as_ptr(), dst.0.add(offsets[i]), parts[i].len())
+
+    /// Run `f(i, me)` for `i` in `0..n`, where each thread first takes the index
+    /// equal to its `me` (see [`run`](Self::run)), then any left over: work
+    /// that reads what thread `i` wrote in an earlier job of the session
+    /// finds it in that thread's cache.
+    pub(crate) fn run_affine(&self, n: usize, threads: usize, f: impl Fn(usize, usize) + Sync) {
+        self.exec(n, threads, true, &f);
+    }
+
+    fn exec(&self, n: usize, threads: usize, affine: bool, run: &(dyn Fn(usize, usize) + Sync)) {
+        let job = Job {
+            next: AtomicUsize::new(0),
+            claimed: if affine {
+                (0..n).map(|_| AtomicBool::new(false)).collect()
+            } else {
+                Box::default()
+            },
+            n,
+            pending: AtomicUsize::new(n),
+            workers: threads.min(n).min(MAX_THREADS).saturating_sub(1),
+            start: Instant::now(),
+            run,
+            panic: Mutex::new(None),
         };
-    };
-    if run(parts.len(), threads, copy).is_none() {
-        (0..parts.len()).for_each(copy);
+        self.pool.dispatch(&job);
+        if let Some(p) = job
+            .panic
+            .into_inner()
+            .unwrap_or_else(PoisonError::into_inner)
+        {
+            panic::resume_unwind(p);
+        }
     }
-    // SAFETY: every element in `base..base + total` was written above
-    unsafe { out.set_len(base + total) };
 }
-
-struct SendPtr(*mut u32);
-
-// SAFETY: the threads behind it write disjoint ranges
-unsafe impl Sync for SendPtr {}
 
 struct Slot<R>(UnsafeCell<Option<R>>);
 
@@ -182,28 +192,47 @@ unsafe impl<R: Send> Sync for Slot<R> {}
 
 struct Job<'a> {
     next: AtomicUsize,
+    /// Per index, whether a thread has taken it; empty unless the job is
+    /// affine.
+    claimed: Box<[AtomicBool]>,
     n: usize,
     pending: AtomicUsize,
     /// Pool workers allowed to join: those with a smaller index.
     workers: usize,
     start: Instant,
-    run: &'a (dyn Fn(usize) + Sync),
+    run: &'a (dyn Fn(usize, usize) + Sync),
     panic: Mutex<Option<Box<dyn Any + Send>>>,
 }
 
 impl Job<'_> {
-    fn work(&self) {
-        loop {
-            let i = self.next.fetch_add(1, Relaxed);
-            if i >= self.n {
-                return;
+    /// Take and run indices until none is left; `me` is the calling
+    /// thread's number.
+    fn work(&self, me: usize) {
+        if self.claimed.is_empty() {
+            loop {
+                let i = self.next.fetch_add(1, Relaxed);
+                if i >= self.n {
+                    return;
+                }
+                self.call(i, me);
             }
-            if let Err(p) = panic::catch_unwind(AssertUnwindSafe(|| (self.run)(i))) {
-                let mut first = self.panic.lock().unwrap_or_else(PoisonError::into_inner);
-                first.get_or_insert(p);
-            }
-            self.pending.fetch_sub(1, Release);
         }
+        if me < self.n && !self.claimed[me].swap(true, Relaxed) {
+            self.call(me, me);
+        }
+        for i in 0..self.n {
+            if !self.claimed[i].load(Relaxed) && !self.claimed[i].swap(true, Relaxed) {
+                self.call(i, me);
+            }
+        }
+    }
+
+    fn call(&self, i: usize, me: usize) {
+        if let Err(p) = panic::catch_unwind(AssertUnwindSafe(|| (self.run)(i, me))) {
+            let mut first = self.panic.lock().unwrap_or_else(PoisonError::into_inner);
+            first.get_or_insert(p);
+        }
+        self.pending.fetch_sub(1, Release);
     }
 
     fn wait_done(&self) {
@@ -269,7 +298,7 @@ impl Pool {
     fn dispatch(&'static self, job: &Job<'_>) {
         let workers = self.spawn_up_to(job.workers);
         if workers == 0 {
-            job.work();
+            job.work(0);
             return;
         }
         let ptr = (job as *const Job<'_>).cast_mut().cast::<Job<'static>>();
@@ -280,7 +309,7 @@ impl Pool {
         for w in &self.workers[..workers] {
             w.wake();
         }
-        job.work();
+        job.work(0);
         job.wait_done();
         self.job.store(std::ptr::null_mut(), SeqCst);
         while self.inside.0.load(SeqCst) != 0 {
@@ -292,10 +321,10 @@ impl Pool {
     #[cfg(miri)]
     fn dispatch(&'static self, job: &Job<'_>) {
         thread::scope(|s| {
-            for _ in 0..job.workers {
-                s.spawn(|| job.work());
+            for k in 0..job.workers {
+                s.spawn(move || job.work(k + 1));
             }
-            job.work();
+            job.work(0);
         });
     }
 
@@ -329,7 +358,7 @@ impl Pool {
             if let Some(job) = unsafe { ptr.as_ref() }
                 && idx < job.workers
             {
-                job.work();
+                job.work(idx + 1);
                 spin = (job.start.elapsed() * 2).min(SPIN_MAX);
             }
             self.inside.0.fetch_sub(1, SeqCst);
@@ -406,5 +435,27 @@ mod tests {
         let inner = run_now(4, 4, |_| run(2, 2, |i| i).is_none());
         // the pool is busy for the outer job's whole duration
         assert!(inner.iter().all(|&refused| refused));
+    }
+
+    #[test]
+    fn a_session_holds_the_pool_across_jobs() {
+        let s = loop {
+            if let Some(s) = session() {
+                break s;
+            }
+            thread::yield_now();
+        };
+        let owners = s.run(16, 4, |_, me| me);
+        assert!(owners.iter().all(|&me| me < 4));
+        // refused attempts leave the holder's claim in place
+        assert!(run(2, 2, |i| i).is_none());
+        assert!(session().is_none());
+        let hits: Vec<AtomicUsize> = (0..4).map(|_| AtomicUsize::new(0)).collect();
+        s.run_affine(4, 4, |i, _| {
+            hits[i].fetch_add(1, Relaxed);
+        });
+        assert!(hits.iter().all(|h| h.load(Relaxed) == 1));
+        drop(s);
+        assert_eq!(run_now(3, 3, |i| i), vec![0, 1, 2]);
     }
 }

@@ -24,6 +24,10 @@
 //! The char before `b` is a letter or a newline under all three, which the
 //! digit rule treats like the start of the text.
 
+use std::cell::RefCell;
+use std::sync::atomic::Ordering::Relaxed;
+use std::sync::atomic::{AtomicPtr, AtomicU64};
+
 use crate::encode_loop::Engine;
 use crate::pool;
 
@@ -33,6 +37,11 @@ pub(crate) const CHUNK: usize = 8 * 1024;
 /// Encode `text` as chunks on the pool, appending to `result`; falls back to
 /// this thread when parallelism is 1, the text has no cut points, or the pool
 /// is busy. At most `max_chunks` chunks, three per thread by default.
+///
+/// Each thread appends its chunks' ids to a buffer of its own that lives
+/// across calls, then copies them into `result` itself. A fresh buffer per
+/// chunk, read back by whichever thread did the copy, cost about half again
+/// the encoding time of the chunk: its lines were last owned by other cores.
 #[inline(never)]
 pub(crate) fn encode(
     engine: &Engine<'_>,
@@ -41,21 +50,97 @@ pub(crate) fn encode(
     max_chunks: Option<usize>,
     result: &mut Vec<u32>,
 ) {
-    if let Some((threads, cuts)) = plan(text, chunk, max_chunks) {
-        let parts = pool::run(cuts.len() - 1, threads, |i| {
+    if let Some((threads, cuts)) = plan(text, chunk, max_chunks)
+        && let Some(session) = pool::session()
+    {
+        let job = NEXT_JOB.fetch_add(1, Relaxed);
+        let bufs: Vec<AtomicPtr<u32>> = (0..threads).map(|_| AtomicPtr::default()).collect();
+        let parts = session.run(cuts.len() - 1, threads, |i, me| {
             let part = &text[cuts[i]..cuts[i + 1]];
-            let mut out = Vec::with_capacity(part.len() / 3);
-            engine.encode_into(part, &mut out);
-            out
+            SCRATCH.with_borrow_mut(|s| {
+                if s.job != job {
+                    s.job = job;
+                    s.ids.clear();
+                }
+                let start = s.ids.len();
+                s.ids.reserve(part.len() / 3);
+                engine.encode_into(part, &mut s.ids);
+                bufs[me].store(s.ids.as_mut_ptr(), Relaxed);
+                Part {
+                    owner: me,
+                    start,
+                    len: s.ids.len() - start,
+                }
+            })
         });
-        if let Some(parts) = parts {
-            pool::concat_into(&parts, threads, result);
-            return;
+        let mut mine = vec![Vec::new(); threads];
+        let mut total = 0;
+        for (i, p) in parts.iter().enumerate() {
+            mine[p.owner].push((i, total));
+            total += p.len;
         }
+        result.reserve(total);
+        let base = result.len();
+        let dst = SendPtr(result.as_mut_ptr().wrapping_add(base));
+        session.run_affine(threads, threads, |owner, me| {
+            let dst = &dst;
+            // the job's completion ordered the store after the owner's last
+            // append before this load
+            let src = bufs[owner].load(Relaxed);
+            for &(i, at) in &mine[owner] {
+                let p = &parts[i];
+                // SAFETY: `src` is the owner's buffer, which nobody touches
+                // until its next job and which holds part `i` at `p.start`;
+                // `reserve` made room for `total` ids past `base`, and part
+                // `i` goes to its own range `at..at + p.len`
+                unsafe { std::ptr::copy_nonoverlapping(src.add(p.start), dst.0.add(at), p.len) };
+            }
+            if me == owner {
+                SCRATCH.with_borrow_mut(|s| {
+                    if s.ids.capacity() > SCRATCH_KEEP {
+                        s.ids = Vec::new();
+                    }
+                });
+            }
+        });
+        // SAFETY: every element in `base..base + total` was written above
+        unsafe { result.set_len(base + total) };
+        return;
     }
     result.reserve(text.len() / 3);
     engine.encode_into(text, result);
 }
+
+static NEXT_JOB: AtomicU64 = AtomicU64::new(1);
+/// Largest scratch buffer a thread keeps after copying out its ids. A
+/// buffer whose ids another thread copied stays until its owner's next job.
+const SCRATCH_KEEP: usize = 1 << 18;
+
+/// Where a chunk's ids went: `len` ids at `start` in thread `owner`'s
+/// scratch buffer.
+struct Part {
+    owner: usize,
+    start: usize,
+    len: usize,
+}
+
+struct Scratch {
+    /// The job whose ids `ids` holds; a thread clears it when it first
+    /// takes a chunk of a new job.
+    job: u64,
+    ids: Vec<u32>,
+}
+
+thread_local! {
+    static SCRATCH: RefCell<Scratch> = const {
+        RefCell::new(Scratch { job: 0, ids: Vec::new() })
+    };
+}
+
+struct SendPtr(*mut u32);
+
+// SAFETY: the threads behind it write disjoint ranges
+unsafe impl Sync for SendPtr {}
 
 /// The counting twin of [`encode`].
 #[inline(never)]
