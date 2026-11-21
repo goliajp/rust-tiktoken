@@ -209,6 +209,15 @@ fn load_for<R: WindowRules, const W: usize>(
 #[inline(always)]
 fn dense(chunk: &[u8]) -> bool {
     let probe = &chunk[..chunk.len().min(DENSE_PROBE)];
+    // most text is ASCII: one pass of ors before counting anything
+    let any = probe
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .fold(0, |a, w| a | u64::from_le_bytes(*w));
+    if any & 0x8080_8080_8080_8080 == 0 {
+        return false;
+    }
     let hi: u32 = probe
         .as_chunks::<8>()
         .0
