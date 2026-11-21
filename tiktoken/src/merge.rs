@@ -8,7 +8,7 @@
 //! successor, and a scan for the leftmost minimum each round. Longer pieces
 //! use a min-heap with lazy deletion.
 
-use crate::vocab::{ABSENT, KEY_READ, Vocab};
+use crate::vocab::{ABSENT, Atoms, KEY_READ, Vocab, char_len};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
@@ -44,7 +44,12 @@ fn block_min(rank: &[u32], b: usize) -> u32 {
 /// returns the part count. A byte missing from the vocabulary yields
 /// [`ABSENT`] for its part.
 #[inline(always)]
-fn merge_n<const N: usize>(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
+fn merge_n<const N: usize>(
+    piece: &[u8],
+    vocab: &Vocab,
+    ids: &mut [u32],
+    atoms: Option<&Atoms>,
+) -> usize {
     let n = piece.len();
     debug_assert!((2..=N).contains(&n) && N >= KEY_READ && ids.len() >= n);
     // twice the piece's room, so every substring key loads with two word reads
@@ -57,15 +62,40 @@ fn merge_n<const N: usize>(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usiz
     let mut prev = [0u8; N];
     // rank[i]: rank of the part at i joined with its successor, MAX if none
     let mut rank = [u32::MAX; N];
-    for i in 0..n {
-        next[i] = (i + 1) as u8;
-        prev[i] = i.wrapping_sub(1) as u8;
-        ids[i] = vocab.rank_single(piece[i]);
-    }
-    for i in 0..n - 1 {
-        rank[i] = vocab.rank_pair(piece[i], piece[i + 1]);
-    }
     let span = |a: usize, b: usize| vocab.rank_padded(buf, a, b - a);
+    if let Some(atoms) = atoms {
+        // atoms start whole, other chars as their bytes
+        let mut i = 0;
+        let mut last = usize::MAX;
+        while i < n {
+            let l = char_len(piece[i]);
+            let (len, id) = match atoms_at(atoms, piece, i, l) {
+                Some(r) => (l, r),
+                None => (1, vocab.rank_single(piece[i])),
+            };
+            ids[i] = id;
+            prev[i] = last as u8;
+            next[i] = (i + len) as u8;
+            if last != usize::MAX {
+                rank[last] = if i - last == 1 && len == 1 {
+                    vocab.rank_pair(piece[last], piece[i])
+                } else {
+                    span(last, i + len)
+                };
+            }
+            last = i;
+            i += len;
+        }
+    } else {
+        for i in 0..n {
+            next[i] = (i + 1) as u8;
+            prev[i] = i.wrapping_sub(1) as u8;
+            ids[i] = vocab.rank_single(piece[i]);
+        }
+        for i in 0..n - 1 {
+            rank[i] = vocab.rank_pair(piece[i], piece[i + 1]);
+        }
+    }
     let blocked = N > MID_MAX;
     let mut mins = [u32::MAX; BLOCKS];
     let n_blocks = (n - 1).div_ceil(BLOCK);
@@ -119,17 +149,55 @@ fn merge_n<const N: usize>(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usiz
     c
 }
 
+/// The atom at `piece[i..i + l]`, if the char there is one and whole.
+#[inline(always)]
+fn atoms_at(atoms: &Atoms, piece: &[u8], i: usize, l: usize) -> Option<u32> {
+    if l < 2 || i + l > piece.len() {
+        return None;
+    }
+    atoms.at(piece, i, l)
+}
+
+/// Whether most bytes of `piece` belong to multibyte chars. Starting from
+/// atoms pays off on such pieces; on words with a curly quote or an accent
+/// the extra lookups cost more than the merges they save.
+#[inline(always)]
+fn mostly_multibyte(piece: &[u8]) -> bool {
+    // most words of Latin script end in ASCII: one compare turns them away
+    piece[piece.len() - 1] >= 0x80 && 2 * piece.iter().filter(|&&b| b >= 0x80).count() > piece.len()
+}
+
 /// Merge a piece of `1..=SMALL_MAX` bytes into `ids`; returns the id count.
 #[inline]
 pub(crate) fn merge_small(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
+    if mostly_multibyte(piece) {
+        return merge_from_atoms(piece, vocab, ids);
+    }
+    merge_small_bytes(piece, vocab, ids)
+}
+
+/// [`merge_small`] from bytes only, never from atoms.
+#[inline]
+pub(crate) fn merge_small_bytes(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
     match piece.len() {
         1 => {
             ids[0] = vocab.rank_single(piece[0]);
             1
         }
-        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids),
-        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids),
-        _ => merge_n::<SMALL_MAX>(piece, vocab, ids),
+        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids, None),
+        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids, None),
+        _ => merge_n::<SMALL_MAX>(piece, vocab, ids, None),
+    }
+}
+
+/// [`merge_small`] of a piece of at least 2 bytes, from its atoms.
+#[inline(never)]
+fn merge_from_atoms(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
+    let atoms = Some(vocab.atoms());
+    match piece.len() {
+        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids, atoms),
+        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids, atoms),
+        _ => merge_n::<SMALL_MAX>(piece, vocab, ids, atoms),
     }
 }
 
@@ -237,6 +305,10 @@ pub fn bpe_count(piece: &[u8], vocab: &Vocab) -> usize {
         out.len()
     }
 }
+
+#[cfg(test)]
+#[path = "merge_atoms_tests.rs"]
+mod atoms_tests;
 
 #[cfg(test)]
 mod tests {

@@ -9,12 +9,14 @@
 //!
 //! Decoding indexes a contiguous arena by rank.
 
+mod atoms;
 mod fast;
 mod filter;
 mod key;
 mod long;
 mod long_derived;
 
+pub(crate) use atoms::{Atoms, char_len};
 pub(crate) use fast::Entry;
 use fast::FastTable;
 use filter::KeyFilter;
@@ -40,6 +42,8 @@ pub struct Vocab {
     long: LongTable,
     // merge results of longer pieces, created on first use
     long_derived: OnceLock<LongDerived>,
+    // chars a merge may start from whole, built on first use
+    atoms: OnceLock<Atoms>,
     // indexed by rank: (offset, len) into the arena, for decode
     decoder: Box<[(u32, u16)]>,
 }
@@ -100,6 +104,7 @@ impl Vocab {
             filter,
             long,
             long_derived: OnceLock::new(),
+            atoms: OnceLock::new(),
             arena,
             single,
             pair,
@@ -199,6 +204,15 @@ impl Vocab {
         self.long_derived
             .get_or_init(LongDerived::new)
             .insert(piece, ids)
+    }
+
+    /// The chars a merge may start from whole.
+    pub(crate) fn atoms(&self) -> &Atoms {
+        self.atoms.get_or_init(|| {
+            let tokens =
+                (0..self.decoder.len() as u32).filter_map(|r| self.try_decode(r).map(|t| (r, t)));
+            Atoms::build(tokens, |t| self.get(t))
+        })
     }
 
     /// Whether the shared table still takes derived entries.
