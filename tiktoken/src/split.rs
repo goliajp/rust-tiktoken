@@ -73,7 +73,10 @@ pub(crate) fn encode(
                 }
             })
         });
-        let mut mine = vec![Vec::new(); threads];
+        // only threads that took a chunk join the copy: waking the others
+        // would cost a park round trip each
+        let used = parts.iter().map(|p| p.owner).max().map_or(1, |m| m + 1);
+        let mut mine = vec![Vec::new(); used];
         let mut total = 0;
         for (i, p) in parts.iter().enumerate() {
             mine[p.owner].push((i, total));
@@ -82,7 +85,7 @@ pub(crate) fn encode(
         result.reserve(total);
         let base = result.len();
         let dst = SendPtr(result.as_mut_ptr().wrapping_add(base));
-        session.run_affine(threads, threads, |owner, me| {
+        session.run_affine(used, used, |owner, me| {
             let dst = &dst;
             // the job's completion ordered the store after the owner's last
             // append before this load
