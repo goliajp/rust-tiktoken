@@ -6,7 +6,24 @@
 //! `o200k.rs`, `deepseek.rs`) are tried first and resolve the common pieces
 //! inline; whatever they cannot decide goes to the complete scanner.
 
+mod bitops;
 mod cl100k;
+pub(crate) mod classify;
+#[cfg(target_arch = "aarch64")]
+mod classify_neon;
+#[cfg(any(
+    test,
+    not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    ))
+))]
+mod classify_portable;
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+mod classify_wasm;
+#[cfg(target_arch = "x86_64")]
+mod classify_x86;
 mod deepseek;
 mod digits;
 mod o200k;
@@ -15,6 +32,9 @@ mod scalar_case;
 mod scalar_cl100k;
 mod scalar_deepseek;
 mod scalar_p50k;
+pub(crate) mod window;
+mod window_case;
+pub(crate) mod windowed;
 
 #[cfg(test)]
 mod reference;
@@ -22,6 +42,8 @@ mod reference;
 mod tests;
 #[cfg(test)]
 mod tests_exhaustive;
+#[cfg(test)]
+mod tests_window;
 
 use cl100k::*;
 use deepseek::*;
@@ -120,6 +142,31 @@ impl ScalarPreTokenizer {
     pub(crate) fn family(&self) -> FastPath {
         self.fast
     }
+
+    /// The window rules of this pattern, if it has them.
+    #[inline(always)]
+    pub(crate) fn window_kind(&self) -> Option<WindowKind> {
+        match self.fast {
+            FastPath::Cl100k => Some(WindowKind::Cl100k),
+            FastPath::Qwen2 => Some(WindowKind::Qwen2),
+            FastPath::Qwen35 => Some(WindowKind::Qwen35),
+            FastPath::O200k | FastPath::MiniMax => Some(WindowKind::O200k),
+            FastPath::Tekken => Some(WindowKind::Tekken),
+            _ => None,
+        }
+    }
+}
+
+/// Patterns with window rules (`window.rs`, `window_case.rs`). The others
+/// look behind a piece start (mistral_v15's digit groups, deepseek's
+/// whitespace) or have no window rules yet.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum WindowKind {
+    Cl100k,
+    Qwen2,
+    Qwen35,
+    O200k,
+    Tekken,
 }
 
 impl PreTokenizer for ScalarPreTokenizer {
