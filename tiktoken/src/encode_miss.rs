@@ -8,6 +8,7 @@
 //! - longer: a long-token lookup, then the thread-local cache (up to its key
 //!   limit), then a plain merge.
 
+use crate::CoreBpe;
 use crate::merge::{self, SMALL_MAX};
 use crate::piece_cache;
 use crate::vocab::{ABSENT, Entry, Vocab};
@@ -101,4 +102,99 @@ pub(crate) fn encode(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, out: 
 
 pub(crate) fn count(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key) -> usize {
     resolve(vocab, cache_id, piece, key, Count)
+}
+
+impl CoreBpe {
+    /// Forget the merge results this instance shares between threads, so
+    /// the next encode of any text starts as if none had been seen. For
+    /// benchmarks of first-pass encoding; not part of the API.
+    ///
+    /// # Safety
+    ///
+    /// No other thread may encode with this instance until it returns; a
+    /// concurrent encode may return wrong tokens.
+    #[doc(hidden)]
+    pub unsafe fn __reset_shared_cache(&self) {
+        self.vocab.clear_derived();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn vocab(&self) -> &Vocab {
+        &self.vocab
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::CoreBpe;
+    use crate::hash::FxHashMap;
+    use crate::merge;
+    use crate::pretokenize::{FastPath, PreTokenizer, WhitespaceRules};
+
+    // every byte, plus tokens over a small alphabet, in a vocabulary small
+    // enough that the shared table fills after a few hundred derived entries
+    fn small_bpe() -> CoreBpe {
+        let mut encoder: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
+        for b in 0..=255u8 {
+            encoder.insert(vec![b], b as u32);
+        }
+        let alpha = b"abcdefgh";
+        let mut rank = 256;
+        for &x in alpha {
+            for &y in alpha {
+                if (x + y) % 3 != 0 {
+                    encoder.insert(vec![x, y], rank);
+                    encoder.insert(vec![b' ', x, y], rank + 1);
+                    encoder.insert(vec![x, y, x], rank + 2);
+                    rank += 3;
+                }
+            }
+        }
+        let special = FxHashMap::default();
+        CoreBpe::new(
+            encoder,
+            special,
+            r"\w+|\S",
+            FastPath::P50k,
+            WhitespaceRules::Generic,
+        )
+    }
+
+    fn text(seed: u64) -> String {
+        let mut x = seed | 1;
+        let mut s = String::new();
+        for _ in 0..3000 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            s.push(' ');
+            for i in 0..1 + x % 30 {
+                s.push(b"abcdefgh"[((x >> (2 * i)) % 8) as usize] as char);
+            }
+        }
+        s
+    }
+
+    #[test]
+    fn full_shared_table_falls_back_to_the_thread_cache() {
+        let bpe = small_bpe();
+        let t = text(7);
+        let mut want = vec![];
+        let mut pos = 0;
+        while let Some((s, e)) = bpe.pre_tokenizer().next_match(&t, pos) {
+            merge::bpe_encode(&t.as_bytes()[s..e], bpe.vocab(), &mut want);
+            pos = e;
+        }
+        for _ in 0..3 {
+            assert_eq!(bpe.encode(&t), want);
+            assert_eq!(bpe.count(&t), want.len());
+        }
+        assert!(!bpe.vocab().accepts_derived());
+        // other threads see the shared entries and build their own cache
+        std::thread::scope(|s| {
+            for _ in 0..4 {
+                s.spawn(|| assert_eq!(bpe.encode(&t), want));
+            }
+        });
+    }
 }

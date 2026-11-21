@@ -111,7 +111,12 @@ impl Cache {
         let need = HEADER_WORDS + key_words + ids.len();
         if self.slots.is_empty() {
             self.slots = vec![Slot::default(); SLOTS];
+            // touch the first stretch of the arena now: a page fault costs
+            // microseconds, and the first records of a text come in a burst
             self.arena.reserve(ARENA_WORDS / 16);
+            self.arena
+                .spare_capacity_mut()
+                .fill(std::mem::MaybeUninit::new(0));
         }
         if self.arena.len() + need > ARENA_WORDS {
             self.arena.clear();
