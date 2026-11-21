@@ -123,7 +123,7 @@ impl ScalarPreTokenizer {
 }
 
 impl PreTokenizer for ScalarPreTokenizer {
-    #[inline]
+    #[inline(always)]
     fn next_match(&self, text: &str, pos: usize) -> Option<(usize, usize)> {
         let bytes = text.as_bytes();
         let fast = match self.fast {
