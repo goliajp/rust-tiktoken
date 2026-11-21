@@ -204,18 +204,22 @@ fn test_every_builtin_vocabulary_entry_is_found() {
             if key.len() <= FAST_KEY_MAX {
                 // the key inside a longer buffer, followed by unrelated bytes
                 text.clear();
-                text.extend_from_slice(b"\xff\xfe");
+                text.extend_from_slice(&[0xFF; KEY_READ]);
                 text.extend_from_slice(key);
                 text.extend_from_slice(&[0xAB; 20]);
-                let end = 2 + key.len();
-                let (lo, hi) = key_in(&text, 2, end);
+                let end = KEY_READ + key.len();
+                let (lo, hi) = key_in(&text, KEY_READ, end);
                 assert_eq!(vocab.fast.get(lo, hi), Some(rank), "{name}");
                 if let Some(home) = vocab.get_home(lo, hi) {
                     assert_eq!(home, rank, "{name}");
                 }
                 // and ending at the very end of the buffer
-                assert_eq!(key_in(&text[..end], 2, end), (lo, hi), "{name}");
-                assert_eq!(vocab.rank_padded(&text, 2, key.len()), rank, "{name}");
+                assert_eq!(key_in(&text[..end], KEY_READ, end), (lo, hi), "{name}");
+                assert_eq!(
+                    vocab.rank_padded(&text, KEY_READ, key.len()),
+                    rank,
+                    "{name}"
+                );
             }
             // neighbours of a real key are found exactly when they are tokens
             let mut longer = key.clone();

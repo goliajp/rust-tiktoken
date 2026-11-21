@@ -1,8 +1,10 @@
 //! Open-addressed table from packed keys to token ids, shared by all threads.
 //!
-//! Every vocabulary token of up to 15 bytes has a slot. Tokens are inserted
-//! in ascending rank, so the frequent low-rank tokens own their home slot and
-//! the encode loop can answer most pieces with one slot read; anything else
+//! Every vocabulary token of up to 15 bytes has a slot. Slots come in pairs
+//! that share a 64-byte cache line; a key hashes to a line and takes the
+//! first free slot from there on. Tokens are inserted in ascending rank, so
+//! the frequent low-rank tokens land in their home line and the encode loop
+//! answers most pieces by comparing the two slots of one line; anything else
 //! goes through [`FastTable::get`], which walks the probe chain.
 //!
 //! The slot fields are atomics so that entries can later be published into a
@@ -14,7 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::key::hash;
 
-#[repr(C, align(32))]
+#[repr(C)]
 struct FastSlot {
     lo: AtomicU64,
     // zero only in an empty slot
@@ -25,8 +27,23 @@ struct FastSlot {
     w1: AtomicU64,
 }
 
+#[repr(C, align(64))]
+struct FastLine([FastSlot; 2]);
+
+impl FastSlot {
+    #[inline(always)]
+    fn matches(&self, lo: u64, hi: u64) -> bool {
+        (self.lo.load(Ordering::Acquire) == lo) & (self.hi.load(Ordering::Relaxed) == hi)
+    }
+
+    #[inline(always)]
+    fn id(&self) -> u32 {
+        self.w0.load(Ordering::Relaxed) as u32
+    }
+}
+
 pub(crate) struct FastTable {
-    slots: Box<[FastSlot]>,
+    lines: Box<[FastLine]>,
     shift: u32,
 }
 
@@ -34,33 +51,39 @@ impl FastTable {
     /// Build from `(lo, hi, id)` triples, which the caller orders by rank.
     pub(crate) fn build(keys: &[(u64, u64, u32)]) -> Self {
         let n = keys.len();
-        let mut size = (n * 2).max(2).next_power_of_two();
+        let mut slots = (n * 2).max(4).next_power_of_two();
         // wasm builds trade probe length for half the memory
-        if cfg!(target_arch = "wasm32") && size / 2 > n + n / 4 {
-            size /= 2;
+        if cfg!(target_arch = "wasm32") && slots / 2 > n + n / 4 {
+            slots /= 2;
         }
-        let mut slots: Box<[FastSlot]> = (0..size)
-            .map(|_| FastSlot {
-                lo: AtomicU64::new(0),
-                hi: AtomicU64::new(0),
-                w0: AtomicU64::new(0),
-                w1: AtomicU64::new(0),
-            })
-            .collect();
+        let size = slots / 2;
+        let empty = || FastSlot {
+            lo: AtomicU64::new(0),
+            hi: AtomicU64::new(0),
+            w0: AtomicU64::new(0),
+            w1: AtomicU64::new(0),
+        };
+        let mut lines: Box<[FastLine]> = (0..size).map(|_| FastLine([empty(), empty()])).collect();
         let shift = 64 - size.trailing_zeros();
         let mask = size - 1;
         for &(lo, hi, id) in keys {
             debug_assert!(hi != 0);
             let mut idx = (hash(lo, hi) >> shift) as usize;
-            while *slots[idx].hi.get_mut() != 0 {
+            let slot = loop {
+                let [a, b] = &mut lines[idx].0;
+                if *a.hi.get_mut() == 0 {
+                    break a;
+                }
+                if *b.hi.get_mut() == 0 {
+                    break b;
+                }
                 idx = (idx + 1) & mask;
-            }
-            let slot = &mut slots[idx];
+            };
             *slot.lo.get_mut() = lo;
             *slot.hi.get_mut() = hi;
             *slot.w0.get_mut() = id as u64 | (1u64 << 32);
         }
-        Self { slots, shift }
+        Self { lines, shift }
     }
 
     #[inline(always)]
@@ -68,42 +91,47 @@ impl FastTable {
         (hash(lo, hi) >> self.shift) as usize
     }
 
-    /// The id stored in the key's home slot, if the key is there.
+    /// The id stored in the key's home line, if the key is there.
     #[inline(always)]
     pub(crate) fn home(&self, lo: u64, hi: u64) -> Option<u32> {
-        let slot = &self.slots[self.home_index(lo, hi)];
-        let hit = (slot.lo.load(Ordering::Acquire) == lo) & (slot.hi.load(Ordering::Relaxed) == hi);
-        let w0 = slot.w0.load(Ordering::Relaxed);
-        hit.then_some(w0 as u32)
+        let [a, b] = &self.lines[self.home_index(lo, hi)].0;
+        if a.matches(lo, hi) {
+            Some(a.id())
+        } else if b.matches(lo, hi) {
+            Some(b.id())
+        } else {
+            None
+        }
     }
 
     /// The key's id, wherever it sits on its probe chain.
     #[inline]
     pub(crate) fn get(&self, lo: u64, hi: u64) -> Option<u32> {
-        let mask = self.slots.len() - 1;
+        let mask = self.lines.len() - 1;
         let mut idx = self.home_index(lo, hi);
         loop {
-            let slot = &self.slots[idx];
-            let slot_hi = slot.hi.load(Ordering::Relaxed);
-            if slot.lo.load(Ordering::Acquire) == lo && slot_hi == hi {
-                return Some(slot.w0.load(Ordering::Relaxed) as u32);
-            }
-            if slot_hi == 0 {
-                return None;
+            for slot in &self.lines[idx].0 {
+                if slot.matches(lo, hi) {
+                    return Some(slot.id());
+                }
+                if slot.hi.load(Ordering::Relaxed) == 0 {
+                    return None;
+                }
             }
             idx = (idx + 1) & mask;
         }
     }
 
-    /// Whether the key sits in its home slot; `None` if absent.
+    /// Whether the key sits in its home line; `None` if absent.
     #[cfg(test)]
     pub(crate) fn is_home(&self, lo: u64, hi: u64) -> Option<bool> {
         self.get(lo, hi)?;
         Some(self.home(lo, hi).is_some())
     }
 
+    /// Number of slots.
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
-        self.slots.len()
+        self.lines.len() * 2
     }
 }

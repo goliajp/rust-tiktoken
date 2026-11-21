@@ -53,20 +53,45 @@ pub(crate) fn key_padded(bytes: &[u8], at: usize, len: usize) -> (u64, u64) {
 /// Key of a whole slice of `1..=FAST_KEY_MAX` bytes, with no read past its end.
 #[inline]
 pub(crate) fn key_of(bytes: &[u8]) -> (u64, u64) {
-    let mut buf = [0u8; KEY_READ];
-    buf[..bytes.len()].copy_from_slice(bytes);
-    key_padded(&buf, 0, bytes.len())
+    let len = bytes.len();
+    debug_assert!((1..=FAST_KEY_MAX).contains(&len));
+    // overlapping reads; the overlapping bits are identical, so OR is exact
+    let (lo, hi) = if len >= 8 {
+        let hi = if len > 8 {
+            read_u64(bytes, len - 8) >> (8 * (16 - len))
+        } else {
+            0
+        };
+        (read_u64(bytes, 0), hi)
+    } else if len >= 4 {
+        let a = u32::from_le_bytes(bytes[..4].try_into().unwrap()) as u64;
+        let b = u32::from_le_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
+        (a | (b << (8 * (len - 4))), 0)
+    } else {
+        let a = bytes[0] as u64;
+        let b = bytes[len / 2] as u64;
+        let c = bytes[len - 1] as u64;
+        (a | (b << (8 * (len / 2))) | (c << (8 * (len - 1))), 0)
+    };
+    (lo, hi | ((len as u64) << 56))
 }
 
-/// Key of `bytes[start..end]` inside a larger buffer: a direct load when 16
-/// bytes are readable from `start`, else a copy of the piece.
+/// Key of `bytes[start..end]` (`1..=FAST_KEY_MAX` bytes) inside a buffer of
+/// at least [`KEY_READ`] bytes: a direct load when 16 bytes are readable from
+/// `start`, else a shift of the buffer's last 16 bytes.
 #[inline(always)]
 pub(crate) fn key_in(bytes: &[u8], start: usize, end: usize) -> (u64, u64) {
-    if start + KEY_READ <= bytes.len() {
-        key_padded(bytes, start, end - start)
-    } else {
-        key_of(&bytes[start..end])
+    let n = bytes.len();
+    let len = end - start;
+    if start + KEY_READ <= n {
+        return key_padded(bytes, start, len);
     }
+    debug_assert!(n >= KEY_READ && end <= n);
+    let tail = u128::from_le_bytes(bytes[n - KEY_READ..].try_into().unwrap());
+    let w = tail >> (8 * (start + KEY_READ - n));
+    let lo = w as u64 & LO_MASK[len];
+    let hi = ((w >> 64) as u64 & HI_MASK[len]) | ((len as u64) << 56);
+    (lo, hi)
 }
 
 #[inline(always)]
@@ -124,11 +149,17 @@ mod tests {
     }
 
     #[test]
-    fn tail_loads_never_read_past_the_slice() {
-        // every key ends exactly at the end of its buffer
-        for len in 1..=FAST_KEY_MAX {
-            let piece: Vec<u8> = (1..=len as u8).collect();
-            assert_eq!(key_in(&piece, 0, len), naive(&piece));
+    fn tail_loads_match_naive_packing() {
+        // keys ending at, or just before, the end of buffers of many lengths
+        for n in KEY_READ..KEY_READ + 20 {
+            let buf: Vec<u8> = (0..n as u8).map(|i| i ^ 0xA5).collect();
+            for len in 1..=FAST_KEY_MAX {
+                for end in n.saturating_sub(3).max(len)..=n {
+                    let start = end - len;
+                    let expected = naive(&buf[start..end]);
+                    assert_eq!(key_in(&buf, start, end), expected, "n {n} {start}..{end}");
+                }
+            }
         }
     }
 

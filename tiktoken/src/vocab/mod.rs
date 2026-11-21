@@ -14,8 +14,7 @@ mod key;
 mod long;
 
 use fast::FastTable;
-use key::key_of;
-pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_padded};
+pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
 
 /// Rank sentinel for "absent" in the direct-indexed tables.
@@ -115,6 +114,12 @@ impl Vocab {
     #[inline(always)]
     pub(crate) fn get_home(&self, lo: u64, hi: u64) -> Option<u32> {
         self.fast.home(lo, hi)
+    }
+
+    /// Rank of the packed key, wherever it sits on its probe chain.
+    #[inline]
+    pub(crate) fn get_key(&self, lo: u64, hi: u64) -> Option<u32> {
+        self.fast.get(lo, hi)
     }
 
     /// Rank of `buf[at..at + len]` or [`ABSENT`], where `buf` stays readable
