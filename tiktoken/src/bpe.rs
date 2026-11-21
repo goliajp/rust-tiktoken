@@ -1,9 +1,13 @@
 use regex::Regex;
 use rustc_hash::FxHashMap;
 
+use crate::encode_loop::Engine;
+#[cfg(feature = "parallel")]
 use crate::merge;
 use crate::piece_cache;
-use crate::pretokenize::{FastPath, PreTokenizer, RegexPreTokenizer, WhitespaceRules};
+#[cfg(feature = "parallel")]
+use crate::pretokenize::PreTokenizer;
+use crate::pretokenize::{FastPath, RegexPreTokenizer, WhitespaceRules};
 use crate::vocab::Vocab;
 
 /// A Byte Pair Encoding tokenizer engine.
@@ -207,23 +211,7 @@ impl CoreBpe {
     #[inline]
     #[must_use]
     pub fn count(&self, text: &str) -> usize {
-        let mut count = 0;
-        let mut pos = 0;
-
-        while let Some((start, end)) = self.pre_tokenizer.next_match(text, pos) {
-            let piece = &text.as_bytes()[start..end];
-            if self.vocab.contains_key(piece) {
-                count += 1;
-            } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
-                count += piece_cache::count_piece(self.cache_id, piece, |buf| {
-                    merge::bpe_encode_buf(piece, &self.vocab, buf)
-                });
-            } else {
-                count += merge::bpe_count(piece, &self.vocab);
-            }
-            pos = end;
-        }
-        count
+        self.engine().count(text)
     }
 
     /// Count tokens, recognizing special tokens.
@@ -348,26 +336,16 @@ impl CoreBpe {
         self.special_encoder.len()
     }
 
-    /// Main encoding hot loop. Iterates pre-tokenizer matches over the input,
-    /// then for each matched piece: (1) try direct vocab lookup (fast path for
-    /// known tokens), (2) fall back to BPE merge for unknown multi-byte pieces.
-    fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
-        let bytes = text.as_bytes();
-        let mut pos = 0;
-
-        while let Some((start, end)) = self.pre_tokenizer.next_match(text, pos) {
-            let piece = &bytes[start..end];
-            if let Some(token) = self.vocab.get(piece) {
-                result.push(token);
-            } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
-                piece_cache::encode_piece(self.cache_id, piece, result, |buf| {
-                    merge::bpe_encode_buf(piece, &self.vocab, buf)
-                });
-            } else {
-                merge::bpe_encode(piece, &self.vocab, result);
-            }
-            pos = end;
+    fn engine(&self) -> Engine<'_> {
+        Engine {
+            vocab: &self.vocab,
+            pre: &self.pre_tokenizer,
+            cache_id: self.cache_id,
         }
+    }
+
+    fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
+        self.engine().encode_into(text, result);
     }
 }
 

@@ -5,7 +5,7 @@
 //! candidate merges by rank; the linked list enables O(1) neighbor updates when
 //! a merge removes a position. Lazy deletion handles stale heap entries.
 
-use crate::vocab::Vocab;
+use crate::vocab::{ABSENT, KEY_READ, Vocab};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
@@ -52,9 +52,15 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
     // bookkeeping). This is the common case after pre-tokenization.
     if n <= LINEAR_THRESHOLD {
         let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        let plen = byte_pair_merge_small(piece, vocab, &mut parts);
+        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
+        let plen = byte_pair_merge_small(piece, vocab, &mut parts, &mut ids);
         return parts[..plen].iter().map(|&p| p as usize).collect();
     }
+
+    // padded copy so every substring key loads with two word reads
+    let mut buf = Vec::with_capacity(n + KEY_READ);
+    buf.extend_from_slice(piece);
+    buf.resize(n + KEY_READ, 0);
 
     // doubly-linked list over byte positions 0..n
     // next[i] = next active position after i
@@ -109,9 +115,8 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
         rank_at[pos] = u32::MAX;
         if after < n {
             let after_next = next[after] as usize;
-            if after_next <= n
-                && let Some(new_rank) = vocab.get(&piece[pos..after_next])
-            {
+            let new_rank = vocab.rank_padded(&buf, pos, after_next - pos);
+            if after_next <= n && new_rank != ABSENT {
                 rank_at[pos] = new_rank;
                 heap.push(Reverse((new_rank, pos as u32)));
             }
@@ -123,9 +128,8 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
             rank_at[prev_pos] = u32::MAX;
             let pos_next = next[pos] as usize;
             debug_assert!(pos_next <= n);
-            if pos_next > pos
-                && let Some(new_rank) = vocab.get(&piece[prev_pos..pos_next])
-            {
+            let new_rank = vocab.rank_padded(&buf, prev_pos, pos_next - prev_pos);
+            if pos_next > pos && new_rank != ABSENT {
                 rank_at[prev_pos] = new_rank;
                 heap.push(Reverse((new_rank, prev_pos as u32)));
             }
@@ -154,21 +158,31 @@ pub fn byte_pair_merge(piece: &[u8], vocab: &Vocab) -> Vec<usize> {
 ///
 /// Caller guarantees `3 <= n <= LINEAR_THRESHOLD`.
 ///
-/// Fills `parts` with the sub-token boundary offsets and returns how many of
-/// them are valid, so callers that only need the token *count* never allocate.
+/// Fills `parts` with the sub-token boundary offsets and `ids` with the token
+/// id of each part, and returns how many boundaries are valid, so callers
+/// that only need the token *count* never allocate. A part's id is the rank
+/// of the merge that produced it, or the single-byte rank ([`ABSENT`] when the
+/// vocabulary lacks that byte).
 #[allow(clippy::needless_range_loop)] // index loops mirror the Viterbi reference; clearer than iterators
 fn byte_pair_merge_small(
     piece: &[u8],
     vocab: &Vocab,
     parts: &mut [u32; LINEAR_THRESHOLD + 1],
+    ids: &mut [u32; LINEAR_THRESHOLD + 1],
 ) -> usize {
     let n = piece.len();
+    // padded copy so every substring key loads with two word reads
+    let mut buf = [0u8; LINEAR_THRESHOLD + KEY_READ];
+    buf[..n].copy_from_slice(piece);
 
     // parts[i] = byte offset of the i-th sub-token boundary; plen entries valid.
     // ranks[i] = rank of the pair (parts[i], parts[i+2]) or u32::MAX if unmergeable.
     let mut ranks = [u32::MAX; LINEAR_THRESHOLD + 1];
     for i in 0..=n {
         parts[i] = i as u32;
+    }
+    for i in 0..n {
+        ids[i] = vocab.rank_single(piece[i]);
     }
     let mut plen = n + 1;
 
@@ -196,18 +210,19 @@ fn byte_pair_merge_small(
         }
 
         // merge: drop boundary parts[min_idx+1] (and its rank slot)
+        ids[min_idx] = min_rank;
         for j in min_idx + 1..plen - 1 {
             parts[j] = parts[j + 1];
             ranks[j] = ranks[j + 1];
+            ids[j] = ids[j + 1];
         }
         plen -= 1;
 
         // recompute the rank of the pair spanning parts[a]..parts[b]
         let rank_of = |a: usize, b: usize| {
             if b < plen {
-                vocab
-                    .get(&piece[parts[a] as usize..parts[b] as usize])
-                    .unwrap_or(u32::MAX)
+                let start = parts[a] as usize;
+                vocab.rank_padded(&buf, start, parts[b] as usize - start)
             } else {
                 u32::MAX
             }
@@ -236,10 +251,11 @@ pub fn bpe_encode(piece: &[u8], vocab: &Vocab, result: &mut Vec<u32>) {
     }
     if (3..=LINEAR_THRESHOLD).contains(&n) {
         let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        let plen = byte_pair_merge_small(piece, vocab, &mut parts);
-        for i in 0..plen - 1 {
-            let key = &piece[parts[i] as usize..parts[i + 1] as usize];
-            result.push(vocab.get(key).expect("merged token not in vocab"));
+        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
+        let plen = byte_pair_merge_small(piece, vocab, &mut parts, &mut ids);
+        for &id in &ids[..plen - 1] {
+            assert!(id != ABSENT, "single byte not in vocab");
+            result.push(id);
         }
         return;
     }
@@ -267,10 +283,11 @@ pub fn bpe_encode_buf(piece: &[u8], vocab: &Vocab, buf: &mut [u32]) -> usize {
     }
     if (3..=LINEAR_THRESHOLD).contains(&n) {
         let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        let plen = byte_pair_merge_small(piece, vocab, &mut parts);
-        for i in 0..plen - 1 {
-            let key = &piece[parts[i] as usize..parts[i + 1] as usize];
-            buf[i] = vocab.get(key).expect("merged token not in vocab");
+        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
+        let plen = byte_pair_merge_small(piece, vocab, &mut parts, &mut ids);
+        for (dst, &id) in buf[..plen - 1].iter_mut().zip(&ids) {
+            assert!(id != ABSENT, "single byte not in vocab");
+            *dst = id;
         }
         return plen - 1;
     }
@@ -290,7 +307,8 @@ pub fn bpe_count(piece: &[u8], vocab: &Vocab) -> usize {
     }
     if (3..=LINEAR_THRESHOLD).contains(&n) {
         let mut parts = [0u32; LINEAR_THRESHOLD + 1];
-        return byte_pair_merge_small(piece, vocab, &mut parts) - 1;
+        let mut ids = [0u32; LINEAR_THRESHOLD + 1];
+        return byte_pair_merge_small(piece, vocab, &mut parts, &mut ids) - 1;
     }
     byte_pair_merge(piece, vocab).len() - 1
 }
