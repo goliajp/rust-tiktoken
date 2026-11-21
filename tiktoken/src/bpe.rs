@@ -1,14 +1,17 @@
 use rustc_hash::FxHashMap;
 
 use crate::encode_loop::Engine;
-#[cfg(feature = "parallel")]
-use crate::merge;
 use crate::piece_cache;
-#[cfg(feature = "parallel")]
-use crate::pretokenize::PreTokenizer;
 use crate::pretokenize::{FastPath, ScalarPreTokenizer, WhitespaceRules};
 use crate::special::SpecialMatcher;
 use crate::vocab::Vocab;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::{pool, split};
+
+/// Texts at least this long are cut into chunks and encoded on the worker
+/// pool (see [`set_parallelism`](crate::set_parallelism)).
+#[cfg(not(target_arch = "wasm32"))]
+const PARALLEL_MIN: usize = 64 * 1024;
 
 /// A Byte Pair Encoding tokenizer engine.
 ///
@@ -85,8 +88,14 @@ impl CoreBpe {
     #[inline]
     #[must_use]
     pub fn encode(&self, text: &str) -> Vec<u32> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if text.len() >= PARALLEL_MIN {
+            let mut result = Vec::new();
+            self.encode_chunked(text, split::CHUNK, None, &mut result);
+            return result;
+        }
         let mut result = Vec::with_capacity(text.len() / 3);
-        self.encode_into(text, &mut result);
+        self.engine().encode_into(text, &mut result);
         result
     }
 
@@ -188,6 +197,10 @@ impl CoreBpe {
     #[inline]
     #[must_use]
     pub fn count(&self, text: &str) -> usize {
+        #[cfg(not(target_arch = "wasm32"))]
+        if text.len() >= PARALLEL_MIN {
+            return self.count_chunked(text, split::CHUNK, None);
+        }
         self.engine().count(text)
     }
 
@@ -220,69 +233,11 @@ impl CoreBpe {
         total
     }
 
-    /// Encode text using multiple threads for large inputs.
-    ///
-    /// Falls back to single-threaded encoding for texts smaller than 4 KB.
-    /// Results are identical to [`encode`](Self::encode).
-    ///
-    /// Requires the `parallel` feature.
-    #[cfg(feature = "parallel")]
+    /// Same as [`encode`](Self::encode), which already spreads long texts
+    /// over several threads; kept for code written against older versions.
     #[must_use]
     pub fn encode_parallel(&self, text: &str) -> Vec<u32> {
-        use rayon::prelude::*;
-
-        // Below this size, single-threaded encode wins: the ASCII fast-path made
-        // serial tokenization cheap, and pre-tokenization (~60% of the work)
-        // stays serial here, so rayon's dispatch/join overhead dominates. Measured
-        // break-even on an M4 Pro is ~460 KB (45 KB: 1.8x slower; 180 KB: 1.1x
-        // slower; 900 KB: 1.2x faster). 512 KB keeps the parallel path strictly a
-        // win. Even above it the ceiling is only ~20% (Amdahl, serial pre-tokenize).
-        const THRESHOLD: usize = 512 * 1024;
-        if text.len() < THRESHOLD {
-            return self.encode(text);
-        }
-
-        // collect all pre-tokenizer match ranges
-        let mut ranges = Vec::new();
-        let mut pos = 0;
-        while let Some((start, end)) = self.pre_tokenizer.next_match(text, pos) {
-            ranges.push((start, end));
-            pos = end;
-        }
-
-        // Encode the pieces in parallel, but grouped into contiguous chunks so
-        // each rayon task fills a single local buffer instead of allocating one
-        // Vec per piece (which would be tens of thousands of tiny allocations on
-        // large inputs). Aim for a few chunks per worker thread for load balance.
-        let bytes = text.as_bytes();
-        let chunk_size = ranges
-            .len()
-            .div_ceil(rayon::current_num_threads() * 4)
-            .max(1);
-        let parts: Vec<Vec<u32>> = ranges
-            .par_chunks(chunk_size)
-            .map(|chunk| {
-                let span = chunk.last().map_or(0, |&(_, end)| end)
-                    - chunk.first().map_or(0, |&(start, _)| start);
-                let mut local = Vec::with_capacity(span / 3 + 1);
-                for &(start, end) in chunk {
-                    let piece = &bytes[start..end];
-                    if let Some(token) = self.vocab.get(piece) {
-                        local.push(token);
-                    } else {
-                        merge::bpe_encode(piece, &self.vocab, &mut local);
-                    }
-                }
-                local
-            })
-            .collect();
-
-        let total: usize = parts.iter().map(|c| c.len()).sum();
-        let mut result = Vec::with_capacity(total);
-        for part in parts {
-            result.extend_from_slice(&part);
-        }
-        result
+        self.encode(text)
     }
 
     /// Number of regular (non-special) tokens in the vocabulary.
@@ -332,7 +287,88 @@ impl CoreBpe {
     }
 
     fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if text.len() >= PARALLEL_MIN {
+            self.encode_chunked(text, split::CHUNK, None, result);
+            return;
+        }
         self.engine().encode_into(text, result);
+    }
+
+    /// Thread count and chunk boundaries for a parallel run, or `None` to
+    /// stay on this thread. At most `max_chunks` chunks, three per thread
+    /// by default.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn plan(text: &str, chunk: usize, max_chunks: Option<usize>) -> Option<(usize, Vec<usize>)> {
+        let threads = pool::threads();
+        if threads <= 1 {
+            return None;
+        }
+        let max_chunks = max_chunks.unwrap_or(threads * 3);
+        let cuts = split::cuts(text.as_bytes(), chunk, max_chunks);
+        (cuts.len() > 2).then_some((threads, cuts))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[inline(never)]
+    fn encode_chunked(
+        &self,
+        text: &str,
+        chunk: usize,
+        max_chunks: Option<usize>,
+        result: &mut Vec<u32>,
+    ) {
+        let engine = self.engine();
+        if let Some((threads, cuts)) = Self::plan(text, chunk, max_chunks) {
+            let parts = pool::run(cuts.len() - 1, threads, |i| {
+                let part = &text[cuts[i]..cuts[i + 1]];
+                let mut out = Vec::with_capacity(part.len() / 3);
+                engine.encode_into(part, &mut out);
+                out
+            });
+            if let Some(parts) = parts {
+                result.reserve(parts.iter().map(Vec::len).sum());
+                for part in &parts {
+                    result.extend_from_slice(part);
+                }
+                return;
+            }
+        }
+        result.reserve(text.len() / 3);
+        engine.encode_into(text, result);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[inline(never)]
+    fn count_chunked(&self, text: &str, chunk: usize, max_chunks: Option<usize>) -> usize {
+        let engine = self.engine();
+        if let Some((threads, cuts)) = Self::plan(text, chunk, max_chunks) {
+            let parts = pool::run(cuts.len() - 1, threads, |i| {
+                engine.count(&text[cuts[i]..cuts[i + 1]])
+            });
+            if let Some(parts) = parts {
+                return parts.iter().sum();
+            }
+        }
+        engine.count(text)
+    }
+
+    /// [`encode`](Self::encode)'s parallel path at any length, with chunks of
+    /// about `chunk` bytes and no cap on their number. For tests and
+    /// benchmarks; not a stable API.
+    #[doc(hidden)]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn __encode_chunks(&self, text: &str, chunk: usize) -> Vec<u32> {
+        let mut result = Vec::new();
+        self.encode_chunked(text, chunk, Some(usize::MAX), &mut result);
+        result
+    }
+
+    /// The counting twin of [`__encode_chunks`](Self::__encode_chunks).
+    #[doc(hidden)]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn __count_chunks(&self, text: &str, chunk: usize) -> usize {
+        self.count_chunked(text, chunk, Some(usize::MAX))
     }
 }
 

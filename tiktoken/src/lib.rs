@@ -49,9 +49,13 @@ mod encode_loop;
 pub mod encoding;
 mod merge;
 mod piece_cache;
+#[cfg(not(target_arch = "wasm32"))]
+mod pool;
 mod pretokenize;
 pub mod pricing;
 mod special;
+#[cfg(not(target_arch = "wasm32"))]
+mod split;
 mod unicode;
 mod vocab;
 
@@ -223,6 +227,41 @@ pub fn get_encoding(name: &str) -> Option<&'static CoreBpe> {
 /// Returns `None` for unknown models.
 pub fn encoding_for_model(model: &str) -> Option<&'static CoreBpe> {
     model_to_encoding(model).and_then(get_encoding)
+}
+
+/// Set how many threads one `encode` / `count` call may use on a long text,
+/// the calling thread included.
+///
+/// Texts of 64 KiB and more are cut into chunks and encoded on a
+/// process-wide pool of worker threads, created on the first such call. The
+/// default is the number of performance cores (all cores where the system
+/// does not tell them apart), or the `TIKTOKEN_THREADS` environment variable
+/// when it holds a positive integer. `0` restores that default. `1` turns
+/// the pool off: every call runs on the calling thread and no worker thread
+/// is ever started. The setting applies to calls that start after it.
+///
+/// One parallel call runs at a time; a call that finds the pool busy, for
+/// example because the application already encodes from several threads,
+/// runs on its own thread instead of waiting, so the process never runs more
+/// encoding threads than this number. On `wasm32` there are no threads and
+/// this does nothing.
+///
+/// # Examples
+///
+/// ```
+/// let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+/// let text = "word ".repeat(20_000);
+/// let parallel = enc.encode(&text);
+///
+/// tiktoken::set_parallelism(1);
+/// assert_eq!(enc.encode(&text), parallel);
+/// tiktoken::set_parallelism(0);
+/// ```
+pub fn set_parallelism(threads: usize) {
+    #[cfg(not(target_arch = "wasm32"))]
+    pool::set_parallelism(threads);
+    #[cfg(target_arch = "wasm32")]
+    let _ = threads;
 }
 
 /// Map a model name to its encoding name.
