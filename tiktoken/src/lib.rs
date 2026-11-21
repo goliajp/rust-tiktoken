@@ -45,6 +45,7 @@
 #![cfg_attr(not(feature = "vocabs-all"), allow(dead_code, unused_imports))]
 
 mod bpe;
+mod encode_loop;
 pub mod encoding;
 mod merge;
 mod piece_cache;

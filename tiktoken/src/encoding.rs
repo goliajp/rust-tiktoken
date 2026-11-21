@@ -336,14 +336,14 @@ pub(crate) fn parse_tiktoken_data_for_test() -> FxHashMap<Vec<u8>, u32> {
 /// hide: every shipped frame chain is decoded here and diffed against them,
 /// entry by entry.
 #[cfg(test)]
-mod vocab_oracle {
+pub(crate) mod vocab_oracle {
     use super::*;
     use base64::Engine;
 
     /// Every vocabulary this build carries, as (name, frame chain).
     // the pushes are cfg-gated, so a collect() would not express this
     #[allow(clippy::vec_init_then_push)]
-    fn chains() -> Vec<(&'static str, &'static [&'static [u8]])> {
+    pub(crate) fn chains() -> Vec<(&'static str, &'static [&'static [u8]])> {
         #[allow(unused_mut)]
         let mut chains: Vec<(&'static str, &'static [&'static [u8]])> = Vec::new();
         #[cfg(feature = "vocab-cl100k_base")]
