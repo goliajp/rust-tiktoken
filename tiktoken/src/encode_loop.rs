@@ -6,7 +6,12 @@
 //! further down their probe chain, longer pieces, pieces that need a BPE
 //! merge) leaves the loop through an out-of-line call.
 //!
-//! The two loops are written out separately on purpose. The scanner's
+//! Patterns with window rules take their pieces from
+//! `pretokenize::windowed`, which hands each piece to a sink here; the sinks
+//! probe the same table. Short texts and the other patterns use the scalar
+//! loops below.
+//!
+//! The two scalar loops are written out separately on purpose. The scanner's
 //! `next_match` is inlined into each of them in this shape; folding them into
 //! one generic or `Option`-driven loop changed that and cost up to 20% on
 //! some inputs. `count` stays `#[inline]` so it can inline into its caller.
@@ -186,7 +191,7 @@ struct EncodeSink<'e, 'v> {
 
 impl<'e, 'v> EncodeSink<'e, 'v> {
     fn new(engine: &'e Engine<'e>, out: &'v mut Vec<u32>) -> Self {
-        out.reserve(out.len() / 4 + 64);
+        out.reserve(64);
         Self {
             engine,
             ptr: out.as_mut_ptr(),
