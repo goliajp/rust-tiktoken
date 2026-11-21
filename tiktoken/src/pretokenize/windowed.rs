@@ -24,10 +24,10 @@ pub(crate) trait PieceSink {
 const TAIL_MAX: usize = 2 * 64 + KEY_READ;
 const TAIL_BUF: usize = 3 * 64;
 
-/// Above this many non-ASCII bytes in the first [`DENSE_PROBE`] bytes of a
-/// chunk, the chunk is scanned by the scalar scanner: dense CJK runs are
-/// longer than a window, and their per-char classification costs more than
-/// the scan.
+/// Above this many non-ASCII bytes per [`DENSE_PROBE`] bytes at the start of
+/// a chunk (or of the tail), it is scanned by the scalar scanner: dense CJK
+/// runs are longer than a window, and their per-char classification costs
+/// more than the scan.
 const DENSE_LIMIT: u32 = 32;
 const DENSE_PROBE: usize = 256;
 
@@ -46,7 +46,7 @@ pub(crate) fn split<R: WindowRules, S: PieceSink>(
             let blocks = ((n - pos - KEY_READ) / 64).min(CHUNK / 64);
             let limit = 64 * blocks;
             if dense(&bytes[pos..pos + limit]) {
-                pos = scalar_span(pre, text, pos, pos + limit, sink);
+                pos = scalar_span(pre, text, bytes, pos, pos + limit, sink);
                 continue;
             }
             let cont = classify_for::<R, BODY_WORDS>(bytes, pos, blocks, &mut maps);
@@ -69,6 +69,10 @@ pub(crate) fn split<R: WindowRules, S: PieceSink>(
     let mut buf = [0u8; TAIL_BUF];
     buf[..tl].copy_from_slice(&bytes[pos..]);
     let tail = &text[pos..];
+    if dense(&buf[..tl]) {
+        scalar_span(pre, tail, &buf, 0, tl, sink);
+        return;
+    }
     let mut maps = Bitmaps::<4>::new();
     let blocks = tl.div_ceil(64);
     let cont = classify_for::<R, 4>(&buf, 0, blocks, &mut maps);
@@ -133,21 +137,24 @@ fn scalar_end(pre: &ScalarPreTokenizer, text: &str, pos: usize) -> usize {
     pre.next_match(text, pos).map_or(text.len(), |(_, end)| end)
 }
 
-/// Pieces from `pos` by the scalar scanner, until one ends at or past
-/// `until`, which leaves at least [`KEY_READ`] bytes after it.
+/// Pieces of `text` from `pos` by the scalar scanner, until one ends at or
+/// past `until`. `buf` holds the same bytes as `text`, with at least
+/// [`KEY_READ`] readable bytes from `until`.
 #[inline(never)]
 fn scalar_span<S: PieceSink>(
     pre: &ScalarPreTokenizer,
     text: &str,
+    buf: &[u8],
     mut pos: usize,
     until: usize,
     sink: &mut S,
 ) -> usize {
-    let bytes = text.as_bytes();
     while pos < until {
         sink.window();
-        let end = scalar_end(pre, text, pos);
-        sink.piece(bytes, pos, end);
+        let Some((_, end)) = pre.next_match(text, pos) else {
+            break;
+        };
+        sink.piece(buf, pos, end);
         pos = end;
     }
     pos
@@ -189,5 +196,5 @@ fn dense(chunk: &[u8]) -> bool {
         .iter()
         .map(|w| (u64::from_le_bytes(*w) & 0x8080_8080_8080_8080).count_ones())
         .sum();
-    hi > DENSE_LIMIT
+    hi as usize * DENSE_PROBE > DENSE_LIMIT as usize * probe.len()
 }

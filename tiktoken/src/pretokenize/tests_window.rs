@@ -209,6 +209,26 @@ fn long_random_texts() {
     }
 }
 
+/// Dense CJK goes to the scalar scanner a chunk (or the tail) at a time;
+/// switching back and forth must not lose or split a piece.
+#[test]
+fn dense_and_sparse_chunks_alternate() {
+    let zh = "你好，世界！这是一个测试。漢字かなカナ한글 ";
+    let en = "The quick brown fox doesn't jump; it's 1234 “quoted” text.\n  ";
+    for (a, b) in [(1, 1), (90, 3), (3, 90), (150, 70), (70, 150)] {
+        for pad in [0, 1, 7, 63, 130] {
+            let text = format!(
+                "{}{}{}{}",
+                filler(0, pad),
+                zh.repeat(a),
+                en.repeat(b),
+                zh.repeat(a / 7 + 1)
+            );
+            check_all(&text);
+        }
+    }
+}
+
 /// Every fixture text through every family's window rules.
 #[test]
 fn fixture_texts_window_matches_scalar() {
