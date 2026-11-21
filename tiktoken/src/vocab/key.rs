@@ -99,21 +99,21 @@ pub(crate) fn hash(lo: u64, hi: u64) -> u64 {
     (lo ^ hi.rotate_left(27)).wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
 
-/// Hash for keys longer than [`FAST_KEY_MAX`]: one multiply per 8-byte
-/// word, the last word overlapping the previous one.
+/// Hash for keys longer than [`FAST_KEY_MAX`]: the length and three 8-byte
+/// samples (start, middle, end), so the cost does not grow with the key.
+/// Lookups compare the full bytes, so keys that share the samples only share
+/// a probe chain.
 #[inline]
 pub(crate) fn hash_long(bytes: &[u8]) -> u64 {
     let n = bytes.len();
     debug_assert!(n >= 8);
-    let mut h = (n as u64).wrapping_mul(0xA24B_AED4_963E_E407);
-    let mut i = 0;
-    while i + 8 < n {
-        h = (h ^ read_u64(bytes, i)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-        h = h.rotate_left(29);
-        i += 8;
-    }
-    h = (h ^ read_u64(bytes, n - 8)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    h ^ (h >> 32)
+    let a = read_u64(bytes, 0) ^ (n as u64).wrapping_mul(0xA24B_AED4_963E_E407);
+    let b = read_u64(bytes, (n - 8) / 2);
+    let c = read_u64(bytes, n - 8);
+    let h = (a.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ b.rotate_left(23))
+        .wrapping_add(c.wrapping_mul(0xD6E8_FEB8_6659_FD93));
+    let h = h.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    h ^ (h >> 29)
 }
 
 #[cfg(test)]
