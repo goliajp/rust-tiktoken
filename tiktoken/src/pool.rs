@@ -1,10 +1,11 @@
 //! Process-wide worker pool for encoding one long text in parallel.
 //!
-//! The pool runs one job at a time. A caller that finds it busy (another
-//! thread is running a job, or the caller is itself inside one) gets `None`
-//! and does the work on its own thread, so work never queues and the pool
-//! never runs more threads than it was sized for. The caller takes chunks
-//! too, so a job uses `threads - 1` pool workers.
+//! The pool serves one caller at a time, for one job or a [`Session`] of
+//! several. A caller that finds it busy (another thread holds it, or the
+//! caller is itself inside a job) gets `None` and does the work on its own
+//! thread, so work never queues and the pool never runs more threads than it
+//! was sized for. The caller takes chunks too, so a job uses `threads - 1`
+//! pool workers.
 //!
 //! After a job a worker spins for twice the job's duration (at most
 //! [`SPIN_MAX`]) so back-to-back calls find it awake, then parks; the caller
@@ -304,8 +305,9 @@ impl Pool {
         let ptr = (job as *const Job<'_>).cast_mut().cast::<Job<'static>>();
         self.job.store(ptr, SeqCst);
         self.epoch.0.fetch_add(1, SeqCst);
-        // a wake-up tree (each woken worker waking two more) measured no
-        // faster than waking everyone from here
+        // a wake-up tree (each woken worker waking two more), and one
+        // wake-all call on the epoch word (os_sync_wake_by_address_all),
+        // both measured slower than waking everyone from here
         for w in &self.workers[..workers] {
             w.wake();
         }
