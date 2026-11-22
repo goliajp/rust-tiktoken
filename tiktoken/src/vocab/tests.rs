@@ -385,3 +385,46 @@ fn derived_entries_published_concurrently_read_back_whole() {
         assert_eq!(ids_of(&vocab, key_of(k)), Some(ids(k)));
     }
 }
+
+#[test]
+fn sharded_count_stops_inserts_shortly_after_cap() {
+    let entries: Vec<(Vec<u8>, u32)> = (0u32..5000)
+        .map(|i| (format!("t{i}").into_bytes(), i))
+        .collect();
+    let vocab = Vocab::from_entries(entries);
+    let cap = vocab.fast.derived_cap() as usize;
+    // large enough that inserts are counted per shard
+    assert!(cap >= 2048, "{cap}");
+    let key = |t: usize, i: usize| key_of(format!("{t}:{i}").as_bytes());
+    let ids = |t: usize, i: usize| vec![t as u32, i as u32];
+    let stored: Vec<Vec<usize>> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..4)
+            .map(|t| {
+                let vocab = &vocab;
+                s.spawn(move || {
+                    let mut mine = vec![];
+                    let mut i = 0;
+                    while vocab.accepts_derived() {
+                        let (lo, hi) = key(t, i);
+                        if vocab.insert_derived(lo, hi, &ids(t, i)) {
+                            mine.push(i);
+                        }
+                        i += 1;
+                    }
+                    mine
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let total: usize = stored.iter().map(Vec::len).sum();
+    assert!((cap..=cap + 16 * 32).contains(&total), "{total} of {cap}");
+    for (t, mine) in stored.iter().enumerate() {
+        for &i in mine {
+            assert_eq!(ids_of(&vocab, key(t, i)), Some(ids(t, i)), "{t}:{i}");
+        }
+    }
+    for i in 0..5000u32 {
+        assert_eq!(vocab.get(format!("t{i}").as_bytes()), Some(i));
+    }
+}
