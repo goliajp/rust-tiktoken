@@ -12,6 +12,7 @@
 use std::mem::MaybeUninit;
 
 use super::ScalarPreTokenizer;
+use super::bitops::below_lowest;
 use super::classify::{Bitmaps, M_CONT, M_L, M_LW, M_NL, M_SP};
 use super::window::{Masks, WindowRules};
 use super::windowed::{PieceSink, scalar_end};
@@ -162,6 +163,23 @@ pub(super) fn decide_chunk<R: WindowRules, const CONT: bool, S: PieceSink, const
     reach
 }
 
+/// Piece starts in a window that the neighbouring bytes alone decide,
+/// below the window's first hard byte: a space next to a non-whitespace
+/// byte, a newline after a letter or digit, and punctuation other than an
+/// apostrophe after a letter or digit (an apostrophe may begin a
+/// contraction suffix of the word before it). Every pattern starts a piece
+/// there whatever follows, so the window's decision has these starts.
+#[inline(always)]
+fn free_starts<R: WindowRules>(m: &Masks) -> u64 {
+    let ok = below_lowest(m.hard) & m.v;
+    let words = if R::CASE { m.l | m.lw } else { m.l } | m.n;
+    let nonws = !m.w & ok;
+    let mut f = m.sp & ((nonws << 1) | (nonws >> 1));
+    f |= m.nl & (words << 1);
+    f |= nonws & !words & !m.cont & !m.ap & (words << 1);
+    f & ok & !1
+}
+
 /// One window of a chain at `r`; returns the next window start.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
@@ -186,6 +204,10 @@ fn step<R: WindowRules, const CONT: bool, const W: usize>(
     debug_assert!(base < buf.len());
     // SAFETY: the window lies inside the classified bytes of `buf`
     let win = unsafe { buf.get_unchecked(base..) };
+    // the next window opens at the last start that needs no decision: the
+    // decision has a start there and keeps every start below it, and the
+    // chain does not wait for the decision
+    let free = free_starts::<R>(&m);
     // most windows of a chunk with some non-ASCII bytes have none of their
     // own, and the rules without continuation bytes are much shorter
     let (s, cut) = if CONT && m.cont & m.v != 0 {
@@ -193,6 +215,13 @@ fn step<R: WindowRules, const CONT: bool, const W: usize>(
     } else {
         R::decide::<false>(&m, false, win)
     };
+    if free != 0 {
+        let b = 63 - free.leading_zeros();
+        debug_assert!(b <= cut && s >> b & 1 == 1, "{b} {cut} {s:#x}");
+        let keep = (end - r).min(b as usize);
+        starts.or_at(r, s & ((1u64 << keep) - 1));
+        return r + b as usize;
+    }
     if cut == 0 {
         starts.or_at(r, 1);
         let e = scalar_end(pre, text, base) - start;
