@@ -243,24 +243,28 @@ static BYTE_BITS: [[u16; 8]; 256] = {
 #[inline(always)]
 fn flatten(word: u64, k: usize, pos: *mut u16, n: usize) -> usize {
     debug_assert!(n <= POS_BATCH);
-    // bit counts per byte, then the count of all bytes below each byte
+    // bit counts per byte, then twice the count of all bytes below each
+    // byte: the byte offset of its entries, at most 112
     let mut c = word - ((word >> 1) & 0x5555_5555_5555_5555);
     c = (c & 0x3333_3333_3333_3333) + ((c >> 2) & 0x3333_3333_3333_3333);
     c = (c + (c >> 4)) & 0x0F0F_0F0F_0F0F_0F0F;
-    let below = c.wrapping_mul(0x0101_0101_0101_0100);
+    let below2 = c.wrapping_mul(0x0202_0202_0202_0200);
+    let total = ((below2 >> 57) + (c >> 56)) as usize;
+    // SAFETY: n <= POS_BATCH
+    let out = unsafe { pos.add(n).cast::<u8>() };
+    let base = (64 * k) as u16;
     for j in 0..8 {
         let b = (word >> (8 * j)) as u8;
-        let at = n + ((below >> (8 * j)) & 0xFF) as usize;
-        let base = (64 * k + 8 * j) as u16;
-        let v = BYTE_BITS[b as usize].map(|x| x + base);
+        let at = ((below2 >> (8 * j)) & 0xFF) as usize;
+        let v = BYTE_BITS[b as usize].map(|x| x + (base + 8 * j as u16));
         // entries past the byte's count are overwritten by the next byte or
         // left past the word's count
-        debug_assert!(at + 8 <= POS_CAP);
-        // SAFETY: n <= POS_BATCH and at <= n + 56, so the eight entries end
+        debug_assert!(n + at / 2 + 8 <= POS_CAP);
+        // SAFETY: n <= POS_BATCH and at / 2 <= 56, so the eight entries end
         // inside POS_CAP
-        unsafe { pos.add(at).cast::<[u16; 8]>().write_unaligned(v) };
+        unsafe { out.add(at).cast::<[u16; 8]>().write_unaligned(v) };
     }
-    n + word.count_ones() as usize
+    n + total
 }
 
 /// Hand the pieces between consecutive starts below `reach` to `sink`, the
