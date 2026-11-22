@@ -249,15 +249,25 @@ fn zeroed_atomics(n: usize) -> Box<[AtomicU32]> {
     unsafe { Box::from_raw(Box::into_raw(words) as *mut [AtomicU32]) }
 }
 
+/// Slot count for `n` vocabulary keys. `compact` (wasm builds) halves the
+/// table only when the half still has room, at three quarters load, for
+/// derived entries a quarter of the vocabulary in number: without them every
+/// piece that is not a token is merged again on every call, which doubled
+/// the time of cl100k on CJK text.
+pub(crate) fn table_slots(n: usize, compact: bool) -> usize {
+    let slots = (n * 2).max(4).next_power_of_two();
+    if compact && slots / 2 * 3 / 4 >= n + n / 4 {
+        slots / 2
+    } else {
+        slots
+    }
+}
+
 impl FastTable {
     /// Build from `(lo, hi, id)` triples, which the caller orders by rank.
     pub(crate) fn build(keys: &[(u64, u64, u32)]) -> Self {
         let n = keys.len();
-        let mut slots = (n * 2).max(4).next_power_of_two();
-        // wasm builds trade probe length for half the memory
-        if cfg!(target_arch = "wasm32") && slots / 2 > n + n / 4 {
-            slots /= 2;
-        }
+        let slots = table_slots(n, cfg!(target_arch = "wasm32"));
         let size = slots / 2;
         let empty = || FastSlot {
             lo: AtomicU64::new(OPEN_LO),
