@@ -270,3 +270,32 @@ fn walk<S: PieceSink, const W: usize>(
     sink.window();
     sink.piece(buf, start + offs[n - 1] as usize, start + reach);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flatten_lists_every_set_bit() {
+        let mut s = 0x9E37_79B9_7F4A_7C15u64;
+        for k in 0..4000usize {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            let word = match k % 4 {
+                0 => s,
+                1 => s & s.rotate_left(7),
+                2 => u64::MAX << (k % 64),
+                _ => s & s.rotate_left(3) & s.rotate_left(11),
+            };
+            let mut buf = [0u16; POS_CAP];
+            let n0 = k % 9;
+            let n = flatten(word, k % 64, buf.as_mut_ptr(), n0);
+            let want: Vec<u16> = (0..64)
+                .filter(|i| word >> i & 1 == 1)
+                .map(|i| (64 * (k % 64) + i) as u16)
+                .collect();
+            assert_eq!(&buf[n0..n], &want[..], "{word:#x}");
+        }
+    }
+}
