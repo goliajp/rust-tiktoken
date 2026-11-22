@@ -46,7 +46,8 @@ vocab-minimax_m2 = ["tiktoken/vocab-minimax_m2"]
 # data, so `-O3` on the code section costs a few hundred KB against 6 MB —
 # while `-Os` was taxing every count()/encode() call in the browser.
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-O3", "--enable-bulk-memory"]
+# `strip` drops the target-features section, so wasm-opt is told about simd
+wasm-opt = ["-O3", "--enable-bulk-memory", "--enable-simd"]
 
 [profile.release]
 lto = true

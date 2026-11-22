@@ -5,6 +5,13 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Built with WebAssembly SIMD (`simd128`): the pre-tokenizer classifies text
+  64 bytes at a time. The package now needs Chrome 91, Firefox 89 or
+  Safari 16.4 and later; older browsers fail to compile the module.
+
 ## [5.1.1] - 2026-11-21
 
 Documentation only, in lockstep with `tiktoken` 5.1.1.

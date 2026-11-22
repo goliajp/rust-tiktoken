@@ -1,0 +1,5 @@
+# The pre-tokenizer classifies 64 bytes at a time with SIMD; without simd128
+# it falls back to a scalar loop. simd128 needs Chrome 91, Firefox 89 or
+# Safari 16.4 and later.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]
