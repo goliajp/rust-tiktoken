@@ -17,12 +17,15 @@
 //! start, and one that covers bytes after it the pair across its end; one
 //! bit per byte pair says whether any fragment has such a pair there.
 
-use crate::hash::FxHashMap;
+use super::frags::{Frags, Side};
 use std::collections::HashMap;
 
 const FIRST: u32 = 0x80;
-const RANK_BITS: u32 = 24;
+const RANK_BITS: u32 = 22;
 const RANK_MASK: u32 = (1 << RANK_BITS) - 1;
+// an atom that no token has bytes before, or after
+const ALONE_BEFORE: u32 = 1 << 22;
+const ALONE_AFTER: u32 = 1 << 23;
 const KIND_SHIFT: u32 = 24;
 // kinds
 const PLAIN: u32 = 0;
@@ -69,6 +72,14 @@ impl CharWord {
         (self.0 & (3 << KIND_SHIFT) == ATOM << KIND_SHIFT).then_some(self.0 & RANK_MASK)
     }
 
+    /// Whether an atom never merges with the parts before it, and with
+    /// those after it: no token holds its bytes with bytes before them, or
+    /// after them, so no part that takes in the atom grows past that side.
+    #[inline(always)]
+    pub(crate) fn alone(self) -> (bool, bool) {
+        (self.0 & ALONE_BEFORE != 0, self.0 & ALONE_AFTER != 0)
+    }
+
     /// A wall's parts: the id of its first two bytes joined, if they are,
     /// and of its last two joined, if they are; otherwise its bytes.
     #[inline(always)]
@@ -104,12 +115,6 @@ pub(crate) fn cp3(b0: u8, b1: u8, b2: u8) -> Option<u32> {
     ok.then_some(cp)
 }
 
-fn pack(b: &[u8]) -> u32 {
-    let mut w = [0u8; 4];
-    w[..b.len()].copy_from_slice(b);
-    u32::from_le_bytes(w)
-}
-
 pub(crate) struct Walls {
     chars: Box<[u32]>,
     // byte pairs across a char edge inside some fragment: (lead byte of the
@@ -120,8 +125,8 @@ pub(crate) struct Walls {
     // the bytes fragments need outside the char, by the 1 or 2 bytes they
     // share with it (keys of `before` start with a lead byte, of `after`
     // with a continuation byte)
-    before: FxHashMap<u32, Box<[Box<[u8]>]>>,
-    after: FxHashMap<u32, Box<[Box<[u8]>]>>,
+    before: Frags,
+    after: Frags,
 }
 
 #[inline(always)]
@@ -143,6 +148,7 @@ impl Walls {
         heads: &HashMap<Vec<u8>, Vec<Box<[u8]>>>,
         tails: &HashMap<Vec<u8>, Vec<Box<[u8]>>>,
         atoms: impl Iterator<Item = (u32, u32)>,
+        context: &[u8],
         get: &impl Fn(&[u8]) -> Option<u32>,
     ) -> Self {
         let mut head_pairs = Box::new([0u64; 1024]);
@@ -157,30 +163,8 @@ impl Walls {
                 set_bit(&mut tail_pairs, k[k.len() - 1], t[k.len()]);
             }
         }
-        let index = |src: &HashMap<Vec<u8>, Vec<Box<[u8]>>>, head: bool| {
-            let mut out = FxHashMap::default();
-            for (k, ts) in src {
-                if k.len() > 2 {
-                    continue;
-                }
-                let mut v: Vec<Box<[u8]>> = ts
-                    .iter()
-                    .map(|t| {
-                        if head {
-                            t[..t.len() - k.len()].into()
-                        } else {
-                            t[k.len()..].into()
-                        }
-                    })
-                    .collect();
-                v.sort();
-                v.dedup();
-                out.insert(pack(k), v.into_boxed_slice());
-            }
-            out
-        };
-        let before = index(heads, true);
-        let after = index(tails, false);
+        let before = Frags::build(heads, Side::Before);
+        let after = Frags::build(tails, Side::After);
         // the 1- and 2-byte keys present, by their bytes
         let mut keys = vec![0u64; 1024 + 4].into_boxed_slice();
         for k in heads.keys().chain(tails.keys()) {
@@ -201,8 +185,8 @@ impl Walls {
         };
         let mut chars = vec![0u32; (0x10000 - FIRST) as usize].into_boxed_slice();
         let mut atom_of = vec![u32::MAX; chars.len()];
-        for (cp, rank) in atoms {
-            debug_assert!(rank <= RANK_MASK);
+        // a char whose rank does not fit the word stays plain
+        for (cp, rank) in atoms.filter(|a| a.1 <= RANK_MASK) {
             atom_of[(cp - FIRST) as usize] = rank;
         }
         for (cp, w) in (FIRST..0x10000).zip(chars.iter_mut()) {
@@ -229,7 +213,10 @@ impl Walls {
             }
             let atom = atom_of[(cp - FIRST) as usize];
             if atom != u32::MAX {
-                *w = atom | ATOM << KIND_SHIFT | flags;
+                let c = context[cp as usize];
+                let alone = if c & 1 == 0 { ALONE_BEFORE } else { 0 }
+                    | if c & 2 == 0 { ALONE_AFTER } else { 0 };
+                *w = atom | ATOM << KIND_SHIFT | alone | flags;
                 continue;
             }
             if get(b).is_some() {
@@ -248,7 +235,9 @@ impl Walls {
                     (JOIN_LAST, z)
                 }
             };
-            debug_assert!(rank <= RANK_MASK);
+            if rank > RANK_MASK {
+                continue;
+            }
             *w = rank | WALL << KIND_SHIFT | shape << SHAPE_SHIFT | flags;
         }
         Self {
@@ -307,29 +296,22 @@ impl Walls {
     /// table word `w`.
     #[inline(always)]
     fn crossed(&self, piece: &[u8], a: usize, l: usize, w: u32) -> bool {
-        let e = a + l;
-        let head = w & HEADS != 0 && a > 0 && bit(&self.head_pairs, piece[a], piece[a - 1]);
-        let tail =
-            w & TAILS != 0 && e < piece.len() && bit(&self.tail_pairs, piece[e - 1], piece[e]);
-        (head || tail) && self.crossed_exactly(piece, a, e, w)
+        let (e, n) = (a + l, piece.len());
+        // both tests without branches: which of them applies varies from
+        // char to char, and the branches mispredicted
+        let before = piece[a.saturating_sub(1)];
+        let after = piece[e.min(n - 1)];
+        let head = (w & HEADS != 0) & (a > 0) & bit(&self.head_pairs, piece[a], before);
+        let tail = (w & TAILS != 0) & (e < n) & bit(&self.tail_pairs, piece[e - 1], after);
+        (head | tail) && self.crossed_exactly(piece, a, e, w)
     }
 
     #[cold]
     #[inline(never)]
     fn crossed_exactly(&self, piece: &[u8], a: usize, e: usize, w: u32) -> bool {
-        let ends = |key: &[u8]| {
-            self.before
-                .get(&pack(key))
-                .is_some_and(|v| v.iter().any(|x| piece[..a].ends_with(x)))
-        };
-        let starts = |key: &[u8]| {
-            self.after
-                .get(&pack(key))
-                .is_some_and(|v| v.iter().any(|y| piece[e..].starts_with(y)))
-        };
-        (w & HEAD1 != 0 && ends(&piece[a..a + 1]))
-            || (w & HEAD2 != 0 && ends(&piece[a..a + 2]))
-            || (w & TAIL1 != 0 && starts(&piece[e - 1..e]))
-            || (w & TAIL2 != 0 && starts(&piece[e - 2..e]))
+        (w & HEAD1 != 0 && self.before.occurs(&piece[a..a + 1], piece, a))
+            || (w & HEAD2 != 0 && self.before.occurs(&piece[a..a + 2], piece, a))
+            || (w & TAIL1 != 0 && self.after.occurs(&piece[e - 1..e], piece, e))
+            || (w & TAIL2 != 0 && self.after.occurs(&piece[e - 2..e], piece, e))
     }
 }

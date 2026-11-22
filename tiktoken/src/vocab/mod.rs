@@ -12,6 +12,7 @@
 mod atoms;
 mod fast;
 mod filter;
+mod frags;
 mod key;
 mod long;
 mod long_derived;
