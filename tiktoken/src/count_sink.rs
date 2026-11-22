@@ -21,7 +21,11 @@ fn count_hits(
         let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
             return (i, count, NO_KEY);
         };
-        match home.lookup(lo, hi) {
+        let found = match home.lookup(lo, hi) {
+            Home::Miss => home.lookup_chain(lo, hi),
+            h => h,
+        };
+        match found {
             Home::Token(_) => count += 1,
             Home::Derived(e) => count += e.len(),
             Home::Miss => return (i, count, (lo, hi)),

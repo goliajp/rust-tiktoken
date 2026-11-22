@@ -311,8 +311,14 @@ fn encode_hits(
         let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
             return (i, len, NO_KEY);
         };
+        // a key off its home line is mostly on the next one; walking the
+        // chain here keeps the piece in the leaf
+        let found = match home.lookup(lo, hi) {
+            Home::Miss => home.lookup_chain(lo, hi),
+            h => h,
+        };
         // SAFETY (writes): the caller made room for three ids per piece
-        match home.lookup(lo, hi) {
+        match found {
             Home::Token(id) => {
                 unsafe { ptr.add(len).write(id) };
                 len += 1;
