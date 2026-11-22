@@ -6,9 +6,12 @@
 //! Pieces of up to [`SMALL_MAX`] bytes merge in stack arrays: a linked list
 //! of parts by byte position, the rank of each part joined with its
 //! successor, and a scan for the leftmost minimum each round. Longer pieces
-//! use a min-heap with lazy deletion.
+//! use a min-heap with lazy deletion. Pieces made mostly of multibyte chars
+//! start from whole atoms and from the parts of wall chars, which never
+//! merge with their neighbours (see the `atoms` and `walls` modules of
+//! `vocab`).
 
-use crate::vocab::{ABSENT, Atoms, KEY_READ, Vocab, char_len};
+use crate::vocab::{ABSENT, Atoms, Char3, KEY_READ, Vocab, char_len, cp3};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
@@ -63,28 +66,65 @@ fn merge_n<const N: usize>(
     // rank[i]: rank of the part at i joined with its successor, MAX if none
     let mut rank = [u32::MAX; N];
     let span = |a: usize, b: usize| vocab.rank_padded(buf, a, b - a);
+    // wall[i]: the part at i belongs to a wall char and never merges
+    let mut wall = [false; N];
+    let walls = atoms.is_some();
     if let Some(atoms) = atoms {
-        // atoms start whole, other chars as their bytes
-        let mut i = 0;
+        // atoms start whole, wall chars as their parts, other chars as bytes
+        let table = atoms.walls();
         let mut last = usize::MAX;
-        while i < n {
-            let l = char_len(piece[i]);
-            let (len, id) = match atoms_at(atoms, piece, i, l) {
-                Some(r) => (l, r),
-                None => (1, vocab.rank_single(piece[i])),
-            };
-            ids[i] = id;
-            prev[i] = last as u8;
-            next[i] = (i + len) as u8;
-            if last != usize::MAX {
-                rank[last] = if i - last == 1 && len == 1 {
-                    vocab.rank_pair(piece[last], piece[i])
+        let mut part = |at: usize, len: usize, id: u32, w: bool, last: &mut usize| {
+            ids[at] = id;
+            prev[at] = *last as u8;
+            next[at] = (at + len) as u8;
+            wall[at] = w;
+            if *last != usize::MAX {
+                rank[*last] = if w || wall[*last] {
+                    u32::MAX
+                } else if at - *last == 1 && len == 1 {
+                    vocab.rank_pair(piece[*last], piece[at])
                 } else {
-                    span(last, i + len)
+                    span(*last, at + len)
                 };
             }
-            last = i;
-            i += len;
+            *last = at;
+        };
+        let mut i = 0;
+        while i < n {
+            let l = char_len(piece[i]);
+            if l == 3
+                && let Some(&[b0, b1, b2]) = piece.get(i..i + 3)
+                && let Some(cp) = cp3(b0, b1, b2)
+            {
+                let (kind, w) = table.get(cp);
+                let whole = match kind {
+                    Char3::Atom(r) => Some(r),
+                    Char3::Ruled => atoms.at(piece, i, 3),
+                    _ => None,
+                };
+                if let Some(r) = whole {
+                    part(i, 3, r, false, &mut last);
+                    i += 3;
+                    continue;
+                }
+                if let Char3::Wall = kind
+                    && let Some(parts) = table.parts(piece, i, w, |b| vocab.rank_single(b))
+                {
+                    let mut at = i;
+                    for &(len, id) in parts.iter().take_while(|p| p.0 != 0) {
+                        part(at, len as usize, id, true, &mut last);
+                        at += len as usize;
+                    }
+                    i += 3;
+                    continue;
+                }
+            } else if let Some(r) = atoms_at(atoms, piece, i, l) {
+                part(i, l, r, false, &mut last);
+                i += l;
+                continue;
+            }
+            part(i, 1, vocab.rank_single(piece[i]), false, &mut last);
+            i += 1;
         }
     } else {
         for i in 0..n {
@@ -122,14 +162,20 @@ fn merge_n<const N: usize>(
         next[k] = nj as u8;
         rank[k] = if nj < n {
             prev[nj] = k as u8;
-            span(k, next[nj] as usize)
+            if walls && wall[nj] {
+                u32::MAX
+            } else {
+                span(k, next[nj] as usize)
+            }
         } else {
             u32::MAX
         };
         let mut p = k;
         if k > 0 {
             p = prev[k] as usize;
-            rank[p] = span(p, nj);
+            if !(walls && wall[p]) {
+                rank[p] = span(p, nj);
+            }
         }
         if blocked {
             // the changed ranks sit at p <= k < j

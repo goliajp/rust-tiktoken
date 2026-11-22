@@ -15,6 +15,7 @@ mod filter;
 mod key;
 mod long;
 mod long_derived;
+mod walls;
 
 pub(crate) use atoms::{Atoms, char_len};
 use fast::FastTable;
@@ -25,6 +26,7 @@ use long::LongTable;
 use long_derived::LongDerived;
 pub(crate) use long_derived::{LONG_KEY_MAX, LongIds};
 use std::sync::OnceLock;
+pub(crate) use walls::{Char3, cp3};
 
 /// Rank sentinel for "absent" in the direct-indexed tables.
 pub(crate) const ABSENT: u32 = u32::MAX;
