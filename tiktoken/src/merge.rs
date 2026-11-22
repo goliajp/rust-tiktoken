@@ -11,7 +11,7 @@
 //! merge with their neighbours (see the `atoms` and `walls` modules of
 //! `vocab`).
 
-use crate::vocab::{ABSENT, Atoms, Char3, KEY_READ, Vocab, char_len, cp3};
+use crate::vocab::{ABSENT, Atoms, KEY_READ, Start, Vocab, char_len, cp_at};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
@@ -57,7 +57,7 @@ fn merge_n<const N: usize>(
     debug_assert!((2..=N).contains(&n) && N >= KEY_READ && ids.len() >= n);
     // twice the piece's room, so every substring key loads with two word reads
     let mut buf = [[0u8; N]; 2];
-    buf.as_flattened_mut()[..n].copy_from_slice(piece);
+    copy_piece(&mut buf.as_flattened_mut()[..n], piece);
     let buf = buf.as_flattened();
     // next[i]: start of the part after the one at byte i (n at the end);
     // prev[i]: start of the part before it
@@ -65,7 +65,8 @@ fn merge_n<const N: usize>(
     let mut prev = [0u8; N];
     // rank[i]: rank of the part at i joined with its successor, MAX if none
     let mut rank = [u32::MAX; N];
-    let span = |a: usize, b: usize| vocab.rank_padded(buf, a, b - a);
+    let probe = vocab.rank_probe();
+    let span = |a: usize, b: usize| probe.rank_padded(buf, a, b - a);
     // wall[i]: the part at i belongs to a wall char and never merges
     let mut wall = [false; N];
     let walls = atoms.is_some();
@@ -82,7 +83,7 @@ fn merge_n<const N: usize>(
                 rank[*last] = if w || wall[*last] {
                     u32::MAX
                 } else if at - *last == 1 && len == 1 {
-                    vocab.rank_pair(piece[*last], piece[at])
+                    probe.rank_pair(piece[*last], piece[at])
                 } else {
                     span(*last, at + len)
                 };
@@ -92,36 +93,32 @@ fn merge_n<const N: usize>(
         let mut i = 0;
         while i < n {
             let l = char_len(piece[i]);
-            if l == 3
-                && let Some(&[b0, b1, b2]) = piece.get(i..i + 3)
-                && let Some(cp) = cp3(b0, b1, b2)
+            if l == 4 {
+                if let Some(r) = atoms_at(atoms, piece, i, l) {
+                    part(i, l, r, false, &mut last);
+                    i += l;
+                    continue;
+                }
+            } else if l > 1
+                && let Some(cp) = cp_at(piece, i, l)
             {
-                let (kind, w) = table.get(cp);
-                let whole = match kind {
-                    Char3::Atom(r) => Some(r),
-                    Char3::Ruled => atoms.at(piece, i, 3),
-                    _ => None,
-                };
-                if let Some(r) = whole {
-                    part(i, 3, r, false, &mut last);
-                    i += 3;
-                    continue;
-                }
-                if let Char3::Wall = kind
-                    && let Some(parts) = table.parts(piece, i, w, |b| vocab.rank_single(b))
-                {
-                    let mut at = i;
-                    for &(len, id) in parts.iter().take_while(|p| p.0 != 0) {
-                        part(at, len as usize, id, true, &mut last);
-                        at += len as usize;
+                match table.start(piece, i, l, cp, |b| vocab.rank_single(b)) {
+                    Start::Whole(r) => {
+                        part(i, l, r, false, &mut last);
+                        i += l;
+                        continue;
                     }
-                    i += 3;
-                    continue;
+                    Start::Wall(parts) => {
+                        let mut at = i;
+                        for &(len, id) in parts.iter().take_while(|p| p.0 != 0) {
+                            part(at, len as usize, id, true, &mut last);
+                            at += len as usize;
+                        }
+                        i += l;
+                        continue;
+                    }
+                    Start::Bytes => {}
                 }
-            } else if let Some(r) = atoms_at(atoms, piece, i, l) {
-                part(i, l, r, false, &mut last);
-                i += l;
-                continue;
             }
             part(i, 1, vocab.rank_single(piece[i]), false, &mut last);
             i += 1;
@@ -133,7 +130,7 @@ fn merge_n<const N: usize>(
             ids[i] = vocab.rank_single(piece[i]);
         }
         for i in 0..n - 1 {
-            rank[i] = vocab.rank_pair(piece[i], piece[i + 1]);
+            rank[i] = probe.rank_pair(piece[i], piece[i + 1]);
         }
     }
     let blocked = N > MID_MAX;
@@ -195,6 +192,27 @@ fn merge_n<const N: usize>(
     c
 }
 
+/// `dst.copy_from_slice(src)` for up to 16 bytes, in two overlapping
+/// word copies rather than a library call.
+#[inline(always)]
+fn copy_piece(dst: &mut [u8], src: &[u8]) {
+    let n = src.len();
+    debug_assert!(dst.len() == n);
+    if n > 16 {
+        dst.copy_from_slice(src);
+    } else if n >= 8 {
+        dst[..8].copy_from_slice(&src[..8]);
+        dst[n - 8..].copy_from_slice(&src[n - 8..]);
+    } else if n >= 4 {
+        dst[..4].copy_from_slice(&src[..4]);
+        dst[n - 4..].copy_from_slice(&src[n - 4..]);
+    } else {
+        for (d, &b) in dst.iter_mut().zip(src) {
+            *d = b;
+        }
+    }
+}
+
 /// The atom at `piece[i..i + l]`, if the char there is one and whole.
 #[inline(always)]
 fn atoms_at(atoms: &Atoms, piece: &[u8], i: usize, l: usize) -> Option<u32> {
@@ -210,7 +228,16 @@ fn atoms_at(atoms: &Atoms, piece: &[u8], i: usize, l: usize) -> Option<u32> {
 #[inline(always)]
 fn mostly_multibyte(piece: &[u8]) -> bool {
     // most words of Latin script end in ASCII: one compare turns them away
-    piece[piece.len() - 1] >= 0x80 && 2 * piece.iter().filter(|&&b| b >= 0x80).count() > piece.len()
+    if piece[piece.len() - 1] < 0x80 {
+        return false;
+    }
+    let (words, rest) = piece.as_chunks::<8>();
+    let high = words
+        .iter()
+        .map(|w| (u64::from_le_bytes(*w) & 0x8080_8080_8080_8080).count_ones() as usize)
+        .sum::<usize>()
+        + rest.iter().filter(|&&b| b >= 0x80).count();
+    2 * high > piece.len()
 }
 
 /// Merge a piece of `1..=SMALL_MAX` bytes into `ids`; returns the id count.
@@ -239,11 +266,22 @@ pub(crate) fn merge_small_bytes(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) ->
 /// [`merge_small`] of a piece of at least 2 bytes, from its atoms.
 #[inline(never)]
 fn merge_from_atoms(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
-    let atoms = Some(vocab.atoms());
+    let atoms = vocab.atoms();
+    match chars::merge_chars(piece, vocab, atoms, ids) {
+        Some(c) => c,
+        None => merge_linked_from_atoms(piece, vocab, ids, atoms),
+    }
+}
+
+/// [`merge_from_atoms`] for pieces with a run of parts too long for the
+/// char-at-a-time merge.
+#[cold]
+#[inline(never)]
+fn merge_linked_from_atoms(piece: &[u8], vocab: &Vocab, ids: &mut [u32], atoms: &Atoms) -> usize {
     match piece.len() {
-        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids, atoms),
-        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids, atoms),
-        _ => merge_n::<SMALL_MAX>(piece, vocab, ids, atoms),
+        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids, Some(atoms)),
+        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids, Some(atoms)),
+        _ => merge_n::<SMALL_MAX>(piece, vocab, ids, Some(atoms)),
     }
 }
 
@@ -351,6 +389,9 @@ pub fn bpe_count(piece: &[u8], vocab: &Vocab) -> usize {
         out.len()
     }
 }
+
+#[path = "merge_chars.rs"]
+mod chars;
 
 #[cfg(test)]
 #[path = "merge_atoms_tests.rs"]

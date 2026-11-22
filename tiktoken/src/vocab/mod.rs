@@ -18,18 +18,68 @@ mod long_derived;
 mod walls;
 
 pub(crate) use atoms::{Atoms, char_len};
-use fast::FastTable;
 pub(crate) use fast::{Entry, Home, HomeProbe, copy_ids};
-use filter::KeyFilter;
+use fast::{FastTable, TokenProbe};
+use filter::{FilterProbe, KeyFilter};
 pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
 use long_derived::LongDerived;
 pub(crate) use long_derived::{LONG_KEY_MAX, LongIds};
 use std::sync::OnceLock;
-pub(crate) use walls::{Char3, cp3};
+pub(crate) use walls::{Start, cp_at};
 
 /// Rank sentinel for "absent" in the direct-indexed tables.
 pub(crate) const ABSENT: u32 = u32::MAX;
+
+/// The rank lookups of a merge, with the tables' fields held by value so
+/// that they stay in registers across the merge's rounds.
+#[derive(Clone, Copy)]
+pub(crate) struct RankProbe<'a> {
+    vocab: &'a Vocab,
+    filter: FilterProbe<'a>,
+    tokens: TokenProbe<'a>,
+    pair: &'a [u32; 1 << 16],
+    // opaque, so that the multiply takes it from a register rather than
+    // building the constant for every key
+    mul: u64,
+}
+
+impl RankProbe<'_> {
+    /// Same as [`Vocab::rank_padded`].
+    #[inline(always)]
+    pub(crate) fn rank_padded(self, buf: &[u8], at: usize, len: usize) -> u32 {
+        if len > FAST_KEY_MAX {
+            return self.vocab.rank_long(&buf[at..at + len]);
+        }
+        self.rank_key(key_padded(buf, at, len))
+    }
+
+    /// Rank of `t` (2 or more bytes) or [`ABSENT`], reading no byte past
+    /// its end.
+    #[inline(always)]
+    pub(crate) fn rank_of(self, t: &[u8]) -> u32 {
+        match t.len() {
+            2 => self.rank_pair(t[0], t[1]),
+            len if len <= FAST_KEY_MAX => self.rank_key(key_of(t)),
+            _ => self.vocab.rank_long(t),
+        }
+    }
+
+    /// Same as [`Vocab::rank_pair`].
+    #[inline(always)]
+    pub(crate) fn rank_pair(self, a: u8, b: u8) -> u32 {
+        self.pair[(a as usize) << 8 | b as usize]
+    }
+
+    #[inline(always)]
+    fn rank_key(self, (lo, hi): (u64, u64)) -> u32 {
+        let h = key::hash_with(lo, hi, self.mul);
+        if !self.filter.may_contain(h) {
+            return ABSENT;
+        }
+        self.tokens.get(lo, hi, h).unwrap_or(ABSENT)
+    }
+}
 
 /// See [`Vocab::long_piece`].
 pub(crate) struct LongPiece<'p> {
@@ -168,6 +218,24 @@ impl Vocab {
                 .get(&self.arena, &buf[at..at + len])
                 .unwrap_or(ABSENT)
         }
+    }
+
+    /// The merge's rank lookups.
+    #[inline(always)]
+    pub(crate) fn rank_probe(&self) -> RankProbe<'_> {
+        RankProbe {
+            vocab: self,
+            filter: self.filter.probe(),
+            tokens: self.fast.token_probe(),
+            pair: self.pair.as_ref().try_into().unwrap(),
+            mul: std::hint::black_box(key::HASH_MUL),
+        }
+    }
+
+    /// Rank of a key longer than [`FAST_KEY_MAX`] bytes, or [`ABSENT`].
+    #[inline(never)]
+    fn rank_long(&self, t: &[u8]) -> u32 {
+        self.long.get(&self.arena, t).unwrap_or(ABSENT)
     }
 
     /// Entry of a piece's packed key: a token's id or the ids of a derived

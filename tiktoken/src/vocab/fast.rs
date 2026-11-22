@@ -34,6 +34,9 @@ use super::key::{HASH_MUL, hash, hash_with};
 #[path = "fast_read.rs"]
 mod read;
 pub(crate) use read::copy_ids;
+#[path = "fast_token.rs"]
+mod token;
+pub(crate) use token::TokenProbe;
 
 const OPEN_LO: u64 = u64::MAX;
 // a real hi has a length of at most 15 in its top byte, plus at most MULTI
@@ -370,19 +373,7 @@ impl FastTable {
     /// [`get`](Self::get) with the key's hash already computed.
     #[inline]
     pub(crate) fn get_hashed(&self, lo: u64, hi: u64, h: u64) -> Option<u32> {
-        let size = self.lines.len();
-        let mut idx = line_of(h, self.shift, size);
-        loop {
-            for slot in &self.lines[idx].0 {
-                if slot.matches(lo, hi) {
-                    return Some(slot.id());
-                }
-                if slot.hi.load(Ordering::Relaxed) == 0 {
-                    return None;
-                }
-            }
-            idx = next_line(idx, size);
-        }
+        self.token_probe().get(lo, hi, h)
     }
 
     /// The key's entry, vocabulary token or derived. The key must come from
