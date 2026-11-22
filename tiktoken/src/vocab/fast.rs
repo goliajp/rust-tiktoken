@@ -26,7 +26,8 @@
 //! vocabulary key and its home line, and a reader that stops at a slot still
 //! being claimed loses nothing but a derived hit.
 
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use super::key::{HASH_MUL, hash, hash_with};
 
@@ -171,10 +172,48 @@ pub(crate) enum Home {
 pub(crate) struct FastTable {
     lines: Box<[FastLine]>,
     shift: u32,
-    derived: AtomicU32,
+    /// Set once `derived_cap` entries are in; read on every miss, so it lives
+    /// apart from the counters every insert writes.
+    full: AtomicBool,
     derived_cap: u32,
     arena: Box<[AtomicU32]>,
-    arena_len: AtomicU32,
+    counts: Counts,
+}
+
+/// Counters written by inserts from any thread, on lines of their own: next
+/// to `lines` and `shift`, which every probe reads, each insert would
+/// invalidate that line in every other core. The entry count is split into
+/// shards for the same reason; one shared counter was a read-modify-write on
+/// one line by every thread for every insert, and cost a first pass on ten
+/// threads more than a third of its time.
+struct Counts {
+    derived: [Padded; SHARDS],
+    arena_len: Padded,
+}
+
+const SHARDS: usize = 16;
+/// A shard adds up all shards each time its own count reaches a multiple of
+/// this, so up to `SHARDS * STEP` entries may go in past `derived_cap`.
+const STEP: u32 = 32;
+/// Smaller caps are checked on every insert: the overshoot must stay well
+/// inside the quarter of the slots that is never filled.
+const EXACT_BELOW: u32 = 4 * SHARDS as u32 * STEP;
+
+#[repr(align(128))]
+struct Padded(AtomicU32);
+
+/// This thread's counter shard.
+fn shard() -> usize {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    thread_local! {
+        static SHARD: Cell<usize> = const { Cell::new(usize::MAX) };
+    }
+    SHARD.with(|s| {
+        if s.get() == usize::MAX {
+            s.set(NEXT.fetch_add(1, Ordering::Relaxed) % SHARDS);
+        }
+        s.get()
+    })
 }
 
 fn zeroed_atomics(n: usize) -> Box<[AtomicU32]> {
@@ -224,10 +263,13 @@ impl FastTable {
         Self {
             lines,
             shift,
-            derived: AtomicU32::new(0),
+            full: AtomicBool::new(derived_cap == 0),
             derived_cap,
             arena: zeroed_atomics(derived_cap as usize * 4),
-            arena_len: AtomicU32::new(0),
+            counts: Counts {
+                derived: std::array::from_fn(|_| Padded(AtomicU32::new(0))),
+                arena_len: Padded(AtomicU32::new(0)),
+            },
         }
     }
 
@@ -316,14 +358,18 @@ impl FastTable {
     pub(crate) fn insert_derived(&self, lo: u64, hi: u64, ids: &[u32]) -> bool {
         let n = ids.len();
         debug_assert!((2..=DERIVED_MAX_IDS).contains(&n) && lo != OPEN_LO && hi & MULTI == 0);
-        if self.derived.load(Ordering::Relaxed) >= self.derived_cap {
+        if self.full.load(Ordering::Relaxed) {
             return false;
         }
         let (w0, w1) = if n <= INLINE {
             let w1 = ids[1] as u64 | ids.get(2).map_or(0, |&id| (id as u64) << 32);
             (ids[0] as u64, w1)
         } else {
-            let off = self.arena_len.fetch_add(n as u32, Ordering::Relaxed) as usize;
+            let off = self
+                .counts
+                .arena_len
+                .0
+                .fetch_add(n as u32, Ordering::Relaxed) as usize;
             if off + n > self.arena.len() {
                 return false;
             }
@@ -348,7 +394,7 @@ impl FastTable {
                         slot.w1.store(w1, Ordering::Relaxed);
                         slot.hi.store(hi | MULTI, Ordering::Relaxed);
                         slot.lo.store(lo, Ordering::Release);
-                        self.derived.fetch_add(1, Ordering::Relaxed);
+                        self.count_derived();
                         return true;
                     }
                 } else if h == hi | MULTI && slot.lo.load(Ordering::Acquire) == lo {
@@ -359,10 +405,28 @@ impl FastTable {
         }
     }
 
+    fn count_derived(&self) {
+        let mine = self.counts.derived[shard()]
+            .0
+            .fetch_add(1, Ordering::Relaxed)
+            + 1;
+        if mine.is_multiple_of(STEP) || self.derived_cap < EXACT_BELOW {
+            let total: u32 = self
+                .counts
+                .derived
+                .iter()
+                .map(|c| c.0.load(Ordering::Relaxed))
+                .sum();
+            if total >= self.derived_cap {
+                self.full.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
     /// Whether [`insert_derived`](Self::insert_derived) may still succeed.
     #[inline]
     pub(crate) fn accepts_derived(&self) -> bool {
-        self.derived.load(Ordering::Relaxed) < self.derived_cap
+        !self.full.load(Ordering::Relaxed)
     }
 
     /// Remove every derived entry, restoring the table as built.
@@ -379,8 +443,11 @@ impl FastTable {
                 }
             }
         }
-        self.derived.store(0, Ordering::Relaxed);
-        self.arena_len.store(0, Ordering::Relaxed);
+        for c in &self.counts.derived {
+            c.0.store(0, Ordering::Relaxed);
+        }
+        self.counts.arena_len.0.store(0, Ordering::Relaxed);
+        self.full.store(self.derived_cap == 0, Ordering::Relaxed);
     }
 
     /// Whether the key sits in its home line; `None` if absent.
