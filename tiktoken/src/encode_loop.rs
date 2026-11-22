@@ -49,6 +49,13 @@ pub(crate) fn id_capacity(text: &str) -> usize {
     if b.len() < WINDOW_MIN {
         return b.len() / 3;
     }
+    window_capacity(b)
+}
+
+/// [`id_capacity`] past [`WINDOW_MIN`] bytes, out of line so that `encode`
+/// still inlines into its callers.
+#[inline(never)]
+fn window_capacity(b: &[u8]) -> usize {
     let dense = b.first_chunk::<64>().is_some_and(|head| {
         let hi: u32 = head
             .as_chunks::<8>()
