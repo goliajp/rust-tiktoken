@@ -77,14 +77,29 @@ fn encode_hits(
     buf: &[u8],
     start: usize,
     offs: &[u16],
-    mut i: usize,
+    i: usize,
     ptr: *mut u32,
-    mut len: usize,
+    len: usize,
 ) -> (usize, usize, (u64, u64), Option<Entry>) {
-    while i + 1 < offs.len() {
-        // SAFETY: i + 1 < offs.len()
-        let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
+    if i + 1 >= offs.len() {
+        return (i, len, NO_KEY, None);
+    }
+    // pointers rather than indices, and each piece's end carried over as
+    // the next one's start: fewer instructions per piece
+    let base = offs.as_ptr();
+    // SAFETY: i + 1 < offs.len(), and `last` is the last offset
+    let (mut o, last, mut a) = unsafe { (base.add(i), base.add(offs.len() - 1), *base.add(i)) };
+    // SAFETY: `len` ids were written below the capacity
+    let mut out = unsafe { ptr.add(len) };
+    let done = |o: *const u16, out: *mut u32| {
+        // SAFETY: both pointers lie in the allocations they started in
+        unsafe { (o.offset_from(base) as usize, out.offset_from(ptr) as usize) }
+    };
+    while o < last {
+        // SAFETY: o < last, so o + 1 is in bounds
+        let b = unsafe { *o.add(1) };
         let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
+            let (i, len) = done(o, out);
             return (i, len, NO_KEY, None);
         };
         // a key off its home line is mostly on the next one; walking the
@@ -95,25 +110,31 @@ fn encode_hits(
         };
         // SAFETY (writes): the caller made room for three ids per piece
         match found {
-            Home::Token(id) => {
-                unsafe { ptr.add(len).write(id) };
-                len += 1;
-            }
+            Home::Token(id) => unsafe {
+                out.write(id);
+                out = out.add(1);
+            },
             // ids past the entry's count are overwritten later or left past
             // the end
-            Home::Derived(e) if e.is_inline() => {
-                unsafe {
-                    let p = ptr.add(len);
-                    p.write(e.first());
-                    p.add(1).cast::<u64>().write_unaligned(e.rest().to_le());
-                }
-                len += e.len();
+            Home::Derived(e) if e.is_inline() => unsafe {
+                out.write(e.first());
+                out.add(1).cast::<u64>().write_unaligned(e.rest().to_le());
+                out = out.add(e.len());
+            },
+            Home::Derived(e) => {
+                let (i, len) = done(o, out);
+                return (i, len, (lo, hi), Some(e));
             }
-            Home::Derived(e) => return (i, len, (lo, hi), Some(e)),
-            Home::Miss => return (i, len, (lo, hi), None),
+            Home::Miss => {
+                let (i, len) = done(o, out);
+                return (i, len, (lo, hi), None);
+            }
         }
-        i += 1;
+        a = b;
+        // SAFETY: o < last
+        o = unsafe { o.add(1) };
     }
+    let (i, len) = done(o, out);
     (i, len, NO_KEY, None)
 }
 

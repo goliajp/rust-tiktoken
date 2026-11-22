@@ -260,7 +260,10 @@ struct Worker {
 
 impl Worker {
     fn wake(&self) {
-        if self.sleeping.swap(false, SeqCst)
+        // a load first: a spinning worker's flag stays false, and swapping
+        // it anyway pulled its line over from another core for every job
+        if self.sleeping.load(SeqCst)
+            && self.sleeping.swap(false, SeqCst)
             && let Some(t) = self.thread.get()
         {
             t.unpark();

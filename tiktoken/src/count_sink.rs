@@ -12,14 +12,22 @@ fn count_hits(
     buf: &[u8],
     start: usize,
     offs: &[u16],
-    mut i: usize,
+    i: usize,
     mut count: usize,
 ) -> (usize, usize, (u64, u64)) {
-    while i + 1 < offs.len() {
-        // SAFETY: i + 1 < offs.len()
-        let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
+    if i + 1 >= offs.len() {
+        return (i, count, NO_KEY);
+    }
+    let base = offs.as_ptr();
+    // SAFETY: i + 1 < offs.len(), and `last` is the last offset
+    let (mut o, last, mut a) = unsafe { (base.add(i), base.add(offs.len() - 1), *base.add(i)) };
+    // SAFETY: `o` lies in `offs`
+    let at = |o: *const u16| unsafe { o.offset_from(base) as usize };
+    while o < last {
+        // SAFETY: o < last, so o + 1 is in bounds
+        let b = unsafe { *o.add(1) };
         let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
-            return (i, count, NO_KEY);
+            return (at(o), count, NO_KEY);
         };
         let found = match home.lookup(lo, hi) {
             Home::Miss => home.lookup_chain(lo, hi),
@@ -28,11 +36,13 @@ fn count_hits(
         match found {
             Home::Token(_) => count += 1,
             Home::Derived(e) => count += e.len(),
-            Home::Miss => return (i, count, (lo, hi)),
+            Home::Miss => return (at(o), count, (lo, hi)),
         }
-        i += 1;
+        a = b;
+        // SAFETY: o < last
+        o = unsafe { o.add(1) };
     }
-    (i, count, NO_KEY)
+    (at(o), count, NO_KEY)
 }
 
 pub(crate) struct CountSink<'e> {

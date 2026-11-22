@@ -229,6 +229,5 @@ const fn bmp_bits(map: &FamilyMap, mask: u8, want: u8) -> BmpBits {
 pub(crate) static LETTERS: BmpBits = bmp_bits(&MAP_BASE, C_LETTER, C_LETTER);
 /// Letters under [`MAP_QWEN35`].
 pub(crate) static LETTERS_QWEN35: BmpBits = bmp_bits(&MAP_QWEN35, C_LETTER, C_LETTER);
-/// Chars in both case classes that cannot lead a word, under [`MAP_BASE`].
-pub(crate) static BOTH_CASES: BmpBits =
-    bmp_bits(&MAP_BASE, C_UPPER | C_LOWER | C_PREFIX, C_UPPER | C_LOWER);
+/// Chars in both case classes under [`MAP_BASE`], marks included.
+pub(crate) static BOTH_CASES: BmpBits = bmp_bits(&MAP_BASE, C_UPPER | C_LOWER, C_UPPER | C_LOWER);

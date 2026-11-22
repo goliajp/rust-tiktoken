@@ -1,12 +1,12 @@
-//! Window decisions for one classified chunk, as two independent chains.
+//! Window decisions for one classified chunk, as three independent chains.
 //!
 //! Each window opens at the previous window's cut, so a single chain of
 //! windows runs at the latency of one decision per window. The chunk is
-//! instead cut near its middle at a piece start that needs no decision (an
-//! ASCII letter followed by a space or a newline: no rule of any pattern
-//! takes a letter and the whitespace after it into one piece), and each half
-//! is decided by its own chain, a window of one after a window of the other,
-//! so that the two overlap. The chains record piece starts in one bitmap,
+//! instead cut about a third and two thirds of the way in, at piece starts
+//! that need no decision (an ASCII letter followed by a space or a newline:
+//! no rule of any pattern takes a letter and the whitespace after it into one
+//! piece), and each part is decided by its own chain, a window of each in
+//! turn, so that they overlap. The chains record piece starts in one bitmap,
 //! which is then walked in order.
 
 use std::mem::MaybeUninit;
@@ -107,33 +107,57 @@ pub(super) fn decide_chunk<R: WindowRules, const CONT: bool, S: PieceSink, const
     stop: usize,
     sink: &mut S,
 ) -> usize {
-    // chain a decides from 0 while its window start is below `mid`, keeping
-    // starts below `end_a`, and chain b from `mid` while below `stop`,
-    // keeping everything; with no start found near the middle, chain a does
-    // it all
-    let (mid, end_a) = match boundary::<W>(R::CASE, maps, stop / 2, 0, stop) {
-        Some(b) => (b, b),
-        None => (stop, usize::MAX),
-    };
     // window bits stay below `limit`, and `or_at` writes one word past
     let mut starts = Starts::<W>::new(limit / 64 + 1);
     let mut step = |r: usize, end: usize| {
         step::<R, CONT, W>(pre, maps, text, buf, start, limit, r, end, &mut starts)
     };
+    // chain k decides from `m[k]` while its window start is below `m[k +
+    // 1]`, keeping starts below `e[k]`; the last chain with a start keeps
+    // everything. Where no start is found, the chain before does that part
+    // too. ASCII chunks are cut a third and two thirds of the way in; chunks
+    // with other bytes only in the middle: their longer rules in three
+    // chains ran out of registers, and the spills cost more than the
+    // overlap gained
+    let first = if CONT { stop / 2 } else { stop / 3 };
+    let m1 = boundary::<W>(R::CASE, maps, first, 0, stop).unwrap_or(stop);
+    let m2 = if !CONT && m1 < stop {
+        boundary::<W>(R::CASE, maps, (2 * stop / 3).max(m1), m1, stop).unwrap_or(stop)
+    } else {
+        stop
+    };
+    let e0 = if m1 < stop { m1 } else { usize::MAX };
+    let e1 = if m2 < stop { m2 } else { usize::MAX };
     // plain locals, not arrays indexed in a loop: a chain's next start must
     // stay in a register, or every window waits on a store and a reload
-    let (mut ra, mut rb) = (0, mid);
-    while ra < mid && rb < stop {
-        ra = step(ra, end_a);
-        rb = step(rb, usize::MAX);
+    let (mut r0, mut r1, mut r2) = (0, m1, m2);
+    if !CONT {
+        while r0 < m1 && r1 < m2 && r2 < stop {
+            r0 = step(r0, e0);
+            r1 = step(r1, e1);
+            r2 = step(r2, usize::MAX);
+        }
     }
-    while ra < mid {
-        ra = step(ra, end_a);
+    while r0 < m1 && r1 < m2 {
+        r0 = step(r0, e0);
+        r1 = step(r1, e1);
     }
-    while rb < stop {
-        rb = step(rb, usize::MAX);
+    while r0 < m1 {
+        r0 = step(r0, e0);
     }
-    let reach = if mid < stop { rb } else { ra };
+    while r1 < m2 {
+        r1 = step(r1, e1);
+    }
+    while r2 < stop {
+        r2 = step(r2, usize::MAX);
+    }
+    let reach = if m2 < stop {
+        r2
+    } else if m1 < stop {
+        r1
+    } else {
+        r0
+    };
     walk(&starts, buf, start, reach, sink);
     reach
 }
