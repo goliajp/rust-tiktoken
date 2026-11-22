@@ -53,7 +53,11 @@ impl LongTable {
     }
 
     pub(crate) fn get(&self, arena: &[u8], token: &[u8]) -> Option<u32> {
-        let hash = hash_long(token);
+        self.get_hashed(arena, token, hash_long(token))
+    }
+
+    /// [`get`](Self::get) with the token's [`hash_long`] already computed.
+    pub(crate) fn get_hashed(&self, arena: &[u8], token: &[u8], hash: u64) -> Option<u32> {
         let tag = tag(hash);
         let mut idx = hash as usize & self.mask;
         loop {
