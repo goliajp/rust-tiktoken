@@ -18,7 +18,7 @@ mod long_derived;
 
 pub(crate) use atoms::{Atoms, char_len};
 use fast::FastTable;
-pub(crate) use fast::{Entry, Home, HomeProbe};
+pub(crate) use fast::{Entry, Home, HomeProbe, copy_ids};
 use filter::KeyFilter;
 pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;

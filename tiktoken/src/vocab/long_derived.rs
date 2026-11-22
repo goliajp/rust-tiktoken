@@ -47,10 +47,11 @@ impl LongIds<'_> {
         self.0.len()
     }
 
-    /// The ids in order.
+    /// The ids, which the slot's `Acquire` load made visible and which are
+    /// not written again until a [`clear`](LongDerived::clear).
     #[inline]
-    pub(crate) fn iter(&self) -> impl Iterator<Item = u32> + '_ {
-        self.0.iter().map(|w| w.load(Ordering::Relaxed))
+    pub(crate) fn as_ptr(&self) -> *const u32 {
+        self.0.as_ptr().cast::<u32>()
     }
 
     /// Append the ids to `out`.

@@ -33,6 +33,7 @@ use super::key::{HASH_MUL, hash, hash_with};
 
 #[path = "fast_read.rs"]
 mod read;
+pub(crate) use read::copy_ids;
 
 const OPEN_LO: u64 = u64::MAX;
 // a real hi has a length of at most 15 in its top byte, plus at most MULTI

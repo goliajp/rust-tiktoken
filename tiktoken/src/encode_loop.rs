@@ -22,7 +22,8 @@ use crate::pretokenize::window::{CaseRules, Cl100kRules};
 use crate::pretokenize::windowed::{self, PieceSink};
 use crate::pretokenize::{PreTokenizer, ScalarPreTokenizer, WindowKind};
 use crate::vocab::{
-    Entry, FAST_KEY_MAX, Home, HomeProbe, KEY_READ, LongIds, Vocab, key_in, key_of, key_padded,
+    Entry, FAST_KEY_MAX, Home, HomeProbe, KEY_READ, LongIds, Vocab, copy_ids, key_in, key_of,
+    key_padded,
 };
 
 // a real key never has a zero high word
@@ -37,6 +38,29 @@ pub(crate) struct Engine<'a> {
 /// Texts shorter than this skip the window rules: classifying costs more than
 /// it saves on a handful of pieces.
 const WINDOW_MIN: usize = 32;
+
+/// Ids to reserve for encoding `text`: a third of its length, or two thirds
+/// when its first 64 bytes are mostly non-ASCII, as dense CJK, Hangul or
+/// Arabic text takes 0.35 to 0.65 ids per byte and would otherwise grow the
+/// vector mid-scan.
+#[inline(always)]
+pub(crate) fn id_capacity(text: &str) -> usize {
+    let b = text.as_bytes();
+    let Some(head) = b.first_chunk::<64>() else {
+        return b.len() / 3;
+    };
+    let hi: u32 = head
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|w| (u64::from_le_bytes(*w) & 0x8080_8080_8080_8080).count_ones())
+        .sum();
+    if hi >= 16 {
+        b.len() / 3 * 2
+    } else {
+        b.len() / 3
+    }
+}
 
 impl Engine<'_> {
     pub(crate) fn encode_into(&self, text: &str, out: &mut Vec<u32>) {
@@ -206,14 +230,16 @@ pub(crate) fn probe(
     home.home(lo, hi).ok_or((lo, hi))
 }
 
-/// Room an [`EncodeSink`] keeps before each window: every piece writes three
-/// ids' worth and advances by at most three.
-const ROOM: usize = 3 * 64;
+/// Room an [`EncodeSink`] keeps before each window: a window has at most 64
+/// pieces, a home-line hit writes one id, and the first miss may write three
+/// ids' worth, after which [`encode_miss`] restores this room. A dense piece
+/// right after a window writes at most 15.
+const ROOM: usize = 64 + 2;
 
 /// Writes ids through a raw pointer. Batches of pieces go through a leaf loop
-/// that writes one id per piece, after making room for the batch; single
-/// pieces come after a [`window`](PieceSink::window) call that makes room for
-/// 64 pieces of up to three inline ids each.
+/// that writes up to three ids per piece, as many pieces at a time as the
+/// spare capacity holds; single pieces come after a
+/// [`window`](PieceSink::window) call that makes [`ROOM`].
 ///
 /// The out-of-line paths take the fields by value rather than `&mut self`,
 /// so that the sink does not escape and its fields stay in registers in the
@@ -360,17 +386,23 @@ impl PieceSink for EncodeSink<'_, '_> {
 
     #[inline(always)]
     fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
+        let last = offs.len() - 1;
         let mut i = 0;
-        while i + 1 < offs.len() {
-            let need = (3 * (offs.len() - i)).max(ROOM);
-            if self.cap - self.len < need {
-                grow(self.out, self.len, need);
+        while i < last {
+            // grow only when fewer than 64 pieces (or the rest) fit: growing
+            // for the whole batch up front reallocated short texts that
+            // never needed it
+            let left = last - i;
+            if self.cap - self.len < 3 * left.min(64) {
+                grow(self.out, self.len, 3 * left);
                 self.reload();
             }
-            let (at, len, key) = encode_hits(self.home, buf, start, offs, i, self.ptr, self.len);
+            let end = i + left.min((self.cap - self.len) / 3);
+            let batch = &offs[..=end];
+            let (at, len, key) = encode_hits(self.home, buf, start, batch, i, self.ptr, self.len);
             self.len = len;
             i = at;
-            if i + 1 < offs.len() {
+            if i < end {
                 let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
                 self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
                 self.reload();
@@ -444,10 +476,9 @@ impl EncodeSink<'_, '_> {
             grow(self.out, self.len, n + ROOM);
             self.reload();
         }
-        for (k, id) in ids.iter().enumerate() {
-            // SAFETY: room for `n` ids was made above
-            unsafe { self.ptr.add(self.len + k).write(id) };
-        }
+        // SAFETY: room for `n + ROOM` ids was made above, and the ids are
+        // not written concurrently
+        unsafe { copy_ids(ids.as_ptr(), self.ptr.add(self.len), n) };
         self.len += n;
     }
 
