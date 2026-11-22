@@ -9,6 +9,24 @@ pub(crate) struct KeyFilter {
     shift: u32,
 }
 
+/// A [`KeyFilter`] by value, for loops that keep its fields in registers.
+#[derive(Clone, Copy)]
+pub(crate) struct FilterProbe<'a> {
+    words: &'a [u64],
+    shift: u32,
+}
+
+impl FilterProbe<'_> {
+    /// Same as [`KeyFilter::may_contain`].
+    #[inline(always)]
+    pub(crate) fn may_contain(self, h: u64) -> bool {
+        let b = bits(h);
+        // SAFETY: the hash's top bits index the power-of-two word array
+        let w = unsafe { *self.words.get_unchecked((h >> self.shift) as usize) };
+        w & b == b
+    }
+}
+
 #[inline(always)]
 fn bits(h: u64) -> u64 {
     // the low bits of a multiplicative hash are weak; take them from the middle
@@ -26,6 +44,14 @@ impl KeyFilter {
             words[(h >> shift) as usize] |= bits(h);
         }
         Self { words, shift }
+    }
+
+    #[inline(always)]
+    pub(crate) fn probe(&self) -> FilterProbe<'_> {
+        FilterProbe {
+            words: &self.words,
+            shift: self.shift,
+        }
     }
 
     #[inline(always)]

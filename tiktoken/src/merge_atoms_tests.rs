@@ -1,7 +1,7 @@
 //! Merges that start from atoms and wall chars against merges from bytes
 //! and a plain reference merge, for every encoding.
 
-use super::{SMALL_MAX, merge_small, merge_small_bytes};
+use super::{SMALL_MAX, merge_n, merge_small, merge_small_bytes};
 use crate::pretokenize::PreTokenizer;
 use crate::vocab::{Vocab, char_len};
 
@@ -35,6 +35,12 @@ fn check(v: &Vocab, piece: &[u8], name: &str) {
     let what = || format!("{name}: {:?} ({piece:x?})", String::from_utf8_lossy(piece));
     assert_eq!(a[..na], b[..nb], "{}", what());
     assert_eq!(a[..na], reference(v, piece)[..], "{}", what());
+    // the linked merge from atoms, which takes runs too long for the
+    // char-at-a-time merge
+    if piece.len() >= 2 {
+        let nc = merge_n::<SMALL_MAX>(piece, v, &mut b, Some(v.atoms()));
+        assert_eq!(a[..na], b[..nc], "{}", what());
+    }
 }
 
 struct Rng(u64);
@@ -185,5 +191,28 @@ fn atoms_match_byte_merges_on_fixture_pieces() {
             }
         }
         assert!(pieces > 10_000, "{name}: {pieces} pieces");
+    }
+}
+
+#[test]
+fn atoms_match_byte_merges_on_long_runs_of_one_script() {
+    // long enough that a run of mergeable parts outgrows the char-at-a-time
+    // merge and the linked merge takes the piece
+    let scripts = [
+        "مرحبابالعالم",
+        "こんにちはせかい",
+        "ПриветМир",
+        "αβγδεζηθ",
+        "你好世界中文",
+    ];
+    for &name in crate::list_encodings() {
+        let v = crate::get_encoding(name).unwrap().vocab();
+        for s in scripts {
+            let mut t = String::new();
+            while t.len() + s.len() <= SMALL_MAX {
+                t.push_str(s);
+                check(v, t.as_bytes(), name);
+            }
+        }
     }
 }

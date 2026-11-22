@@ -22,7 +22,7 @@
 //! argument applies to one char at a time, so any set of atoms may start
 //! whole together.
 
-use super::walls::{Walls, cp3};
+use super::walls::{Walls, cp_at};
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Default)]
@@ -188,12 +188,13 @@ impl Atoms {
                 rule: ix,
             });
         }
-        let three = atoms.iter().filter_map(|a| {
-            let [b0, b1, b2, b3] = a.key.to_le_bytes();
-            let cp = cp3(b0, b1, b2).filter(|_| b3 == 0)?;
-            Some((cp, a.rank, a.rule != 0))
+        let short = atoms.iter().filter_map(|a| {
+            let b = a.key.to_le_bytes();
+            let l = char_len(b[0]);
+            let cp = cp_at(&b[..l], 0, l).filter(|_| b[l..].iter().all(|&x| x == 0))?;
+            Some((cp, a.rank))
         });
-        let walls = Walls::build(&heads, &tails, three, &get);
+        let walls = Walls::build(&heads, &tails, short, &get);
         let size = (atoms.len() * 2).max(16).next_power_of_two();
         let mut slots = vec![Slot::default(); size].into_boxed_slice();
         let mut filter = Box::new([0u64; FILTER_WORDS]);
@@ -214,7 +215,7 @@ impl Atoms {
         }
     }
 
-    /// What the merge may assume about each 3-byte char.
+    /// What the merge may assume about each 2- and 3-byte char.
     #[inline(always)]
     pub(crate) fn walls(&self) -> &Walls {
         &self.walls
