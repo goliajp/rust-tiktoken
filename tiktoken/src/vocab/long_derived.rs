@@ -122,7 +122,7 @@ impl LongDerived {
         // SAFETY: the slot's Acquire load ordered the record's writes before
         // this read, and a published record is never written again
         let bytes = unsafe { std::slice::from_raw_parts(key.as_ptr().cast::<u8>(), len) };
-        if bytes != piece {
+        if !same_long(bytes, piece) {
             return None;
         }
         Some(LongIds(&rec[1 + key_words..1 + key_words + n]))
@@ -190,9 +190,39 @@ impl LongDerived {
     }
 }
 
+/// `a == b` for two slices of the same length of at least 16 bytes, in
+/// 16-byte steps and one overlapping last step rather than a library call.
+#[inline(always)]
+fn same_long(a: &[u8], b: &[u8]) -> bool {
+    let n = b.len();
+    debug_assert!(a.len() == n && n >= 16);
+    let at = |s: &[u8], i: usize| u128::from_ne_bytes(s[i..i + 16].try_into().unwrap());
+    let mut i = 0;
+    while i + 16 < n {
+        if at(a, i) != at(b, i) {
+            return false;
+        }
+        i += 16;
+    }
+    at(a, n - 16) == at(b, n - 16)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_long_finds_any_differing_byte() {
+        let a: Vec<u8> = (0..80u8).map(|i| i.wrapping_mul(37)).collect();
+        for n in 16..=80 {
+            assert!(same_long(&a[..n], &a[..n]));
+            for i in 0..n {
+                let mut b = a[..n].to_vec();
+                b[i] ^= 0x40;
+                assert!(!same_long(&a[..n], &b), "{n} {i}");
+            }
+        }
+    }
 
     #[test]
     fn insert_get_exact_and_clear() {
