@@ -1,11 +1,11 @@
 //! The counting sink of the windowed scan: the same probes as the encoding
-//! sink in `encode_loop`, adding up id counts instead of writing ids.
+//! sink in `encode_sink`, adding up id counts instead of writing ids.
 
 use crate::encode_loop::{Engine, NO_KEY, piece_key, probe, probe_entry};
 use crate::pretokenize::windowed::PieceSink;
 use crate::vocab::{Home, HomeProbe};
 
-/// The counting twin of [`encode_hits`].
+/// The counting twin of `encode_hits` in `encode_sink`.
 #[inline(never)]
 fn count_hits(
     home: HomeProbe<'_>,
