@@ -447,3 +447,47 @@ fn sharded_count_stops_inserts_shortly_after_cap() {
         assert_eq!(vocab.get(format!("t{i}").as_bytes()), Some(i));
     }
 }
+
+#[test]
+fn clearing_derived_entries_forgets_all_of_them() {
+    let entries: Vec<(Vec<u8>, u32)> = (0u32..5000)
+        .map(|i| (format!("t{i}").into_bytes(), i))
+        .collect();
+    let vocab = Vocab::from_entries(entries);
+    let key = |t: usize, i: usize| key_of(format!("{t}:{i}").as_bytes());
+    let long = |t: usize, i: usize| format!("{t}:{i}:{}", "x".repeat(16 + i % 40)).into_bytes();
+    for (threads, per_thread) in [(3, 10), (3, 700), (1, 2500)] {
+        std::thread::scope(|s| {
+            for t in 0..threads {
+                let vocab = &vocab;
+                s.spawn(move || {
+                    for i in 0..per_thread {
+                        let (lo, hi) = key(t, i);
+                        assert!(vocab.insert_derived(lo, hi, &[t as u32, i as u32]));
+                        let p = long(t, i);
+                        assert!(vocab.insert_long(&vocab.long_piece(&p), &[1, 2, i as u32]));
+                    }
+                });
+            }
+        });
+        for t in 0..threads {
+            for i in 0..per_thread {
+                assert_eq!(ids_of(&vocab, key(t, i)), Some(vec![t as u32, i as u32]));
+                assert!(vocab.long_ids(&long(t, i)).is_some());
+            }
+        }
+        vocab.clear_derived();
+        for t in 0..threads {
+            for i in 0..per_thread {
+                assert_eq!(ids_of(&vocab, key(t, i)), None, "{per_thread} {t}:{i}");
+                assert!(
+                    vocab.long_ids(&long(t, i)).is_none(),
+                    "{per_thread} {t}:{i}"
+                );
+            }
+        }
+        for i in 0..5000u32 {
+            assert_eq!(vocab.get(format!("t{i}").as_bytes()), Some(i));
+        }
+    }
+}
