@@ -26,6 +26,28 @@ export function tk_bind(m) {
   mem = m;
   views();
 }
+// whether TextEncoder.encode plus a copy beats encodeInto, timed once on
+// 1 KB of ASCII: JavaScriptCore's encodeInto runs about 20 times slower
+// than its encode, V8's about 1.6 times faster
+let copyEncoded = null;
+function pick() {
+  if (typeof performance === 'undefined') return false;
+  const s = 'The quick brown fox jumps over the lazy dog. '.repeat(24);
+  const buf = new Uint8Array(4096);
+  const time = (f) => {
+    const t0 = performance.now();
+    let k = 0, t = 0;
+    do {
+      for (let i = 0; i < 16; i++) f();
+      k += 16;
+      t = performance.now() - t0;
+    } while (t < 1);
+    return t / k;
+  };
+  const into = time(() => te.encodeInto(s, buf));
+  const copy = time(() => buf.set(te.encode(s)));
+  return copy < into * 0.8;
+}
 // mostly chars of two or more utf-8 bytes, judged from 16 samples
 function wide(s, n) {
   const step = n >>> 4;
@@ -53,9 +75,22 @@ export function tk_read(s, p8, c8, p16, c16) {
     return 2 * (i + te.encodeInto(s.slice(i), u8.subarray(p8 + i, p8 + c8)).written);
   }
   if (n >= 64 && wide(s, n)) {
-    const at = p16 >>> 1;
-    for (let i = 0; i < n; i++) u16[at + i] = s.charCodeAt(i);
+    const v = u16, at = p16 >>> 1;
+    let i = 0;
+    for (; i + 4 <= n; i += 4) {
+      v[at + i] = s.charCodeAt(i);
+      v[at + i + 1] = s.charCodeAt(i + 1);
+      v[at + i + 2] = s.charCodeAt(i + 2);
+      v[at + i + 3] = s.charCodeAt(i + 3);
+    }
+    for (; i < n; i++) v[at + i] = s.charCodeAt(i);
     return 2 * n + 1;
+  }
+  if (copyEncoded === null) copyEncoded = pick();
+  if (copyEncoded) {
+    const b = te.encode(s);
+    u8.set(b, p8);
+    return 2 * b.length;
   }
   return 2 * te.encodeInto(s, u8.subarray(p8, p8 + c8)).written;
 }
