@@ -104,6 +104,9 @@ impl Vocab {
             }
         }
 
+        // the per-token buffers go before the tables are allocated, so that a
+        // wasm heap, which never shrinks, can reuse their space
+        drop(entries);
         let arena = arena.into_boxed_slice();
         let long = LongTable::build(&arena, &long_items);
         let filter = KeyFilter::build(fast_keys.iter().map(|&(lo, hi, _)| key::hash(lo, hi)));

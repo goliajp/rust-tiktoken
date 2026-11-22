@@ -20,8 +20,16 @@ use super::key::hash_long;
 /// Longest piece kept.
 pub(crate) const LONG_KEY_MAX: usize = 255;
 const BUCKET: usize = 8;
+// wasm linear memory has no lazily mapped zero pages: the whole arena counts
+// from the first long piece on, for every encoding in use
+#[cfg(not(target_arch = "wasm32"))]
 const BUCKETS: usize = 1 << 13;
+#[cfg(not(target_arch = "wasm32"))]
 const ARENA_WORDS: usize = 1 << 20;
+#[cfg(target_arch = "wasm32")]
+const BUCKETS: usize = 1 << 10;
+#[cfg(target_arch = "wasm32")]
+const ARENA_WORDS: usize = 1 << 17;
 
 #[repr(C, align(64))]
 struct Bucket([AtomicU64; BUCKET]);

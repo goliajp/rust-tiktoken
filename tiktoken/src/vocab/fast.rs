@@ -128,9 +128,9 @@ pub(crate) struct HomeProbe<'a> {
 impl<'a> HomeProbe<'a> {
     #[inline(always)]
     fn line(self, lo: u64, hi: u64) -> &'a FastLine {
-        let idx = (hash_with(lo, hi, self.mul) >> self.shift) as usize;
+        let idx = line_of(hash_with(lo, hi, self.mul), self.shift, self.lines.len());
         debug_assert!(idx < self.lines.len());
-        // SAFETY: the hash's top `64 - shift` bits index the power-of-two table
+        // SAFETY: line_of maps into the table
         unsafe { self.lines.get_unchecked(idx) }
     }
 
@@ -166,10 +166,10 @@ impl<'a> HomeProbe<'a> {
     /// finds it, told apart like [`lookup`](Self::lookup)'s.
     #[inline(always)]
     pub(crate) fn lookup_chain(&self, lo: u64, hi: u64) -> Home {
-        let mask = self.lines.len() - 1;
-        let mut idx = (hash_with(lo, hi, self.mul) >> self.shift) as usize;
+        let size = self.lines.len();
+        let mut idx = line_of(hash_with(lo, hi, self.mul), self.shift, size);
         loop {
-            // SAFETY: masked into the power-of-two table
+            // SAFETY: line_of and next_line stay inside the table
             for slot in &unsafe { self.lines.get_unchecked(idx) }.0 {
                 if slot.lo.load(Ordering::Acquire) == lo {
                     let h = slot.hi.load(Ordering::Relaxed);
@@ -184,7 +184,7 @@ impl<'a> HomeProbe<'a> {
                     return Home::Miss;
                 }
             }
-            idx = (idx + 1) & mask;
+            idx = next_line(idx, size);
         }
     }
 }
@@ -249,17 +249,41 @@ fn zeroed_atomics(n: usize) -> Box<[AtomicU32]> {
     unsafe { Box::from_raw(Box::into_raw(words) as *mut [AtomicU32]) }
 }
 
-/// Slot count for `n` vocabulary keys. `compact` (wasm builds) halves the
-/// table only when the half still has room, at three quarters load, for
-/// derived entries a quarter of the vocabulary in number: without them every
-/// piece that is not a token is merged again on every call, which doubled
-/// the time of cl100k on CJK text.
+/// Slot count for `n` vocabulary keys: a power of two with at least twice
+/// as many slots. `compact` (wasm builds, where every byte of the table is
+/// linear memory from the start) instead gives 1.6 slots a key, an even
+/// count, so that derived entries a fifth of the vocabulary in number still
+/// fit below three quarters load: without them every piece that is not a
+/// token is merged again on every call, which doubled the time of cl100k on
+/// CJK text.
 pub(crate) fn table_slots(n: usize, compact: bool) -> usize {
-    let slots = (n * 2).max(4).next_power_of_two();
-    if compact && slots / 2 * 3 / 4 >= n + n / 4 {
-        slots / 2
+    if compact {
+        (n * 8 / 5).max(4).next_multiple_of(2)
     } else {
-        slots
+        (n * 2).max(4).next_power_of_two()
+    }
+}
+
+/// The line of hash `h` in a table of `lines` lines: the top bits on a
+/// power-of-two table (`shift` is 64 minus their number); on wasm, where
+/// [`table_slots`] sizes it to the vocabulary, the top half scaled to the
+/// line count.
+#[inline(always)]
+fn line_of(h: u64, shift: u32, lines: usize) -> usize {
+    if cfg!(target_arch = "wasm32") {
+        (((h >> 32) * lines as u64) >> 32) as usize
+    } else {
+        (h >> shift) as usize
+    }
+}
+
+/// The line after `idx` on a probe chain, wrapping at the end.
+#[inline(always)]
+fn next_line(idx: usize, lines: usize) -> usize {
+    if cfg!(target_arch = "wasm32") {
+        if idx + 1 == lines { 0 } else { idx + 1 }
+    } else {
+        (idx + 1) & (lines - 1)
     }
 }
 
@@ -276,11 +300,10 @@ impl FastTable {
             w1: AtomicU64::new(0),
         };
         let mut lines: Box<[FastLine]> = (0..size).map(|_| FastLine([empty(), empty()])).collect();
-        let shift = 64 - size.trailing_zeros();
-        let mask = size - 1;
+        let shift = 64 - size.next_power_of_two().trailing_zeros();
         for &(lo, hi, id) in keys {
             debug_assert!(hi != 0);
-            let mut idx = (hash(lo, hi) >> shift) as usize;
+            let mut idx = line_of(hash(lo, hi), shift, size);
             let slot = loop {
                 let [a, b] = &mut lines[idx].0;
                 if *a.hi.get_mut() == 0 {
@@ -289,7 +312,7 @@ impl FastTable {
                 if *b.hi.get_mut() == 0 {
                     break b;
                 }
-                idx = (idx + 1) & mask;
+                idx = next_line(idx, size);
             };
             *slot.lo.get_mut() = lo;
             *slot.hi.get_mut() = hi;
@@ -312,7 +335,7 @@ impl FastTable {
 
     #[inline(always)]
     fn home_index(&self, lo: u64, hi: u64) -> usize {
-        (hash(lo, hi) >> self.shift) as usize
+        line_of(hash(lo, hi), self.shift, self.lines.len())
     }
 
     #[inline(always)]
@@ -347,8 +370,8 @@ impl FastTable {
     /// [`get`](Self::get) with the key's hash already computed.
     #[inline]
     pub(crate) fn get_hashed(&self, lo: u64, hi: u64, h: u64) -> Option<u32> {
-        let mask = self.lines.len() - 1;
-        let mut idx = (h >> self.shift) as usize;
+        let size = self.lines.len();
+        let mut idx = line_of(h, self.shift, size);
         loop {
             for slot in &self.lines[idx].0 {
                 if slot.matches(lo, hi) {
@@ -358,7 +381,7 @@ impl FastTable {
                     return None;
                 }
             }
-            idx = (idx + 1) & mask;
+            idx = next_line(idx, size);
         }
     }
 
@@ -367,7 +390,7 @@ impl FastTable {
     #[inline]
     pub(crate) fn entry(&self, lo: u64, hi: u64) -> Option<Entry> {
         debug_assert!(lo != OPEN_LO);
-        let mask = self.lines.len() - 1;
+        let size = self.lines.len();
         let mut idx = self.home_index(lo, hi);
         loop {
             for slot in &self.lines[idx].0 {
@@ -384,7 +407,7 @@ impl FastTable {
                     return None;
                 }
             }
-            idx = (idx + 1) & mask;
+            idx = next_line(idx, size);
         }
     }
 
@@ -416,7 +439,7 @@ impl FastTable {
             (off as u64, 0)
         };
         let w0 = w0 | ((n as u64) << COUNT_SHIFT) | DERIVED;
-        let mask = self.lines.len() - 1;
+        let size = self.lines.len();
         let mut idx = self.home_index(lo, hi);
         loop {
             for slot in &self.lines[idx].0 {
@@ -438,7 +461,7 @@ impl FastTable {
                     return true;
                 }
             }
-            idx = (idx + 1) & mask;
+            idx = next_line(idx, size);
         }
     }
 
