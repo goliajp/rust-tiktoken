@@ -29,8 +29,14 @@ struct Bucket([AtomicU64; BUCKET]);
 pub(crate) struct LongDerived {
     buckets: Box<[Bucket]>,
     arena: Box<[AtomicU32]>,
-    arena_len: AtomicU32,
+    /// On a line of its own: every insert writes it, and next to `buckets`
+    /// and `arena`, which every lookup reads, it would invalidate that line
+    /// in every other core.
+    arena_len: Padded,
 }
+
+#[repr(align(128))]
+struct Padded(AtomicU32);
 
 /// Ids of an entry, as published.
 pub(crate) struct LongIds<'a>(&'a [AtomicU32]);
@@ -73,7 +79,7 @@ impl LongDerived {
         Self {
             buckets,
             arena,
-            arena_len: AtomicU32::new(0),
+            arena_len: Padded(AtomicU32::new(0)),
         }
     }
 
@@ -132,10 +138,12 @@ impl LongDerived {
         }
         let key_words = piece.len().div_ceil(4);
         let need = 1 + key_words + ids.len();
-        let off = self.arena_len.fetch_add(need as u32, Ordering::Relaxed) as usize;
+        let off = self.arena_len.0.fetch_add(need as u32, Ordering::Relaxed) as usize;
         if off + need > ARENA_WORDS {
             // keep the length from creeping towards overflow
-            self.arena_len.store(ARENA_WORDS as u32, Ordering::Relaxed);
+            self.arena_len
+                .0
+                .store(ARENA_WORDS as u32, Ordering::Relaxed);
             return false;
         }
         let rec = &self.arena[off..off + need];
@@ -165,7 +173,7 @@ impl LongDerived {
 
     /// Drop every entry. Caller guarantees no concurrent use.
     pub(crate) fn clear(&self) {
-        if self.arena_len.load(Ordering::Relaxed) == 0 {
+        if self.arena_len.0.load(Ordering::Relaxed) == 0 {
             return;
         }
         // write only the slots in use: an unwritten line stays shared in
@@ -177,7 +185,7 @@ impl LongDerived {
                 }
             }
         }
-        self.arena_len.store(0, Ordering::Relaxed);
+        self.arena_len.0.store(0, Ordering::Relaxed);
     }
 }
 
