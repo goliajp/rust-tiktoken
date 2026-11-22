@@ -161,18 +161,14 @@ impl LongDerived {
                 .store(ARENA_WORDS as u32, Ordering::Relaxed);
             return false;
         }
-        let rec = &self.arena[off..off + need];
-        rec[0].store(
-            piece.len() as u32 | (ids.len() as u32) << 16,
-            Ordering::Relaxed,
-        );
-        for (w, chunk) in rec[1..].iter().zip(piece.chunks(4)) {
-            let mut b = [0u8; 4];
-            b[..chunk.len()].copy_from_slice(chunk);
-            w.store(u32::from_ne_bytes(b), Ordering::Relaxed);
-        }
-        for (w, &id) in rec[1 + key_words..].iter().zip(ids) {
-            w.store(id, Ordering::Relaxed);
+        // SAFETY: the words `off..off + need` were reserved above, no reader
+        // sees them before the slot's Release below, and they are in bounds;
+        // the key's padding bytes are never read
+        unsafe {
+            let rec = self.arena.as_ptr().cast::<u32>().cast_mut().add(off);
+            rec.write(piece.len() as u32 | (ids.len() as u32) << 16);
+            std::ptr::copy_nonoverlapping(piece.as_ptr(), rec.add(1).cast::<u8>(), piece.len());
+            std::ptr::copy_nonoverlapping(ids.as_ptr(), rec.add(1 + key_words), ids.len());
         }
         let v = tag(h) | (off as u64 + 1);
         for slot in &bucket.0 {
