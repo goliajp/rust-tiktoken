@@ -332,6 +332,70 @@ fn walk<S: PieceSink, const W: usize>(
 mod tests {
     use super::*;
 
+    use super::super::classify::{BODY_WORDS, classify};
+    use super::super::window::{CaseRules, Cl100kRules};
+
+    // every free start is a start the window decides, so the highest one
+    // never passes the cut; at every window position of random texts
+    fn free_starts_are_decided<R: WindowRules>(text: &[u8]) {
+        let blocks = (text.len() - 16) / 64;
+        let mut maps = Bitmaps::<BODY_WORDS>::new();
+        let cont = if R::CASE {
+            classify::<true, BODY_WORDS>(R::classes(), text, 0, blocks, &mut maps)
+        } else {
+            classify::<false, BODY_WORDS>(R::classes(), text, 0, blocks, &mut maps)
+        };
+        for r in 0..=64 * blocks - 64 {
+            // windows open at char boundaries
+            if text[r] & 0xC0 == 0x80 {
+                continue;
+            }
+            let m = if R::CASE {
+                Masks::load_body::<true, BODY_WORDS>(&maps, r)
+            } else {
+                Masks::load_body::<false, BODY_WORDS>(&maps, r)
+            };
+            let (s, cut) = if cont {
+                R::decide::<true>(&m, false, &text[r..])
+            } else {
+                R::decide::<false>(&m, false, &text[r..])
+            };
+            let free = free_starts::<R>(&m);
+            let ctx = String::from_utf8_lossy(&text[r..r + 64]);
+            assert_eq!(free & !s, 0, "{r} {free:#x} {s:#x} {ctx:?}");
+            if free != 0 {
+                assert!(63 - free.leading_zeros() <= cut, "{r} {ctx:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn free_starts_are_a_subset_of_the_decided_starts() {
+        const CHARS: &[&str] = &[
+            "a", "b", "Z", "Q", "s", "t", "e", "l", "'", "0", "7", " ", " ", " ", "\t", "\n", "\r",
+            ".", ",", "/", "-", "(", "’", "“", "é", "É", "世", "\u{3000}", "\u{301}", "²", "😀",
+            "ʰ",
+        ];
+        let mut x = 0x2545_F491_4F6C_DD1Du64;
+        for _ in 0..60 {
+            let mut text = String::new();
+            while text.len() < 1200 {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                let i = (x % CHARS.len() as u64) as usize;
+                for _ in 0..1 + (x >> 40) % 4 {
+                    text.push_str(CHARS[i]);
+                }
+            }
+            let t = text.as_bytes();
+            free_starts_are_decided::<Cl100kRules<3, false>>(t);
+            free_starts_are_decided::<Cl100kRules<1, true>>(t);
+            free_starts_are_decided::<CaseRules<true, 3>>(t);
+            free_starts_are_decided::<CaseRules<false, 1>>(t);
+        }
+    }
+
     #[test]
     fn flatten_lists_every_set_bit() {
         let mut s = 0x9E37_79B9_7F4A_7C15u64;
