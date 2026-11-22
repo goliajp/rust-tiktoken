@@ -107,31 +107,40 @@ pub(super) fn decide_chunk<R: WindowRules, const CONT: bool, S: PieceSink, const
     stop: usize,
     sink: &mut S,
 ) -> usize {
+    // window bits stay below `limit`, and `or_at` writes one word past
+    let mut starts = Starts::<W>::new(limit / 64 + 1);
+    let mut step = |r: usize, end: usize| {
+        step::<R, CONT, W>(pre, maps, text, buf, start, limit, r, end, &mut starts)
+    };
     // chain k decides from `m[k]` while its window start is below `m[k +
     // 1]`, keeping starts below `e[k]`; the last chain with a start keeps
-    // everything. A third of the way and two thirds of the way in, the
-    // chunk is cut at a start found there; where none is found, the chain
-    // before does that part too
-    let m1 = boundary::<W>(R::CASE, maps, stop / 3, 0, stop).unwrap_or(stop);
-    let m2 = if m1 < stop {
+    // everything. Where no start is found, the chain before does that part
+    // too. ASCII chunks are cut a third and two thirds of the way in; chunks
+    // with other bytes only in the middle: their longer rules in three
+    // chains ran out of registers, and the spills cost more than the
+    // overlap gained
+    let first = if CONT { stop / 2 } else { stop / 3 };
+    let m1 = boundary::<W>(R::CASE, maps, first, 0, stop).unwrap_or(stop);
+    let m2 = if !CONT && m1 < stop {
         boundary::<W>(R::CASE, maps, (2 * stop / 3).max(m1), m1, stop).unwrap_or(stop)
     } else {
         stop
     };
     let e0 = if m1 < stop { m1 } else { usize::MAX };
     let e1 = if m2 < stop { m2 } else { usize::MAX };
-    // window bits stay below `limit`, and `or_at` writes one word past
-    let mut starts = Starts::<W>::new(limit / 64 + 1);
-    let mut step = |r: usize, end: usize| {
-        step::<R, CONT, W>(pre, maps, text, buf, start, limit, r, end, &mut starts)
-    };
     // plain locals, not arrays indexed in a loop: a chain's next start must
     // stay in a register, or every window waits on a store and a reload
     let (mut r0, mut r1, mut r2) = (0, m1, m2);
-    while r0 < m1 && r1 < m2 && r2 < stop {
+    if !CONT {
+        while r0 < m1 && r1 < m2 && r2 < stop {
+            r0 = step(r0, e0);
+            r1 = step(r1, e1);
+            r2 = step(r2, usize::MAX);
+        }
+    }
+    while r0 < m1 && r1 < m2 {
         r0 = step(r0, e0);
         r1 = step(r1, e1);
-        r2 = step(r2, usize::MAX);
     }
     while r0 < m1 {
         r0 = step(r0, e0);
