@@ -166,13 +166,6 @@ impl Vocab {
         self.fast.entry(lo, hi)
     }
 
-    /// Entry of a piece's packed key in its home line. The key must come
-    /// from utf-8 text.
-    #[inline(always)]
-    pub(crate) fn home_entry(&self, lo: u64, hi: u64) -> Option<Entry> {
-        self.fast.home_entry(lo, hi)
-    }
-
     /// Write an entry's ids at `out`, and up to two arbitrary words after
     /// them.
     ///

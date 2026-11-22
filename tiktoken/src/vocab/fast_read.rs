@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use super::{Entry, FastTable, INLINE, MULTI, OPEN_LO};
+use super::{Entry, FastTable, INLINE};
 
 /// Copy `n >= 1` ids from `src` to `dst` with a few overlapping block moves
 /// rather than a loop of one id at a time, whose exit mispredicts on every
@@ -50,25 +50,6 @@ impl Entry {
 }
 
 impl FastTable {
-    /// The entry in the key's home line, vocabulary token or derived. The
-    /// key must come from utf-8 text.
-    #[inline(always)]
-    pub(crate) fn home_entry(&self, lo: u64, hi: u64) -> Option<Entry> {
-        debug_assert!(lo != OPEN_LO);
-        for slot in &self.lines[self.home_index(lo, hi)].0 {
-            if slot.lo.load(Ordering::Acquire) == lo
-                && slot.hi.load(Ordering::Relaxed) & !MULTI == hi
-            {
-                let e = Entry {
-                    w0: slot.w0.load(Ordering::Relaxed),
-                    w1: slot.w1.load(Ordering::Relaxed),
-                };
-                return Some(e);
-            }
-        }
-        None
-    }
-
     /// Write the entry's ids at `out`, and up to two arbitrary words after
     /// them.
     ///

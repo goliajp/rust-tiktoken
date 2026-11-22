@@ -457,8 +457,8 @@ impl PieceSink for EncodeSink<'_, '_> {
     }
 }
 
-/// The home-line entry of a piece, derived entries included; otherwise the
-/// key for the miss path.
+/// The table entry of a piece, derived entries included, wherever it sits on
+/// its probe chain; otherwise the key for the miss path.
 #[inline(always)]
 pub(crate) fn probe_entry(
     vocab: &Vocab,
@@ -471,7 +471,7 @@ pub(crate) fn probe_entry(
         return Err(NO_KEY);
     }
     let (lo, hi) = key_padded(buf, start, len);
-    vocab.home_entry(lo, hi).ok_or((lo, hi))
+    vocab.entry(lo, hi).ok_or((lo, hi))
 }
 
 impl EncodeSink<'_, '_> {
