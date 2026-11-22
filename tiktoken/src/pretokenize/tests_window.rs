@@ -185,7 +185,7 @@ fn hand_picked_texts_at_every_offset() {
 }
 
 /// Chunks are decided by several chains that start at a letter followed by
-/// whitespace near the middle of the chunk; put that start, and tricky text
+/// whitespace a third and two thirds of the way in; put that start, and tricky text
 /// right after it, at every offset around the place the search begins.
 #[test]
 fn chain_starts_at_every_offset() {
@@ -197,9 +197,16 @@ fn chain_starts_at_every_offset() {
         "\r“quoted” ‘it’s’ 世界 \u{3000}\u{3000}x ٣٤ a\u{301}b",
         "   \t  \n",
     ];
+    // the searches begin a third and two thirds of the way into a chunk;
+    // the second only runs after the first found a start, so the texts for
+    // it have one there already
+    let thirds = (1240..1440).chain(1920..2120).chain(2590..2790);
     for t in texts {
-        for at in 1920..2120 {
+        for at in thirds.clone() {
             let mut text: String = head.chars().cycle().take(at - 1).collect();
+            if at > 2000 {
+                text.replace_range(1350..1352, "a ");
+            }
             text.push('a');
             text.push_str(t);
             text.push_str(&filler(at, 3000));
