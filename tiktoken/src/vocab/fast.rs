@@ -33,6 +33,7 @@ use super::key::{HASH_MUL, hash, hash_with};
 
 #[path = "fast_read.rs"]
 mod read;
+pub(crate) use read::copy_ids;
 
 const OPEN_LO: u64 = u64::MAX;
 // a real hi has a length of at most 15 in its top byte, plus at most MULTI
@@ -158,6 +159,32 @@ impl<'a> HomeProbe<'a> {
             Home::Derived(b.entry())
         } else {
             Home::Miss
+        }
+    }
+
+    /// The key's entry anywhere on its probe chain, as [`FastTable::entry`]
+    /// finds it, told apart like [`lookup`](Self::lookup)'s.
+    #[inline(always)]
+    pub(crate) fn lookup_chain(&self, lo: u64, hi: u64) -> Home {
+        let mask = self.lines.len() - 1;
+        let mut idx = (hash_with(lo, hi, self.mul) >> self.shift) as usize;
+        loop {
+            // SAFETY: masked into the power-of-two table
+            for slot in &unsafe { self.lines.get_unchecked(idx) }.0 {
+                if slot.lo.load(Ordering::Acquire) == lo {
+                    let h = slot.hi.load(Ordering::Relaxed);
+                    if h == hi {
+                        return Home::Token(slot.id());
+                    }
+                    if h == hi | MULTI {
+                        return Home::Derived(slot.entry());
+                    }
+                }
+                if slot.hi.load(Ordering::Relaxed) == 0 {
+                    return Home::Miss;
+                }
+            }
+            idx = (idx + 1) & mask;
         }
     }
 }

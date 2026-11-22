@@ -18,7 +18,7 @@ mod long_derived;
 
 pub(crate) use atoms::{Atoms, char_len};
 use fast::FastTable;
-pub(crate) use fast::{Entry, Home, HomeProbe};
+pub(crate) use fast::{Entry, Home, HomeProbe, copy_ids};
 use filter::KeyFilter;
 pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
@@ -164,13 +164,6 @@ impl Vocab {
     #[inline]
     pub(crate) fn entry(&self, lo: u64, hi: u64) -> Option<Entry> {
         self.fast.entry(lo, hi)
-    }
-
-    /// Entry of a piece's packed key in its home line. The key must come
-    /// from utf-8 text.
-    #[inline(always)]
-    pub(crate) fn home_entry(&self, lo: u64, hi: u64) -> Option<Entry> {
-        self.fast.home_entry(lo, hi)
     }
 
     /// Write an entry's ids at `out`, and up to two arbitrary words after

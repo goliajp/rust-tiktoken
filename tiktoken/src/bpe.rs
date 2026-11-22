@@ -1,6 +1,6 @@
 use crate::hash::FxHashMap;
 
-use crate::encode_loop::Engine;
+use crate::encode_loop::{Engine, id_capacity};
 use crate::piece_cache;
 use crate::pretokenize::{FastPath, ScalarPreTokenizer, WhitespaceRules};
 use crate::special::SpecialMatcher;
@@ -96,7 +96,7 @@ impl CoreBpe {
             split::encode(&self.engine(), text, split::CHUNK, None, &mut result);
             return result;
         }
-        let mut result = Vec::with_capacity(text.len() / 3);
+        let mut result = Vec::with_capacity(id_capacity(text));
         self.engine().encode_into(text, &mut result);
         result
     }
@@ -120,7 +120,7 @@ impl CoreBpe {
             None => return self.encode(text),
         };
 
-        let mut result = Vec::with_capacity(text.len() / 3);
+        let mut result = Vec::with_capacity(id_capacity(text));
         let mut start = 0;
 
         while let Some((s, e, token)) = special.find(text.as_bytes(), start) {

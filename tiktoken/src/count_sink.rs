@@ -1,11 +1,11 @@
 //! The counting sink of the windowed scan: the same probes as the encoding
-//! sink in `encode_loop`, adding up id counts instead of writing ids.
+//! sink in `encode_sink`, adding up id counts instead of writing ids.
 
 use crate::encode_loop::{Engine, NO_KEY, piece_key, probe, probe_entry};
 use crate::pretokenize::windowed::PieceSink;
 use crate::vocab::{Home, HomeProbe};
 
-/// The counting twin of [`encode_hits`].
+/// The counting twin of `encode_hits` in `encode_sink`.
 #[inline(never)]
 fn count_hits(
     home: HomeProbe<'_>,
@@ -21,7 +21,11 @@ fn count_hits(
         let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
             return (i, count, NO_KEY);
         };
-        match home.lookup(lo, hi) {
+        let found = match home.lookup(lo, hi) {
+            Home::Miss => home.lookup_chain(lo, hi),
+            h => h,
+        };
+        match found {
             Home::Token(_) => count += 1,
             Home::Derived(e) => count += e.len(),
             Home::Miss => return (i, count, (lo, hi)),
@@ -52,7 +56,9 @@ impl PieceSink for CountSink<'_> {
     #[inline(always)]
     fn window(&mut self) {}
 
-    #[inline(always)]
+    // out of line: it runs once per batch, and inlined under the window
+    // loop it measured slower
+    #[inline(never)]
     fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
         let mut i = 0;
         while i + 1 < offs.len() {
@@ -60,8 +66,10 @@ impl PieceSink for CountSink<'_> {
             self.count = count;
             i = at;
             if i + 1 < offs.len() {
+                // the leaf walked the chain: a long piece or one the table
+                // does not hold
                 let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
-                self.count += count_miss(self.engine, piece, key);
+                self.count += self.engine.count_piece(piece, key);
                 i += 1;
             }
         }

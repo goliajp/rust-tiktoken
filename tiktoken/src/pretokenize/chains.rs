@@ -194,36 +194,49 @@ const POS_BATCH: usize = 512;
 /// [`POS_BATCH`] plus one word's starts and the overshoot of [`flatten`].
 const POS_CAP: usize = POS_BATCH + 64 + 8;
 
+/// Offsets of the set bits of each byte value, ascending, then zeros.
+static BYTE_BITS: [[u16; 8]; 256] = {
+    let mut t = [[0u16; 8]; 256];
+    let mut v = 0;
+    while v < 256 {
+        let (mut i, mut k) = (0, 0);
+        while i < 8 {
+            if v >> i & 1 == 1 {
+                t[v][k] = i as u16;
+                k += 1;
+            }
+            i += 1;
+        }
+        v += 1;
+    }
+    t
+};
+
 /// Appends the offsets of the set bits of `word` (word `k` of the bitmap) to
-/// `pos` after `n` entries; returns the new count. Writes in groups of eight,
-/// so the loop branches on the count rather than once per bit.
+/// `pos` after `n` entries; returns the new count. Each byte of the word
+/// writes eight entries from a table at its own place, found from a prefix
+/// sum of the byte counts, so nothing waits on the previous bit or byte.
 #[inline(always)]
 fn flatten(word: u64, k: usize, pos: *mut u16, n: usize) -> usize {
     debug_assert!(n <= POS_BATCH);
-    let mut m = word;
-    let cnt = m.count_ones() as usize;
-    let base = 64 * k as u16;
-    let put = |j: usize, m: &mut u64| {
-        // a spent word writes base + 64, past the count and ignored
-        debug_assert!(n + j < POS_CAP);
-        // SAFETY: n <= POS_BATCH, and a word writes at most 64 + 8 entries
-        unsafe { pos.add(n + j).write(base + m.trailing_zeros() as u16) };
-        *m &= m.wrapping_sub(1);
-    };
+    // bit counts per byte, then the count of all bytes below each byte
+    let mut c = word - ((word >> 1) & 0x5555_5555_5555_5555);
+    c = (c & 0x3333_3333_3333_3333) + ((c >> 2) & 0x3333_3333_3333_3333);
+    c = (c + (c >> 4)) & 0x0F0F_0F0F_0F0F_0F0F;
+    let below = c.wrapping_mul(0x0101_0101_0101_0100);
     for j in 0..8 {
-        put(j, &mut m);
+        let b = (word >> (8 * j)) as u8;
+        let at = n + ((below >> (8 * j)) & 0xFF) as usize;
+        let base = (64 * k + 8 * j) as u16;
+        let v = BYTE_BITS[b as usize].map(|x| x + base);
+        // entries past the byte's count are overwritten by the next byte or
+        // left past the word's count
+        debug_assert!(at + 8 <= POS_CAP);
+        // SAFETY: n <= POS_BATCH and at <= n + 56, so the eight entries end
+        // inside POS_CAP
+        unsafe { pos.add(at).cast::<[u16; 8]>().write_unaligned(v) };
     }
-    if cnt > 8 {
-        for j in 8..16 {
-            put(j, &mut m);
-        }
-        let mut j = 16;
-        while m != 0 {
-            put(j, &mut m);
-            j += 1;
-        }
-    }
-    n + cnt
+    n + word.count_ones() as usize
 }
 
 /// Hand the pieces between consecutive starts below `reach` to `sink`, the
@@ -256,4 +269,33 @@ fn walk<S: PieceSink, const W: usize>(
     sink.pieces(buf, start, offs);
     sink.window();
     sink.piece(buf, start + offs[n - 1] as usize, start + reach);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flatten_lists_every_set_bit() {
+        let mut s = 0x9E37_79B9_7F4A_7C15u64;
+        for k in 0..4000usize {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            let word = match k % 4 {
+                0 => s,
+                1 => s & s.rotate_left(7),
+                2 => u64::MAX << (k % 64),
+                _ => s & s.rotate_left(3) & s.rotate_left(11),
+            };
+            let mut buf = [0u16; POS_CAP];
+            let n0 = k % 9;
+            let n = flatten(word, k % 64, buf.as_mut_ptr(), n0);
+            let want: Vec<u16> = (0..64)
+                .filter(|i| word >> i & 1 == 1)
+                .map(|i| (64 * (k % 64) + i) as u16)
+                .collect();
+            assert_eq!(&buf[n0..n], &want[..], "{word:#x}");
+        }
+    }
 }

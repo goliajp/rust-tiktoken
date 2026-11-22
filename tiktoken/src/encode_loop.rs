@@ -7,8 +7,9 @@
 //! merge) leaves the loop through an out-of-line call.
 //!
 //! Patterns with window rules take their pieces from
-//! `pretokenize::windowed`, which hands each piece to a sink here; the sinks
-//! probe the same table. Short texts and the other patterns use the scalar
+//! `pretokenize::windowed`, which hands each piece to a sink
+//! (`encode_sink`, `count_sink`); the sinks probe the same table, with the
+//! key and probe helpers here. Short texts and the other patterns use the scalar
 //! loops below.
 //!
 //! The two scalar loops are written out separately on purpose. The scanner's
@@ -18,12 +19,11 @@
 
 use crate::count_sink::CountSink;
 use crate::encode_miss;
+use crate::encode_sink::{EncodeSink, ROOM};
 use crate::pretokenize::window::{CaseRules, Cl100kRules};
 use crate::pretokenize::windowed::{self, PieceSink};
 use crate::pretokenize::{PreTokenizer, ScalarPreTokenizer, WindowKind};
-use crate::vocab::{
-    Entry, FAST_KEY_MAX, Home, HomeProbe, KEY_READ, LongIds, Vocab, key_in, key_of, key_padded,
-};
+use crate::vocab::{Entry, FAST_KEY_MAX, HomeProbe, KEY_READ, Vocab, key_in, key_of, key_padded};
 
 // a real key never has a zero high word
 pub(crate) const NO_KEY: (u64, u64) = (0, 0);
@@ -37,6 +37,37 @@ pub(crate) struct Engine<'a> {
 /// Texts shorter than this skip the window rules: classifying costs more than
 /// it saves on a handful of pieces.
 const WINDOW_MIN: usize = 32;
+
+/// Ids to reserve for encoding `text`: a third of its length, or two thirds
+/// when its first 64 bytes are mostly non-ASCII, as dense CJK, Hangul or
+/// Arabic text takes 0.35 to 0.65 ids per byte. Texts for the window sink get
+/// its [`ROOM`] on top, which it keeps free before each window; without it a
+/// text of a few hundred bytes grows the vector near its end.
+#[inline(always)]
+pub(crate) fn id_capacity(text: &str) -> usize {
+    let b = text.as_bytes();
+    if b.len() < WINDOW_MIN {
+        return b.len() / 3;
+    }
+    window_capacity(b)
+}
+
+/// [`id_capacity`] past [`WINDOW_MIN`] bytes, out of line so that `encode`
+/// still inlines into its callers.
+#[inline(never)]
+fn window_capacity(b: &[u8]) -> usize {
+    let dense = b.first_chunk::<64>().is_some_and(|head| {
+        let hi: u32 = head
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|w| (u64::from_le_bytes(*w) & 0x8080_8080_8080_8080).count_ones())
+            .sum();
+        hi >= 16
+    });
+    let ids = if dense { b.len() / 3 * 2 } else { b.len() / 3 };
+    ids + ROOM
+}
 
 impl Engine<'_> {
     pub(crate) fn encode_into(&self, text: &str, out: &mut Vec<u32>) {
@@ -120,7 +151,7 @@ impl Engine<'_> {
     }
 
     #[inline(never)]
-    fn encode_piece(&self, piece: &[u8], key: (u64, u64), out: &mut Vec<u32>) {
+    pub(crate) fn encode_piece(&self, piece: &[u8], key: (u64, u64), out: &mut Vec<u32>) {
         encode_miss::encode(self.vocab, self.cache_id, piece, Self::miss_key(key), out);
     }
 
@@ -206,221 +237,8 @@ pub(crate) fn probe(
     home.home(lo, hi).ok_or((lo, hi))
 }
 
-/// Room an [`EncodeSink`] keeps before each window: every piece writes three
-/// ids' worth and advances by at most three.
-const ROOM: usize = 3 * 64;
-
-/// Writes ids through a raw pointer. Batches of pieces go through a leaf loop
-/// that writes one id per piece, after making room for the batch; single
-/// pieces come after a [`window`](PieceSink::window) call that makes room for
-/// 64 pieces of up to three inline ids each.
-///
-/// The out-of-line paths take the fields by value rather than `&mut self`,
-/// so that the sink does not escape and its fields stay in registers in the
-/// piece loop.
-struct EncodeSink<'e, 'v> {
-    engine: &'e Engine<'e>,
-    home: HomeProbe<'e>,
-    out: &'v mut Vec<u32>,
-    ptr: *mut u32,
-    len: usize,
-    cap: usize,
-}
-
-impl<'e, 'v> EncodeSink<'e, 'v> {
-    fn new(engine: &'e Engine<'e>, out: &'v mut Vec<u32>) -> Self {
-        out.reserve(ROOM);
-        Self {
-            engine,
-            home: engine.vocab.home_probe(),
-            ptr: out.as_mut_ptr(),
-            len: out.len(),
-            cap: out.capacity(),
-            out,
-        }
-    }
-
-    /// Take `ptr` and `cap` from `out` after an out-of-line call.
-    #[inline(always)]
-    fn reload(&mut self) {
-        self.ptr = self.out.as_mut_ptr();
-        self.cap = self.out.capacity();
-    }
-
-    #[inline(always)]
-    fn finish(self) {
-        // SAFETY: `len` ids were written below `cap`
-        unsafe { self.out.set_len(self.len) }
-    }
-}
-
-/// Make room for `need` more ids after `len` ids.
-#[cold]
-#[inline(never)]
-fn grow(out: &mut Vec<u32>, len: usize, need: usize) {
-    // SAFETY: `len` ids were written below the capacity
-    unsafe { out.set_len(len) };
-    out.reserve(need.max(len / 2));
-}
-
-/// Writes the ids of consecutive pieces `offs[i]..offs[i + 1]` from `i` on
-/// while their home lines answer them (a token, or a derived entry of up to
-/// three ids), after `len` ids at `ptr`. Stops at the first piece it does
-/// not answer, and returns that piece's index (`offs.len() - 1` when all are
-/// done), the new length and the piece's key. A leaf, so the loop keeps
-/// everything in registers.
-#[inline(never)]
-fn encode_hits(
-    home: HomeProbe<'_>,
-    buf: &[u8],
-    start: usize,
-    offs: &[u16],
-    mut i: usize,
-    ptr: *mut u32,
-    mut len: usize,
-) -> (usize, usize, (u64, u64)) {
-    while i + 1 < offs.len() {
-        // SAFETY: i + 1 < offs.len()
-        let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
-        let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
-            return (i, len, NO_KEY);
-        };
-        // SAFETY (writes): the caller made room for three ids per piece
-        match home.lookup(lo, hi) {
-            Home::Token(id) => {
-                unsafe { ptr.add(len).write(id) };
-                len += 1;
-            }
-            // ids past the entry's count are overwritten later or left past
-            // the end
-            Home::Derived(e) if e.is_inline() => {
-                unsafe {
-                    let p = ptr.add(len);
-                    p.write(e.first());
-                    p.add(1).cast::<u64>().write_unaligned(e.rest().to_le());
-                }
-                len += e.len();
-            }
-            _ => return (i, len, (lo, hi)),
-        }
-        i += 1;
-    }
-    (i, len, NO_KEY)
-}
-
-/// A piece the home-line probe did not answer, written after `len` ids at
-/// `ptr`; returns the new length, with room for the rest of the window.
-#[inline(never)]
-fn encode_miss(
-    engine: &Engine<'_>,
-    out: &mut Vec<u32>,
-    ptr: *mut u32,
-    len: usize,
-    piece: &[u8],
-    key: (u64, u64),
-) -> usize {
-    let entry = if key != NO_KEY {
-        engine.vocab.entry(key.0, key.1)
-    } else {
-        None
-    };
-    if let Some(e) = entry
-        && e.is_inline()
-    {
-        debug_assert!(len + 3 <= out.capacity());
-        // SAFETY: the window left three ids of room for every piece; ids past
-        // the entry's count are overwritten later or left past the end
-        unsafe {
-            let p = ptr.add(len);
-            p.write(e.first());
-            p.add(1).cast::<u64>().write_unaligned(e.rest().to_le());
-        }
-        return len + e.len();
-    }
-    // SAFETY: `len` ids were written below the capacity
-    unsafe { out.set_len(len) };
-    match entry {
-        Some(e) => engine.vocab.extend_entry(e, out),
-        None => engine.encode_piece(piece, key, out),
-    }
-    if out.capacity() - out.len() < ROOM {
-        out.reserve(ROOM);
-    }
-    out.len()
-}
-
-impl PieceSink for EncodeSink<'_, '_> {
-    #[inline(always)]
-    fn window(&mut self) {
-        if self.cap - self.len < ROOM {
-            grow(self.out, self.len, ROOM);
-            self.reload();
-        }
-    }
-
-    #[inline(always)]
-    fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
-        let mut i = 0;
-        while i + 1 < offs.len() {
-            let need = (3 * (offs.len() - i)).max(ROOM);
-            if self.cap - self.len < need {
-                grow(self.out, self.len, need);
-                self.reload();
-            }
-            let (at, len, key) = encode_hits(self.home, buf, start, offs, i, self.ptr, self.len);
-            self.len = len;
-            i = at;
-            if i + 1 < offs.len() {
-                let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
-                self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
-                self.reload();
-                i += 1;
-            }
-        }
-    }
-
-    #[inline(always)]
-    fn piece(&mut self, buf: &[u8], start: usize, end: usize) {
-        match probe(&self.home, buf, start, end) {
-            Ok(id) => {
-                debug_assert!(self.len < self.cap);
-                // SAFETY: `window` left room for every piece of the window,
-                // and `encode_miss` restores that room
-                unsafe { self.ptr.add(self.len).write(id) };
-                self.len += 1;
-            }
-            Err(key) => {
-                let piece = &buf[start..end];
-                self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
-                self.reload();
-            }
-        }
-    }
-
-    #[inline(always)]
-    fn dense_piece(&mut self, buf: &[u8], start: usize, end: usize) {
-        match probe_entry(self.engine.vocab, buf, start, end) {
-            Ok(e) => {
-                debug_assert!(self.len + 15 <= self.cap);
-                // SAFETY: `window` came right before and left room for 64
-                // ids, and a piece of up to 15 bytes has at most 15
-                unsafe { self.engine.vocab.write_entry(e, self.ptr.add(self.len)) };
-                self.len += e.len();
-            }
-            Err(NO_KEY) => {
-                let piece = &buf[start..end];
-                match self.engine.vocab.long_ids(piece) {
-                    Some(ids) => self.long(ids),
-                    None => self.miss(piece, NO_KEY),
-                }
-            }
-            Err(key) => self.miss(&buf[start..end], key),
-        }
-    }
-}
-
-/// The home-line entry of a piece, derived entries included; otherwise the
-/// key for the miss path.
+/// The table entry of a piece, derived entries included, wherever it sits on
+/// its probe chain; otherwise the key for the miss path.
 #[inline(always)]
 pub(crate) fn probe_entry(
     vocab: &Vocab,
@@ -433,29 +251,7 @@ pub(crate) fn probe_entry(
         return Err(NO_KEY);
     }
     let (lo, hi) = key_padded(buf, start, len);
-    vocab.home_entry(lo, hi).ok_or((lo, hi))
-}
-
-impl EncodeSink<'_, '_> {
-    #[inline(always)]
-    fn long(&mut self, ids: LongIds<'_>) {
-        let n = ids.len();
-        if self.cap - self.len < n + ROOM {
-            grow(self.out, self.len, n + ROOM);
-            self.reload();
-        }
-        for (k, id) in ids.iter().enumerate() {
-            // SAFETY: room for `n` ids was made above
-            unsafe { self.ptr.add(self.len + k).write(id) };
-        }
-        self.len += n;
-    }
-
-    #[inline(always)]
-    fn miss(&mut self, piece: &[u8], key: (u64, u64)) {
-        self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
-        self.reload();
-    }
+    vocab.entry(lo, hi).ok_or((lo, hi))
 }
 
 #[cfg(test)]
