@@ -277,21 +277,19 @@ fn test_table_keeps_an_empty_slot() {
 #[test]
 fn test_compact_table_keeps_room_for_derived_entries() {
     use super::fast::table_slots;
-    // cl100k and o200k sit just above a power of two: halving would leave
-    // no room, so they keep the full size
-    assert_eq!(table_slots(100_256, true), 262_144);
-    assert_eq!(table_slots(199_998, true), 524_288);
-    assert_eq!(table_slots(151_643, true), 262_144);
     for n in [
         1usize, 3, 1000, 50_257, 100_256, 128_000, 151_643, 199_998, 248_044,
     ] {
         let full = table_slots(n, false);
         assert_eq!(full, (n * 2).max(4).next_power_of_two());
         let slots = table_slots(n, true);
-        assert!(slots == full || slots == full / 2);
+        assert!(
+            slots.is_multiple_of(2) && slots > n && slots <= n * 8 / 5 + 4,
+            "n {n}: {slots}"
+        );
         // derived capacity as FastTable::build computes it
         let cap = (slots / 4).min((slots * 3 / 4).saturating_sub(n));
-        assert!(cap >= n / 4, "n {n}: {slots} slots leave {cap} derived");
+        assert!(cap >= n / 5, "n {n}: {slots} slots leave {cap} derived");
     }
 }
 

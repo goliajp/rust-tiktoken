@@ -26,6 +26,7 @@ wasm-pack build --target web --release --scope goliapkg
 - `tiktoken_wasm.js` — WASM ローダ付きの ES モジュール
 - `tiktoken_wasm_bg.wasm` — コンパイル済み WASM バイナリ（8.96 MB、gzip 後 8.22 MB、全 20 語彙を含む）
 - `tiktoken_wasm.d.ts` — TypeScript 型定義
+- `snippets/` — テキストとトークン ID を WASM メモリへ出し入れする小さな JavaScript
 
 自分でビルドする場合、`--no-default-features --features vocab-o200k_base`（または `tiktoken` から転送される任意の `vocab-*` / ベンダー単位の feature）を付けると 1.96 MB、gzip 後 1.22 MB になります。
 

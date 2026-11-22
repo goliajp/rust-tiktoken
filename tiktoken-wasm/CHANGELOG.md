@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Built with WebAssembly SIMD (`simd128`): the pre-tokenizer classifies text
   64 bytes at a time. The package now needs Chrome 91, Firefox 89 or
   Safari 16.4 and later; older browsers fail to compile the module.
+- Text reaches the tokenizer in a buffer kept across calls: through
+  `TextEncoder.encodeInto`, or `TextEncoder.encode` plus a copy where that
+  is faster (Safari; timed once on first use), or, when most of the text is
+  outside ASCII, as UTF-16 code units converted to UTF-8 inside the module.
+  Ids come back with one copy. The generated bindings copied ASCII one char
+  at a time and allocated on every call. In Chrome, `count` and `encode`
+  on ASCII text of 1 to 45 KB take 25 to 45% less time and `encode` on a
+  short string about 20% less; in Safari, CJK text takes 30 to 45% less.
+  `count` on a string of a few chars takes a few nanoseconds more (one more
+  call between JavaScript and WebAssembly).
+- Less memory: encodings with the same ranks (`o200k_base` and
+  `o200k_harmony`, `p50k_base` and `p50k_edit`, `deepseek_v3` and
+  `deepseek_v4`, `kimi_k2` and `kimi_k3`) share one vocabulary, and the
+  lookup tables are sized to the vocabulary instead of the next power of two.
+  All 20 encodings loaded and used take 197 MiB of linear memory (5.1.1:
+  196 MiB; the earlier unreleased build with full-size tables: 392 MiB).
+- `encode`, `encodeWithSpecialTokens`, `count` and `countWithSpecialTokens`
+  throw a `TypeError` for an argument that is not a string.
+- The npm package carries the bindings' `snippets/` directory.
 
 ## [5.1.1] - 2026-11-21
 

@@ -9,7 +9,7 @@ use super::*;
 /// Construct the kimi_k2 encoding (Kimi K2 / K2.5 / K2.6, Moonshot).
 #[cfg(feature = "vocab-kimi_k2")]
 pub fn kimi_k2() -> CoreBpe {
-    let encoder = parse_tkv(KIMI_K2_CHAIN);
+    let vocab = shared_vocab("kimi_k2", KIMI_K2_CHAIN);
     let special = special_tokens(&[
         ("[BOS]", 163584),
         ("[EOS]", 163585),
@@ -29,8 +29,8 @@ pub fn kimi_k2() -> CoreBpe {
         ("[UNK]", 163838),
         ("[PAD]", 163839),
     ]);
-    CoreBpe::new(
-        encoder,
+    CoreBpe::with_vocab(
+        vocab,
         special,
         KIMI_PATTERN,
         FastPath::Kimi,
@@ -44,7 +44,7 @@ pub fn kimi_k2() -> CoreBpe {
 /// differs (K3 renames the chat markers and adds media tokens).
 #[cfg(feature = "vocab-kimi_k2")]
 pub fn kimi_k3() -> CoreBpe {
-    let encoder = parse_tkv(KIMI_K2_CHAIN);
+    let vocab = shared_vocab("kimi_k2", KIMI_K2_CHAIN);
     let special = special_tokens(&[
         ("[BOS]", 163584),
         ("[EOS]", 163585),
@@ -63,8 +63,8 @@ pub fn kimi_k3() -> CoreBpe {
         ("[UNK]", 163838),
         ("[PAD]", 163839),
     ]);
-    CoreBpe::new(
-        encoder,
+    CoreBpe::with_vocab(
+        vocab,
         special,
         KIMI_PATTERN,
         FastPath::Kimi,

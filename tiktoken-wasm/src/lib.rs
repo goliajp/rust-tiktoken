@@ -7,7 +7,16 @@
 //! All encoding instances are cached globally via `OnceLock`, so repeated
 //! calls to `getEncoding()` with the same name return the same underlying data.
 
+use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::{JsError, wasm_bindgen};
+
+mod io;
+mod utf16;
+
+#[wasm_bindgen(start)]
+fn start() {
+    io::bind();
+}
 
 /// WASM wrapper around a tiktoken encoding instance.
 ///
@@ -27,17 +36,26 @@ impl Encoding {
     ///
     /// Special tokens like `<|endoftext|>` are treated as ordinary text.
     /// Use `encodeWithSpecialTokens()` to recognize them.
-    pub fn encode(&self, text: &str) -> Vec<u32> {
-        self.bpe.encode(text)
+    #[wasm_bindgen(js_name = encode, unchecked_return_type = "Uint32Array")]
+    pub fn encode_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "string")] text: &JsValue,
+    ) -> JsValue {
+        io::ids(&io::with_text(text, |t| self.bpe.encode(t)))
     }
 
     /// Encode text into token ids, recognizing special tokens.
     ///
     /// Special tokens (e.g. `<|endoftext|>`) are encoded as their designated ids
     /// instead of being split into sub-word pieces.
-    #[wasm_bindgen(js_name = encodeWithSpecialTokens)]
-    pub fn encode_with_special_tokens(&self, text: &str) -> Vec<u32> {
-        self.bpe.encode_with_special_tokens(text)
+    #[wasm_bindgen(js_name = encodeWithSpecialTokens, unchecked_return_type = "Uint32Array")]
+    pub fn encode_with_special_tokens_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "string")] text: &JsValue,
+    ) -> JsValue {
+        io::ids(&io::with_text(text, |t| {
+            self.bpe.encode_with_special_tokens(t)
+        }))
     }
 
     /// Decode token ids back to a UTF-8 string.
@@ -51,8 +69,12 @@ impl Encoding {
     /// Count tokens without building the full token id array.
     ///
     /// Faster than `encode(text).length` for cases where you only need the count.
-    pub fn count(&self, text: &str) -> usize {
-        self.bpe.count(text)
+    #[wasm_bindgen(js_name = count)]
+    pub fn count_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "string")] text: &JsValue,
+    ) -> usize {
+        io::with_text(text, |t| self.bpe.count(t))
     }
 
     /// Count tokens, recognizing special tokens.
@@ -60,8 +82,11 @@ impl Encoding {
     /// Like `count()` but special tokens (e.g. `<|endoftext|>`) are counted
     /// as single tokens instead of being split into sub-word pieces.
     #[wasm_bindgen(js_name = countWithSpecialTokens)]
-    pub fn count_with_special_tokens(&self, text: &str) -> usize {
-        self.bpe.count_with_special_tokens(text)
+    pub fn count_with_special_tokens_js(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "string")] text: &JsValue,
+    ) -> usize {
+        io::with_text(text, |t| self.bpe.count_with_special_tokens(t))
     }
 
     /// Get the number of regular (non-special) tokens in the vocabulary.
@@ -80,6 +105,29 @@ impl Encoding {
     #[wasm_bindgen(getter)]
     pub fn name(&self) -> String {
         self.name.to_string()
+    }
+}
+
+/// The same calls for Rust callers, on `&str`.
+impl Encoding {
+    /// Encode text into token ids; special tokens are ordinary text.
+    pub fn encode(&self, text: &str) -> Vec<u32> {
+        self.bpe.encode(text)
+    }
+
+    /// Encode text into token ids, recognizing special tokens.
+    pub fn encode_with_special_tokens(&self, text: &str) -> Vec<u32> {
+        self.bpe.encode_with_special_tokens(text)
+    }
+
+    /// Count tokens without building the token id array.
+    pub fn count(&self, text: &str) -> usize {
+        self.bpe.count(text)
+    }
+
+    /// Count tokens, recognizing special tokens.
+    pub fn count_with_special_tokens(&self, text: &str) -> usize {
+        self.bpe.count_with_special_tokens(text)
     }
 }
 

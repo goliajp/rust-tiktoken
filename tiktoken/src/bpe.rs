@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::hash::FxHashMap;
 
 use crate::encode_loop::{Engine, id_capacity};
@@ -37,7 +39,8 @@ const PARALLEL_MIN: usize = 32 * 1024;
 /// assert_eq!(enc.count("hello world"), 2);
 /// ```
 pub struct CoreBpe {
-    pub(crate) vocab: Vocab,
+    /// Shared by the encodings built on the same ranks.
+    pub(crate) vocab: Arc<Vocab>,
     /// Identity for the thread-local piece cache — a nonce, never an address.
     cache_id: u64,
     special_encoder: FxHashMap<Vec<u8>, u32>,
@@ -54,6 +57,19 @@ impl CoreBpe {
         fast: FastPath,
         ws: WhitespaceRules,
     ) -> Self {
+        let entries: Vec<(Vec<u8>, u32)> = encoder.into_iter().collect();
+        let vocab = Arc::new(Vocab::from_entries(entries));
+        Self::with_vocab(vocab, special_encoder, pattern, fast, ws)
+    }
+
+    /// [`new`](Self::new) on a vocabulary built before.
+    pub(crate) fn with_vocab(
+        vocab: Arc<Vocab>,
+        special_encoder: FxHashMap<Vec<u8>, u32>,
+        pattern: &str,
+        fast: FastPath,
+        ws: WhitespaceRules,
+    ) -> Self {
         let pre_tokenizer = ScalarPreTokenizer::new(pattern, fast, ws);
         let special_matcher = SpecialMatcher::new(&special_encoder);
 
@@ -61,9 +77,6 @@ impl CoreBpe {
             .iter()
             .map(|(k, &v)| (v, k.clone()))
             .collect();
-
-        let entries: Vec<(Vec<u8>, u32)> = encoder.into_iter().collect();
-        let vocab = Vocab::from_entries(entries);
 
         Self {
             vocab,
