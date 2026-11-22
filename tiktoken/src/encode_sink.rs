@@ -4,7 +4,7 @@
 
 use crate::encode_loop::{Engine, NO_KEY, piece_key, probe, probe_entry};
 use crate::pretokenize::windowed::PieceSink;
-use crate::vocab::{Home, HomeProbe, LongIds, copy_ids};
+use crate::vocab::{Entry, Home, HomeProbe, LongIds, copy_ids};
 
 /// Room an [`EncodeSink`] keeps before each window: a window has at most 64
 /// pieces, a home-line hit writes one id, and the first miss may write three
@@ -66,11 +66,11 @@ fn grow(out: &mut Vec<u32>, len: usize, need: usize) {
 }
 
 /// Writes the ids of consecutive pieces `offs[i]..offs[i + 1]` from `i` on
-/// while their home lines answer them (a token, or a derived entry of up to
-/// three ids), after `len` ids at `ptr`. Stops at the first piece it does
-/// not answer, and returns that piece's index (`offs.len() - 1` when all are
-/// done), the new length and the piece's key. A leaf, so the loop keeps
-/// everything in registers.
+/// while the table answers them (a token, or a derived entry of up to three
+/// ids), after `len` ids at `ptr`. Stops at the first piece it does not
+/// answer, and returns that piece's index (`offs.len() - 1` when all are
+/// done), the new length, the piece's key and its entry if it has one. A
+/// leaf, so the loop keeps everything in registers.
 #[inline(never)]
 fn encode_hits(
     home: HomeProbe<'_>,
@@ -80,12 +80,12 @@ fn encode_hits(
     mut i: usize,
     ptr: *mut u32,
     mut len: usize,
-) -> (usize, usize, (u64, u64)) {
+) -> (usize, usize, (u64, u64), Option<Entry>) {
     while i + 1 < offs.len() {
         // SAFETY: i + 1 < offs.len()
         let (a, b) = unsafe { (*offs.get_unchecked(i), *offs.get_unchecked(i + 1)) };
         let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
-            return (i, len, NO_KEY);
+            return (i, len, NO_KEY, None);
         };
         // a key off its home line is mostly on the next one; walking the
         // chain here keeps the piece in the leaf
@@ -109,17 +109,17 @@ fn encode_hits(
                 }
                 len += e.len();
             }
-            _ => return (i, len, (lo, hi)),
+            Home::Derived(e) => return (i, len, (lo, hi), Some(e)),
+            Home::Miss => return (i, len, (lo, hi), None),
         }
         i += 1;
     }
-    (i, len, NO_KEY)
+    (i, len, NO_KEY, None)
 }
 
-/// A piece the home-line probe did not answer, written after `len` ids at
-/// `ptr`; returns the new length, with room for the rest of the window.
+/// [`encode_miss`] for a piece whose probe chain has not been walked yet.
 #[inline(never)]
-fn encode_miss(
+fn encode_unwalked(
     engine: &Engine<'_>,
     out: &mut Vec<u32>,
     ptr: *mut u32,
@@ -132,6 +132,22 @@ fn encode_miss(
     } else {
         None
     };
+    encode_miss(engine, out, ptr, len, piece, key, entry)
+}
+
+/// A piece the leaf loops did not write, with its table entry if it has one
+/// (none for a piece the table does not hold), written after `len` ids at
+/// `ptr`; returns the new length, with room for the rest of the window.
+#[inline(never)]
+fn encode_miss(
+    engine: &Engine<'_>,
+    out: &mut Vec<u32>,
+    ptr: *mut u32,
+    len: usize,
+    piece: &[u8],
+    key: (u64, u64),
+    entry: Option<Entry>,
+) -> usize {
     if let Some(e) = entry
         && e.is_inline()
     {
@@ -183,12 +199,14 @@ impl PieceSink for EncodeSink<'_, '_> {
             }
             let end = i + left.min((self.cap - self.len) / 3);
             let batch = &offs[..=end];
-            let (at, len, key) = encode_hits(self.home, buf, start, batch, i, self.ptr, self.len);
+            let (at, len, key, entry) =
+                encode_hits(self.home, buf, start, batch, i, self.ptr, self.len);
             self.len = len;
             i = at;
             if i < end {
                 let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
-                self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
+                let (out, ptr) = (&mut *self.out, self.ptr);
+                self.len = encode_miss(self.engine, out, ptr, self.len, piece, key, entry);
                 self.reload();
                 i += 1;
             }
@@ -207,7 +225,7 @@ impl PieceSink for EncodeSink<'_, '_> {
             }
             Err(key) => {
                 let piece = &buf[start..end];
-                self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
+                self.len = encode_unwalked(self.engine, self.out, self.ptr, self.len, piece, key);
                 self.reload();
             }
         }
@@ -230,6 +248,7 @@ impl PieceSink for EncodeSink<'_, '_> {
                     None => self.miss(piece, NO_KEY),
                 }
             }
+            // `probe_entry` walked the chain: the table does not hold it
             Err(key) => self.miss(&buf[start..end], key),
         }
     }
@@ -249,9 +268,10 @@ impl EncodeSink<'_, '_> {
         self.len += n;
     }
 
+    /// A piece the table does not hold.
     #[inline(always)]
     fn miss(&mut self, piece: &[u8], key: (u64, u64)) {
-        self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key);
+        self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key, None);
         self.reload();
     }
 }

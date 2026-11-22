@@ -66,8 +66,10 @@ impl PieceSink for CountSink<'_> {
             self.count = count;
             i = at;
             if i + 1 < offs.len() {
+                // the leaf walked the chain: a long piece or one the table
+                // does not hold
                 let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
-                self.count += count_miss(self.engine, piece, key);
+                self.count += self.engine.count_piece(piece, key);
                 i += 1;
             }
         }
