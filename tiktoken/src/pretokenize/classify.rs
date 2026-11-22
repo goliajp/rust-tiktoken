@@ -241,57 +241,76 @@ fn fixup<const CASE: bool, const W: usize>(
     blocks: usize,
     maps: &mut Bitmaps<W>,
 ) {
-    // bytes of word k that belong to a char started in word k - 1, as
-    // [cont, l, lw, w, hard] bits
-    let mut carry = [0u64; 5];
+    const FLAGS: [u8; 4] = [X_L, X_LW, X_W, X_HARD];
+    const TARGETS: [usize; 4] = [M_L, M_LW, M_W, M_HARD];
+    // class bits of word k from chars started in word k - 1
+    let mut carry = [0u64; 4];
     for k in 0..blocks {
         let hi = maps.load_word(M_CONT, k);
         if hi == 0 {
             // no spill either: spilled bytes are continuation bytes
             continue;
         }
-        let mut acc = [0u128; 5];
-        for (a, &c) in acc.iter_mut().zip(carry.iter()) {
-            *a = c as u128;
-        }
-        let mut m = hi & !carry[0];
-        while m != 0 {
-            let i = m.trailing_zeros() as usize;
-            let (cp, len) = decode(text, start + 64 * k + i);
+        let at = start + 64 * k;
+        let cont = cont_mask(text[at..at + 64].try_into().unwrap());
+        let mut acc = carry;
+        carry = [0; 4];
+        // most non-ASCII chars of mostly-ASCII text are punctuation (quotes,
+        // dashes), whose class is none: only their continuation bytes change
+        let mut leads = hi & !cont;
+        while leads != 0 {
+            let i = leads.trailing_zeros() as usize;
+            leads &= leads - 1;
+            let (cp, len) = decode(text, at + i);
             let x = table[category(cp) as usize];
-            let bits = ((1u128 << len) - 1) << i;
-            acc[0] |= bits & !(1u128 << i);
-            if x & X_L != 0 {
-                acc[1] |= bits;
-            }
-            if x & X_LW != 0 {
-                acc[2] |= bits;
-            }
-            if x & X_W != 0 {
-                acc[3] |= bits;
-            }
-            if x & X_HARD != 0 {
-                acc[4] |= bits;
-            }
-            m &= !(bits as u64);
-        }
-        for (&map, &a) in [M_CONT, M_L, M_LW, M_W, M_HARD].iter().zip(acc.iter()) {
-            if !CASE && map == M_LW {
+            if x == 0 {
                 continue;
             }
-            let lo = if map == M_CONT {
-                a as u64
-            } else {
-                maps.load_word(map, k) | a as u64
-            };
-            maps.store_word(map, k, lo);
+            let bits = (1u64 << len) - 1;
+            let (lo, spill) = (bits << i, (bits >> 1) >> (63 - i));
+            for j in 0..4 {
+                if x & FLAGS[j] != 0 {
+                    acc[j] |= lo;
+                    carry[j] |= spill;
+                }
+            }
+        }
+        maps.store_word(M_CONT, k, cont);
+        for j in 0..4 {
+            if CASE || TARGETS[j] != M_LW {
+                let v = maps.load_word(TARGETS[j], k) | acc[j];
+                maps.store_word(TARGETS[j], k, v);
+            }
         }
         // a char across the end of the range spills into the guard word,
         // which no window reads as valid
-        for (c, &a) in carry.iter_mut().zip(acc.iter()) {
-            *c = (a >> 64) as u64;
-        }
     }
+}
+
+/// Utf-8 continuation bytes (`0x80..0xC0`) of a block.
+#[inline(always)]
+fn cont_mask(block: &[u8; 64]) -> u64 {
+    #[cfg(target_arch = "aarch64")]
+    {
+        super::classify_neon::cont_mask(block)
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        cont_mask_swar(block)
+    }
+}
+
+/// [`cont_mask`] eight bytes at a time: bit 7 set and bit 6 clear, gathered
+/// with a multiply.
+#[cfg(any(test, not(target_arch = "aarch64")))]
+fn cont_mask_swar(block: &[u8; 64]) -> u64 {
+    let mut out = 0;
+    for (g, eight) in block.as_chunks::<8>().0.iter().enumerate() {
+        let raw = u64::from_le_bytes(*eight);
+        let c = (raw >> 7) & !(raw >> 6) & 0x0101_0101_0101_0101;
+        out |= (c.wrapping_mul(0x0102_0408_1020_4080) >> 56) << (8 * g);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -336,6 +355,20 @@ mod tests {
                 check_block::<false>(&b);
                 check_block::<true>(&b);
             }
+        }
+    }
+
+    #[test]
+    fn cont_masks_match_bytewise_definition() {
+        for seed in 0..500 {
+            let t = random_text(seed, 70);
+            let b: &[u8; 64] = t[..64].try_into().unwrap();
+            let want = b
+                .iter()
+                .enumerate()
+                .fold(0u64, |a, (i, &c)| a | (((c & 0xC0 == 0x80) as u64) << i));
+            assert_eq!(cont_mask(b), want, "{b:?}");
+            assert_eq!(cont_mask_swar(b), want, "{b:?}");
         }
     }
 
