@@ -20,7 +20,7 @@
 use crate::count_sink::CountSink;
 use crate::encode_miss;
 use crate::encode_sink::{EncodeSink, ROOM};
-use crate::pretokenize::window::{CaseRules, Cl100kRules};
+use crate::pretokenize::window::{CaseRules, Cl100kRules, WindowRules};
 use crate::pretokenize::windowed::{self, PieceSink};
 use crate::pretokenize::{PreTokenizer, ScalarPreTokenizer, WindowKind};
 use crate::vocab::{Entry, FAST_KEY_MAX, HomeProbe, KEY_READ, Vocab, key_in, key_of, key_padded};
@@ -169,12 +169,21 @@ fn window_dispatch<S: PieceSink>(
     sink: &mut S,
 ) {
     match kind {
-        WindowKind::Cl100k => windowed::split::<Cl100kRules<3, false>, S>(pre, text, sink),
-        WindowKind::Qwen2 => windowed::split::<Cl100kRules<1, false>, S>(pre, text, sink),
-        WindowKind::Qwen35 => windowed::split::<Cl100kRules<1, true>, S>(pre, text, sink),
-        WindowKind::O200k => windowed::split::<CaseRules<true, 3>, S>(pre, text, sink),
-        WindowKind::Tekken => windowed::split::<CaseRules<false, 1>, S>(pre, text, sink),
+        WindowKind::Cl100k => split::<Cl100kRules<3, false>, S>(pre, text, sink),
+        WindowKind::Qwen2 => split::<Cl100kRules<1, false>, S>(pre, text, sink),
+        WindowKind::Qwen35 => split::<Cl100kRules<1, true>, S>(pre, text, sink),
+        WindowKind::O200k => split::<CaseRules<true, 3>, S>(pre, text, sink),
+        WindowKind::Tekken => split::<CaseRules<false, 1>, S>(pre, text, sink),
     }
+}
+
+// a function of its own per pattern on wasm: JavaScriptCore leaves a function
+// the size of all five inlined together in its baseline tier, which made
+// short calls on Safari about twice as slow
+#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+fn split<R: WindowRules, S: PieceSink>(pre: &ScalarPreTokenizer, text: &str, sink: &mut S) {
+    windowed::split::<R, S>(pre, text, sink);
 }
 
 /// Masks of the two key words by key length, one load for both.
