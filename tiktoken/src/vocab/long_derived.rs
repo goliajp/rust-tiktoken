@@ -15,6 +15,7 @@
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
+use super::copy_ids;
 use super::key::hash_long;
 
 /// Longest piece kept.
@@ -167,8 +168,8 @@ impl LongDerived {
         unsafe {
             let rec = self.arena.as_ptr().cast::<u32>().cast_mut().add(off);
             rec.write(piece.len() as u32 | (ids.len() as u32) << 16);
-            std::ptr::copy_nonoverlapping(piece.as_ptr(), rec.add(1).cast::<u8>(), piece.len());
-            std::ptr::copy_nonoverlapping(ids.as_ptr(), rec.add(1 + key_words), ids.len());
+            copy_key(piece, rec.add(1).cast::<u8>());
+            copy_ids(ids.as_ptr(), rec.add(1 + key_words), ids.len());
         }
         let v = tag(h) | (off as u64 + 1);
         for slot in &bucket.0 {
@@ -197,6 +198,30 @@ impl LongDerived {
             }
         }
         self.arena_len.0.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Copy a key of at least 16 bytes to `dst` in 16-byte blocks, the last
+/// one overlapping: most keys take one or two blocks.
+///
+/// # Safety
+///
+/// `dst` has room for `key.len()` bytes.
+#[inline(always)]
+unsafe fn copy_key(key: &[u8], dst: *mut u8) {
+    let n = key.len();
+    debug_assert!(n >= 16);
+    let block = |i: usize| u128::from_ne_bytes(key[i..i + 16].try_into().unwrap());
+    // SAFETY: every block lies in dst[..n]
+    unsafe {
+        let mut i = 0;
+        while i + 16 < n {
+            dst.add(i).cast::<u128>().write_unaligned(block(i));
+            i += 16;
+        }
+        dst.add(n - 16)
+            .cast::<u128>()
+            .write_unaligned(block(n - 16));
     }
 }
 

@@ -186,8 +186,30 @@ fn encode_miss(
     unsafe { out.set_len(len) };
     match entry {
         Some(e) => engine.vocab.extend_entry(e, out),
+        // a short piece's whole probe chain was walked; a long one's table
+        // was not looked at
+        None if key != NO_KEY => engine.encode_unheld(piece, key, out),
         None => engine.encode_piece(piece, key, out),
     }
+    if out.capacity() - out.len() < ROOM {
+        out.reserve(ROOM);
+    }
+    out.len()
+}
+
+/// A piece the shared tables were found not to hold, written after `len`
+/// ids; returns the new length, with [`ROOM`] to spare.
+#[inline(never)]
+fn encode_unheld(
+    engine: &Engine<'_>,
+    out: &mut Vec<u32>,
+    len: usize,
+    piece: &[u8],
+    key: (u64, u64),
+) -> usize {
+    // SAFETY: `len` ids were written below the capacity
+    unsafe { out.set_len(len) };
+    engine.encode_unheld(piece, key, out);
     if out.capacity() - out.len() < ROOM {
         out.reserve(ROOM);
     }
@@ -292,7 +314,7 @@ impl EncodeSink<'_, '_> {
     /// A piece the table does not hold.
     #[inline(always)]
     fn miss(&mut self, piece: &[u8], key: (u64, u64)) {
-        self.len = encode_miss(self.engine, self.out, self.ptr, self.len, piece, key, None);
+        self.len = encode_unheld(self.engine, self.out, self.len, piece, key);
         self.reload();
     }
 }
@@ -301,6 +323,74 @@ impl EncodeSink<'_, '_> {
 mod tests {
     use crate::merge;
     use crate::pretokenize::PreTokenizer;
+
+    fn reference(bpe: &crate::CoreBpe, text: &str) -> Vec<u32> {
+        let mut want = vec![];
+        let mut pos = 0;
+        while let Some((s, e)) = bpe.pre_tokenizer().next_match(text, pos) {
+            merge::bpe_encode(&text.as_bytes()[s..e], bpe.vocab(), &mut want);
+            pos = e;
+        }
+        want
+    }
+
+    // words never seen before between common ones, so that one batch of
+    // pieces holds many misses (some twice, some merging into one id per
+    // byte) among hits and long pieces
+    #[test]
+    fn batches_with_many_misses_match_the_merge() {
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        for name in [
+            "cl100k_base",
+            "o200k_base",
+            "qwen3_5",
+            "mistral_v3",
+            "p50k_base",
+        ] {
+            let bpe = crate::get_encoding(name).unwrap();
+            for round in 0..4 {
+                let mut text = String::new();
+                let mut words: Vec<String> = vec![];
+                for i in 0..3000 {
+                    let r = next();
+                    match r % 8 {
+                        0..=3 => {
+                            // a fresh word of rare letters, 1 to 14 bytes
+                            let w: String = (0..1 + (r >> 8) % 14)
+                                .map(|k| b"qzxjvkwy"[((r >> (12 + 3 * k)) % 8) as usize] as char)
+                                .collect();
+                            text.push(' ');
+                            text.push_str(&w);
+                            words.push(w);
+                        }
+                        4 if !words.is_empty() => {
+                            // a word from a few pieces back: a repeat in the
+                            // same batch
+                            let w =
+                                &words[words.len() - 1 - (r >> 8) as usize % words.len().min(8)];
+                            text.push(' ');
+                            text.push_str(w);
+                        }
+                        5 => text.push_str(" the"),
+                        6 => text.push_str(&format!(" {}", r % 100_000)),
+                        _ if i % 97 == 0 => text.push_str(" qzxjvkwyqzxjvkwyqzxj"),
+                        _ => text.push_str(", ¿"),
+                    }
+                }
+                let want = reference(bpe, &text);
+                for _ in 0..2 {
+                    assert_eq!(bpe.encode(&text), want, "{name} round {round}");
+                    assert_eq!(bpe.count(&text), want.len(), "{name} round {round}");
+                }
+            }
+        }
+    }
 
     // every length around the sink's room and batch thresholds, for ascii
     // text, dense text whose entries hold many ids, and pieces that miss
