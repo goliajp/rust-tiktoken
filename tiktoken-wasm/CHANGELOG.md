@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lookup tables are sized to the vocabulary instead of the next power of two.
   All 20 encodings loaded and used take 197 MiB of linear memory (5.1.1:
   196 MiB; the earlier unreleased build with full-size tables: 392 MiB).
+- Where the engine has the JS string builtins (`wasm:js-string`; current
+  Chrome, Safari and Node have them), text mostly outside ASCII is copied
+  into the module by `intoCharCodeArray` instead of a JavaScript loop, and
+  eight 3-byte chars are converted to UTF-8 at a time. Other engines keep
+  the loop. On 4 KB of CJK text in Chrome, `count` and `encode` take 10 to
+  20% less time.
+- Each split pattern is compiled into a function of its own, and the module
+  is built without reference types. Safari kept the single large function
+  in its baseline tier: `count` and `encode` there take 5 to 20% less time
+  on text of 900 bytes and more, and `count` on a 13-byte string 45 to
+  48 ns instead of 70 to 80 ns.
 - `encode`, `encodeWithSpecialTokens`, `count` and `countWithSpecialTokens`
   throw a `TypeError` for an argument that is not a string.
 - The npm package carries the bindings' `snippets/` directory.

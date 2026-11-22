@@ -173,6 +173,22 @@ mod simd {
                 let m3 = u16x8_ge(v, u16x8_splat(0x800));
                 let last = low6(v);
                 let lead3 = v128_or(u16x8_shr(v, 12), u16x8_splat(0xE0));
+                if i16x8_all_true(m3) {
+                    // eight chars of 3 bytes, the usual group in CJK text
+                    let fs = u8x16_narrow_i16x8(lead3, low6(u16x8_shr(v, 6)));
+                    let t = u8x16_narrow_i16x8(last, last);
+                    let a = i8x16_shuffle::<0, 8, 16, 1, 9, 17, 2, 10, 18, 3, 11, 19, 4, 12, 20, 5>(
+                        fs, t,
+                    );
+                    let b = i8x16_shuffle::<13, 21, 6, 14, 22, 7, 15, 23, 0, 0, 0, 0, 0, 0, 0, 0>(
+                        fs, t,
+                    );
+                    v128_store(dst.add(o) as *mut v128, a);
+                    v128_store64_lane::<0>(b, dst.add(o + 16) as *mut u64);
+                    i += 8;
+                    o += 24;
+                    continue;
+                }
                 let lead2 = v128_or(u16x8_shr(v, 6), u16x8_splat(0xC0));
                 let first = v128_bitselect(lead3, v128_bitselect(lead2, v, m2), m3);
                 let second = v128_bitselect(low6(u16x8_shr(v, 6)), last, m3);
