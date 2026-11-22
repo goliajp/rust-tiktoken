@@ -22,6 +22,7 @@
 //! argument applies to one char at a time, so any set of atoms may start
 //! whole together.
 
+use super::walls::{Walls, cp3};
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Default)]
@@ -57,6 +58,7 @@ pub(crate) struct Atoms {
     filter: Box<[u64; FILTER_WORDS]>,
     slots: Box<[Slot]>,
     rules: Vec<Rule>,
+    walls: Walls,
 }
 
 const FILTER_WORDS: usize = 1024;
@@ -186,6 +188,12 @@ impl Atoms {
                 rule: ix,
             });
         }
+        let three = atoms.iter().filter_map(|a| {
+            let [b0, b1, b2, b3] = a.key.to_le_bytes();
+            let cp = cp3(b0, b1, b2).filter(|_| b3 == 0)?;
+            Some((cp, a.rank, a.rule != 0))
+        });
+        let walls = Walls::build(&heads, &tails, three, &get);
         let size = (atoms.len() * 2).max(16).next_power_of_two();
         let mut slots = vec![Slot::default(); size].into_boxed_slice();
         let mut filter = Box::new([0u64; FILTER_WORDS]);
@@ -202,7 +210,14 @@ impl Atoms {
             filter,
             slots,
             rules,
+            walls,
         }
+    }
+
+    /// What the merge may assume about each 3-byte char.
+    #[inline(always)]
+    pub(crate) fn walls(&self) -> &Walls {
+        &self.walls
     }
 
     /// The rank of the char at `piece[a..a + len]` (`len >= 2`) when the

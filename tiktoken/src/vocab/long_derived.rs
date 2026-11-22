@@ -92,7 +92,12 @@ impl LongDerived {
     /// The ids stored for `piece` (more than 15 bytes), if any.
     #[inline]
     pub(crate) fn get(&self, piece: &[u8]) -> Option<LongIds<'_>> {
-        let h = hash_long(piece);
+        self.get_hashed(piece, hash_long(piece))
+    }
+
+    /// [`get`](Self::get) with the piece's [`hash_long`] already computed.
+    #[inline]
+    pub(crate) fn get_hashed(&self, piece: &[u8], h: u64) -> Option<LongIds<'_>> {
         let tag = tag(h);
         for slot in &self.bucket(h).0 {
             let v = slot.load(Ordering::Acquire);
@@ -128,11 +133,12 @@ impl LongDerived {
         Some(LongIds(&rec[1 + key_words..1 + key_words + n]))
     }
 
-    /// Publish the ids of `piece` (16 to [`LONG_KEY_MAX`] bytes). False when
-    /// the table refuses it; the caller keeps the result elsewhere.
-    pub(crate) fn insert(&self, piece: &[u8], ids: &[u32]) -> bool {
+    /// Publish the ids of `piece` (16 to [`LONG_KEY_MAX`] bytes), whose
+    /// [`hash_long`] is `h`. False when the table refuses it; the caller
+    /// keeps the result elsewhere.
+    pub(crate) fn insert(&self, piece: &[u8], ids: &[u32], h: u64) -> bool {
         debug_assert!(piece.len() > 15 && piece.len() <= LONG_KEY_MAX && ids.len() <= piece.len());
-        let h = hash_long(piece);
+        debug_assert_eq!(h, hash_long(piece));
         let bucket = self.bucket(h);
         if bucket.0[BUCKET - 1].load(Ordering::Relaxed) != 0 {
             return false;
@@ -229,7 +235,7 @@ mod tests {
         let t = LongDerived::new();
         let a = "分词器把文本切成很多片段".as_bytes();
         assert!(t.get(a).is_none());
-        assert!(t.insert(a, &[1, 2, 3]));
+        assert!(t.insert(a, &[1, 2, 3], hash_long(a)));
         let got = t.get(a).unwrap();
         let mut v = vec![];
         got.extend_into(&mut v);
@@ -249,7 +255,7 @@ mod tests {
         let mut kept = vec![];
         for i in 0..200_000u32 {
             let key = format!("{i:0>40}");
-            if t.insert(key.as_bytes(), &[i; 20]) {
+            if t.insert(key.as_bytes(), &[i; 20], hash_long(key.as_bytes())) {
                 kept.push(i);
             }
         }

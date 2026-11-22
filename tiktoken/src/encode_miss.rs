@@ -13,7 +13,7 @@
 use crate::CoreBpe;
 use crate::merge::{self, SMALL_MAX};
 use crate::piece_cache;
-use crate::vocab::{ABSENT, Entry, LONG_KEY_MAX, LongIds, Vocab};
+use crate::vocab::{ABSENT, Entry, FAST_KEY_MAX, LONG_KEY_MAX, LongIds, LongPiece, Vocab};
 
 /// Packed key of a piece of up to 15 bytes, or `None` for longer ones.
 pub(crate) type Key = Option<(u64, u64)>;
@@ -81,7 +81,9 @@ fn resolve<S: Sink>(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, sink: 
             return sink.entry(vocab, e);
         }
         if vocab.accepts_derived() {
-            let mut ids = [0u32; SMALL_MAX];
+            // sized for the piece: zeroing a buffer for the longest piece
+            // costs a noticeable part of a short merge
+            let mut ids = [0u32; FAST_KEY_MAX];
             let n = merge_checked(piece, vocab, &mut ids);
             let ids = &ids[..n];
             if vocab.insert_derived(lo, hi, ids) {
@@ -95,27 +97,16 @@ fn resolve<S: Sink>(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, sink: 
             return piece_cache::with_ids(cache_id, piece, fill, |ids| sink.ids(ids));
         }
     } else {
-        if let Some(ids) = vocab.long_ids(piece) {
-            return sink.long(ids);
-        }
         if piece.len() <= LONG_KEY_MAX {
-            let mut buf = [0u32; LONG_KEY_MAX];
-            let n = match vocab.get(piece) {
-                Some(id) => {
-                    buf[0] = id;
-                    1
-                }
-                None => merge_checked(piece, vocab, &mut buf),
-            };
-            let ids = &buf[..n];
-            if vocab.insert_long(piece, ids) {
-                return sink.ids(ids);
+            let lp = vocab.long_piece(piece);
+            if let Some(ids) = vocab.long_ids_of(&lp) {
+                return sink.long(ids);
             }
-            let fill = |b: &mut [u32; piece_cache::KEY_MAX]| {
-                b[..n].copy_from_slice(ids);
-                n
+            return if piece.len() <= MID_LONG {
+                long_miss::<MID_LONG, S>(vocab, cache_id, &lp, piece, sink)
+            } else {
+                long_miss::<LONG_KEY_MAX, S>(vocab, cache_id, &lp, piece, sink)
             };
-            return piece_cache::with_ids(cache_id, piece, fill, |ids| sink.ids(ids));
         }
     }
     if piece.len() <= piece_cache::KEY_MAX {
@@ -126,6 +117,37 @@ fn resolve<S: Sink>(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, sink: 
         merge::bpe_encode(piece, vocab, &mut out);
         sink.ids(&out)
     }
+}
+
+// most long pieces are a few words or a CJK clause
+const MID_LONG: usize = 48;
+
+/// A piece of 16 to `M` bytes that the shared table of long results lacks.
+#[inline(always)]
+fn long_miss<const M: usize, S: Sink>(
+    vocab: &Vocab,
+    cache_id: u64,
+    lp: &LongPiece<'_>,
+    piece: &[u8],
+    sink: S,
+) -> S::Out {
+    let mut buf = [0u32; M];
+    let n = match vocab.long_token(lp) {
+        Some(id) => {
+            buf[0] = id;
+            1
+        }
+        None => merge_checked(piece, vocab, &mut buf),
+    };
+    let ids = &buf[..n];
+    if vocab.insert_long(lp, ids) {
+        return sink.ids(ids);
+    }
+    let fill = |b: &mut [u32; piece_cache::KEY_MAX]| {
+        b[..n].copy_from_slice(ids);
+        n
+    };
+    piece_cache::with_ids(cache_id, piece, fill, |ids| sink.ids(ids))
 }
 
 pub(crate) fn encode(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, out: &mut Vec<u32>) {

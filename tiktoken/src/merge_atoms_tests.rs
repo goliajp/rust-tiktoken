@@ -1,9 +1,29 @@
-//! Merges that start from atoms against merges from bytes, for every
-//! encoding.
+//! Merges that start from atoms and wall chars against merges from bytes
+//! and a plain reference merge, for every encoding.
 
 use super::{SMALL_MAX, merge_small, merge_small_bytes};
 use crate::pretokenize::PreTokenizer;
 use crate::vocab::{Vocab, char_len};
+
+/// tiktoken's rule spelled out: merge the adjacent pair whose concatenation
+/// has the lowest rank, leftmost on ties, until none is a token.
+fn reference(v: &Vocab, piece: &[u8]) -> Vec<u32> {
+    let mut parts: Vec<&[u8]> = piece.chunks(1).collect();
+    loop {
+        let best = (0..parts.len().saturating_sub(1))
+            .filter_map(|i| v.get(&[parts[i], parts[i + 1]].concat()).map(|r| (r, i)))
+            .min();
+        let Some((_, i)) = best else { break };
+        let len = parts[i].len() + parts[i + 1].len();
+        let at = parts[..i].iter().map(|p| p.len()).sum::<usize>();
+        parts[i] = &piece[at..at + len];
+        parts.remove(i + 1);
+    }
+    parts
+        .iter()
+        .map(|p| v.get(p).unwrap_or(crate::vocab::ABSENT))
+        .collect()
+}
 
 fn check(v: &Vocab, piece: &[u8], name: &str) {
     if piece.is_empty() || piece.len() > SMALL_MAX {
@@ -12,12 +32,9 @@ fn check(v: &Vocab, piece: &[u8], name: &str) {
     let (mut a, mut b) = ([0u32; SMALL_MAX], [0u32; SMALL_MAX]);
     let na = merge_small(piece, v, &mut a);
     let nb = merge_small_bytes(piece, v, &mut b);
-    assert_eq!(
-        a[..na],
-        b[..nb],
-        "{name}: {:?} ({piece:x?})",
-        String::from_utf8_lossy(piece)
-    );
+    let what = || format!("{name}: {:?} ({piece:x?})", String::from_utf8_lossy(piece));
+    assert_eq!(a[..na], b[..nb], "{}", what());
+    assert_eq!(a[..na], reference(v, piece)[..], "{}", what());
 }
 
 struct Rng(u64);

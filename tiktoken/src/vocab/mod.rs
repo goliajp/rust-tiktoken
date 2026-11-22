@@ -15,6 +15,7 @@ mod filter;
 mod key;
 mod long;
 mod long_derived;
+mod walls;
 
 pub(crate) use atoms::{Atoms, char_len};
 use fast::FastTable;
@@ -25,9 +26,16 @@ use long::LongTable;
 use long_derived::LongDerived;
 pub(crate) use long_derived::{LONG_KEY_MAX, LongIds};
 use std::sync::OnceLock;
+pub(crate) use walls::{Char3, cp3};
 
 /// Rank sentinel for "absent" in the direct-indexed tables.
 pub(crate) const ABSENT: u32 = u32::MAX;
+
+/// See [`Vocab::long_piece`].
+pub(crate) struct LongPiece<'p> {
+    piece: &'p [u8],
+    hash: u64,
+}
 
 pub struct Vocab {
     // all token bytes, contiguous; referenced by `decoder` and `long`
@@ -197,12 +205,34 @@ impl Vocab {
         self.long_derived.get()?.get(piece)
     }
 
-    /// Share the ids of a piece of 16 to [`LONG_KEY_MAX`] bytes with every
-    /// thread; false when the table refuses it.
-    pub(crate) fn insert_long(&self, piece: &[u8], ids: &[u32]) -> bool {
+    /// A piece of 16 to [`LONG_KEY_MAX`] bytes, hashed once for the lookups
+    /// and the insert of its first occurrence.
+    #[inline]
+    pub(crate) fn long_piece<'p>(&self, piece: &'p [u8]) -> LongPiece<'p> {
+        LongPiece {
+            piece,
+            hash: key::hash_long(piece),
+        }
+    }
+
+    /// [`long_ids`](Self::long_ids) of a hashed piece.
+    #[inline]
+    pub(crate) fn long_ids_of(&self, p: &LongPiece<'_>) -> Option<LongIds<'_>> {
+        self.long_derived.get()?.get_hashed(p.piece, p.hash)
+    }
+
+    /// The id of a hashed piece if it is a vocabulary token.
+    #[inline]
+    pub(crate) fn long_token(&self, p: &LongPiece<'_>) -> Option<u32> {
+        self.long.get_hashed(&self.arena, p.piece, p.hash)
+    }
+
+    /// Share the ids of a hashed piece with every thread; false when the
+    /// table refuses it.
+    pub(crate) fn insert_long(&self, p: &LongPiece<'_>, ids: &[u32]) -> bool {
         self.long_derived
             .get_or_init(LongDerived::new)
-            .insert(piece, ids)
+            .insert(p.piece, ids, p.hash)
     }
 
     /// The chars a merge may start from whole.
