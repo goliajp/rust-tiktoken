@@ -9,10 +9,13 @@
 //!
 //! Pattern source: <https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py>
 
+use std::sync::{Arc, Mutex, Weak};
+
 use crate::hash::FxHashMap;
 
 use crate::bpe::CoreBpe;
 use crate::pretokenize::{FastPath, WhitespaceRules};
+use crate::vocab::Vocab;
 
 // Embedded vocabulary frames, decompressed on first use via the OnceLocks in
 // lib.rs. The data lives in the tiktoken-vocab-* crates, one per vendor, built
@@ -249,6 +252,33 @@ pub(crate) fn parse_tkv(chain: &[&[u8]]) -> FxHashMap<Vec<u8>, u32> {
     ranks
 }
 
+/// The vocabulary of `chain`, built once for all encodings that name the
+/// same `key` and kept while any of them is alive. Encodings that differ only
+/// in special tokens (o200k_base and o200k_harmony, for one) then share its
+/// tables, and the merge results cached in them.
+pub(crate) fn shared_vocab(key: &'static str, chain: &[&[u8]]) -> Arc<Vocab> {
+    static BUILT: Mutex<Vec<(&'static str, Weak<Vocab>)>> = Mutex::new(Vec::new());
+    let find = |built: &[(&'static str, Weak<Vocab>)]| {
+        built
+            .iter()
+            .find(|(k, _)| *k == key)
+            .and_then(|(_, v)| v.upgrade())
+    };
+    if let Some(v) = find(&BUILT.lock().unwrap()) {
+        return v;
+    }
+    // built outside the lock, so that other vocabularies load meanwhile
+    let entries: Vec<(Vec<u8>, u32)> = parse_tkv(chain).into_iter().collect();
+    let vocab = Arc::new(Vocab::from_entries(entries));
+    let mut built = BUILT.lock().unwrap();
+    if let Some(v) = find(&built) {
+        return v;
+    }
+    built.retain(|(_, v)| v.strong_count() > 0);
+    built.push((key, Arc::downgrade(&vocab)));
+    vocab
+}
+
 /// Decode one decompressed TKV1 frame into `ranks`.
 fn insert_frame(data: &[u8], ranks: &mut FxHashMap<Vec<u8>, u32>) {
     assert_eq!(&data[..4], b"TKV1", "bad vocabulary frame magic");
@@ -438,5 +468,31 @@ pub(crate) mod vocab_oracle {
                 assert_eq!(derived.get(&token), Some(&rank), "token {token:?}");
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "vocab-o200k_base", feature = "vocab-p50k_base"))]
+mod shared_vocab_tests {
+    use std::sync::Arc;
+
+    #[test]
+    fn encodings_on_the_same_ranks_share_one_vocabulary() {
+        let a = crate::get_encoding("o200k_base").unwrap();
+        let b = crate::get_encoding("o200k_harmony").unwrap();
+        assert!(Arc::ptr_eq(&a.vocab, &b.vocab));
+        // an owned instance joins while the cached ones are alive
+        let c = super::o200k_base();
+        assert!(Arc::ptr_eq(&a.vocab, &c.vocab));
+        let p = super::p50k_base();
+        let q = super::p50k_edit();
+        assert!(Arc::ptr_eq(&p.vocab, &q.vocab));
+        assert!(!Arc::ptr_eq(&a.vocab, &p.vocab));
+        // the special tokens stay each encoding's own
+        let text = "hi<|endoftext|><|return|>";
+        assert_ne!(
+            a.encode_with_special_tokens(text),
+            b.encode_with_special_tokens(text)
+        );
+        assert_eq!(a.encode(text), b.encode(text));
     }
 }
