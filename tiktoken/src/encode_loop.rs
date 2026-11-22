@@ -41,25 +41,26 @@ const WINDOW_MIN: usize = 32;
 
 /// Ids to reserve for encoding `text`: a third of its length, or two thirds
 /// when its first 64 bytes are mostly non-ASCII, as dense CJK, Hangul or
-/// Arabic text takes 0.35 to 0.65 ids per byte and would otherwise grow the
-/// vector mid-scan.
+/// Arabic text takes 0.35 to 0.65 ids per byte. Texts for the window sink get
+/// its [`ROOM`] on top, which it keeps free before each window; without it a
+/// text of a few hundred bytes grows the vector near its end.
 #[inline(always)]
 pub(crate) fn id_capacity(text: &str) -> usize {
     let b = text.as_bytes();
-    let Some(head) = b.first_chunk::<64>() else {
+    if b.len() < WINDOW_MIN {
         return b.len() / 3;
-    };
-    let hi: u32 = head
-        .as_chunks::<8>()
-        .0
-        .iter()
-        .map(|w| (u64::from_le_bytes(*w) & 0x8080_8080_8080_8080).count_ones())
-        .sum();
-    if hi >= 16 {
-        b.len() / 3 * 2
-    } else {
-        b.len() / 3
     }
+    let dense = b.first_chunk::<64>().is_some_and(|head| {
+        let hi: u32 = head
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|w| (u64::from_le_bytes(*w) & 0x8080_8080_8080_8080).count_ones())
+            .sum();
+        hi >= 16
+    });
+    let ids = if dense { b.len() / 3 * 2 } else { b.len() / 3 };
+    ids + ROOM
 }
 
 impl Engine<'_> {
@@ -395,11 +396,11 @@ impl PieceSink for EncodeSink<'_, '_> {
         let last = offs.len() - 1;
         let mut i = 0;
         while i < last {
-            // grow only when fewer than 64 pieces (or the rest) fit: growing
+            // grow only when fewer than 16 pieces (or the rest) fit: growing
             // for the whole batch up front reallocated short texts that
             // never needed it
             let left = last - i;
-            if self.cap - self.len < 3 * left.min(64) {
+            if self.cap - self.len < 3 * left.min(16) {
                 grow(self.out, self.len, 3 * left);
                 self.reload();
             }
