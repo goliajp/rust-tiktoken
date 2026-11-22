@@ -56,7 +56,9 @@ impl PieceSink for CountSink<'_> {
     #[inline(always)]
     fn window(&mut self) {}
 
-    #[inline(always)]
+    // out of line: it runs once per batch, and inlined under the window
+    // loop it measured slower
+    #[inline(never)]
     fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
         let mut i = 0;
         while i + 1 < offs.len() {

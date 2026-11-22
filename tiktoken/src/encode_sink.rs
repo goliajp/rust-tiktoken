@@ -166,7 +166,9 @@ impl PieceSink for EncodeSink<'_, '_> {
         }
     }
 
-    #[inline(always)]
+    // out of line: it runs once per batch, and inlined under the window
+    // loop it measured slower
+    #[inline(never)]
     fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
         let last = offs.len() - 1;
         let mut i = 0;
