@@ -98,6 +98,38 @@ fn random_text(seed: u64, len: usize) -> String {
     text
 }
 
+/// Texts of one script at a time with its marks, modifier letters,
+/// symbols, unassigned code points and punctuation between the chars: the
+/// pieces that start at a mark or at punctuation stay on the dense scan.
+#[test]
+fn single_scripts_with_marks_and_punctuation_match_scalar() {
+    let blocks = [
+        (0x3040u32, 0x30A0u32),
+        (0x0620, 0x0650),
+        (0x0600, 0x0700),
+        (0x4E00, 0x4E40),
+    ];
+    let seps = [
+        "，", " ", "\n", "。\n", "'", "!!", " ，", "、・", "/", "\r\n", "1",
+    ];
+    let mut x = 12345u32;
+    for (b, &(lo, hi)) in blocks.iter().enumerate() {
+        for seed in 0..40u32 {
+            let mut s = String::new();
+            for i in 0..600 + seed * 17 {
+                x = x.wrapping_mul(1_103_515_245).wrapping_add(12345);
+                if let Some(c) = char::from_u32(lo + (x >> 9) % (hi - lo)) {
+                    s.push(c);
+                }
+                if i % (3 + seed % 9) == 2 {
+                    s.push_str(seps[((x >> 3) as usize + b) % seps.len()]);
+                }
+            }
+            check(&s);
+        }
+    }
+}
+
 #[test]
 fn random_dense_texts_match_scalar() {
     for seed in 0..300 {
