@@ -37,7 +37,7 @@ pub(crate) const CHUNK: usize = 8 * 1024;
 /// Encode `text` as chunks on the pool, appending to `result`; falls back to
 /// this thread when parallelism is 1, the text has no cut points, or the pool
 /// is busy. At most `max_chunks` chunks, by default a multiple of the thread
-/// count up to three per thread.
+/// count up to two per thread.
 ///
 /// One job does it all: each thread takes chunks and appends their ids to a
 /// buffer of its own that lives across calls; the thread that finishes the
@@ -237,13 +237,14 @@ fn plan(text: &str, chunk: usize, max_chunks: Option<usize>) -> Option<(usize, V
 
 /// Chunks for a text of `len` bytes: one per `chunk` bytes, rounded up to a
 /// multiple of `threads` once there are more than `threads`, so that every
-/// thread gets the same number; at most three per thread.
+/// thread gets the same number; at most two per thread, which measured
+/// faster than three or four.
 fn chunk_count(len: usize, chunk: usize, threads: usize) -> usize {
     let c = len.div_ceil(chunk.max(1));
     if c <= threads {
         return c;
     }
-    (c.div_ceil(threads) * threads).min(3 * threads)
+    (c.div_ceil(threads) * threads).min(2 * threads)
 }
 
 /// Chunk boundaries of `b`: `0`, the cuts in increasing order, `b.len()`.
