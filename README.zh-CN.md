@@ -11,6 +11,8 @@
 >
 > **升级到 4.0？** token id 与 API 都没变。唯一的破坏性变更：词表移到了默认开启的 `vocab-*` feature 之后，写了 `default-features = false` 的依赖需要点名自己用到的词表。
 >
+> **升级到 5.2？** API 没有变化。32 KiB 及以上的文本现在默认用多个线程编码（`tiktoken::set_parallelism(1)` 或 `TIKTOKEN_THREADS=1` 可关闭）；wasm 包需要 WebAssembly SIMD（Chrome 91、Firefox 89、Safari 16.4）；另有 336 个只在较新 Unicode 版本里算数字的码点，在 `mistral_v15` 和 `deepseek_v3` / `deepseek_v4` 上切分方式有变。详见 [CHANGELOG](tiktoken/CHANGELOG.md#520---2026-11-23)。
+>
 > **升级到 5.0？** 两处破坏性变更。一是价格相关的结构体和 `VisionPricing` 改成了 `#[non_exhaustive]`：`match` 要加 `_` 分支，也不能再用字面量构造这些结构体。二是 Llama 4、Qwen 3.5–3.8、Mistral Large 4 和 `deepseek-flash` 改为映射到这些模型实际使用的词表，它们的 token 数会变。5.1 把词表数据移到了按厂商划分的 `tiktoken-vocab-*` crate，其余不变。
 
 最快的 Rust BPE 分词器，以及它的 WebAssembly 绑定。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持主流开源模型（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。手写扫描器同时覆盖 ASCII 与 CJK，配合按 key 长度分层的词表与整片记忆，**原生比 tiktoken-rs 快 3.7〜20 倍**，**浏览器内比 gpt-tokenizer 快 1.1〜2.7 倍** —— 中日文散文同样领先。
@@ -27,9 +29,9 @@
 
 ## 亮点
 
-- **手写预分词器，覆盖 ASCII 与 CJK** —— 字母、数字、标点、缩写、汉字/假名/谚文与全角形式都不经过正则引擎直接解析；正则仍是判准（属性测试钉死等价），也是罕见形状的兜底。
+- **运行时不用正则** —— 每套编码的切分规则都由查表实现的扫描器复现，表格由 Unicode 数据生成；cl100k 和 o200k 两个系列用 SIMD（NEON、SSE2、wasm simd128）一次判定 64 字节内的片段起点。`regex` crate 只在测试里作为扫描器的对照实现。
 - **20 套编码 · 153 个模型 · 11 家厂商** —— OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2–3.8、Mistral（含 Large 4）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3；并提供美元成本估算（价格含 Anthropic、Google）。
-- **轻量可移植** —— 20 份词表共 7.8 MB 编译期内嵌且可按词表退订（只要 cl100k 的构建仅带 373 KB，cargo 也只下载启用的厂商的数据）、按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、可选 rayon 并行、零分配 `count()`、零 C 依赖的纯 Rust、自足的 wasm 构建。
+- **轻量可移植** —— 20 份词表共 7.8 MB 编译期内嵌且可按词表退订（只要 cl100k 的构建仅带 373 KB，cargo 也只下载启用的厂商的数据）、按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、长文本由内置的纯 std 线程池自动多线程编码、零分配 `count()`、零 C 依赖的纯 Rust（运行时依赖只有 `ruzstd` 和各词表数据 crate）、自足的 wasm 构建。
 
 完整 API、支持模型表、基准测试见各 crate 的 README：**[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。
 
@@ -101,7 +103,7 @@ git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
 # tag `v*` 发布 tiktoken crate；`tiktoken-wasm-v*` 发布 wasm crate + npm
 ```
 
-23 个预分词属性测试与 12 个往返属性测试，把手写扫描器钉在正则引擎上。`PROPTEST_CASES` 决定每次运行开拓多少新地面；`proptest-regressions/` 里的种子在任何设置下都会先于随机用例重放，所以历史失败输入始终在查。
+7 个预分词属性测试（每个都在所有切分规则系列上运行）、一次短字符串穷举，以及 12 个往返属性测试，把扫描器钉在 `regex` crate 上。`PROPTEST_CASES` 决定每次运行开拓多少新地面；`proptest-regressions/` 里的种子在任何设置下都会先于随机用例重放，所以历史失败输入始终在查。
 
 ## 许可证
 

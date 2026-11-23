@@ -11,6 +11,8 @@
 >
 > **Upgrading to 4.0?** Token ids and the API are unchanged. The one break: vocabularies now live behind default-on `vocab-*` features, so a dependency written as `default-features = false` must name the ones it uses.
 >
+> **Upgrading to 5.2?** No API change. Texts of 32 KiB and more are now encoded on several threads by default (`tiktoken::set_parallelism(1)` or `TIKTOKEN_THREADS=1` turns that off); the wasm package needs WebAssembly SIMD (Chrome 91, Firefox 89, Safari 16.4); and 336 code points that are digits only in newer Unicode versions split differently on `mistral_v15` and `deepseek_v3` / `deepseek_v4`. Details: [CHANGELOG](tiktoken/CHANGELOG.md#520---2026-11-23).
+>
 > **Upgrading to 5.0?** Two breaks. The pricing structs and `VisionPricing` are `#[non_exhaustive]`, so a `match` needs a `_` arm and the structs can no longer be built with literals. And Llama 4, Qwen 3.5–3.8, Mistral Large 4 and `deepseek-flash` now resolve to the vocabularies those models really use, so their token counts change. 5.1 moves the vocabulary data into per-vendor `tiktoken-vocab-*` crates without changing anything else.
 
 The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **3.7–20x faster than tiktoken-rs** natively and **1.1–2.7x faster than gpt-tokenizer in the browser** — CJK prose included.
@@ -27,9 +29,9 @@ The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatibl
 
 ## Highlights
 
-- **Hand-written pre-tokenizer for ASCII and CJK** — letters, digits, punctuation, contractions, Han/kana/hangul runs and fullwidth forms all resolve without the regex engine, which remains the arbiter (property-tested equivalence) and the fallback for rare shapes.
+- **No regex at runtime** — every encoding's split pattern is reproduced by a table-driven scanner built on generated Unicode tables, and the cl100k and o200k families decide piece starts 64 bytes at a time with SIMD (NEON, SSE2, wasm simd128). The `regex` crate is only the reference the scanners are tested against.
 - **20 encodings · 153 models · 11 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, GPT-6.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek V3/V4, Qwen 2–3.8, Mistral (incl. Large 4), Kimi K2/K3, GLM-4/5, MiniMax M2/M3; plus USD cost estimation (Anthropic & Google included for pricing).
-- **Lean & portable** — all 20 vocabularies embedded in 7.8 MB and opt-out per vocabulary (a cl100k-only build carries 373 KB, and cargo only downloads the vendors you enable), key-size-layered vocabulary with whole-piece memoisation, hybrid linear/heap BPE merge, optional rayon parallelism, allocation-free `count()`, pure Rust with zero C dependencies, and a self-contained wasm build.
+- **Lean & portable** — all 20 vocabularies embedded in 7.8 MB and opt-out per vocabulary (a cl100k-only build carries 373 KB, and cargo only downloads the vendors you enable), key-size-layered vocabulary with whole-piece memoisation, hybrid linear/heap BPE merge, long texts encoded on several threads by a built-in std-only pool, allocation-free `count()`, pure Rust with zero C dependencies (runtime dependencies: `ruzstd` and the vocabulary data crates), and a self-contained wasm build.
 
 Full API, supported-model tables, and benchmarks live in the per-crate READMEs: **[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**.
 
@@ -101,8 +103,9 @@ git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
 # tag `v*` publishes the tiktoken crate; `tiktoken-wasm-v*` publishes the wasm crate + npm
 ```
 
-The 23 pre-tokenizer and 12 round-trip property tests pin the hand-written
-scanners against the regex engine. `PROPTEST_CASES` sets how much new ground
+The 7 pre-tokenizer property tests (each run on every pattern family), an
+exhaustive sweep of short strings and 12 round-trip property tests pin the
+scanners against the `regex` crate. `PROPTEST_CASES` sets how much new ground
 each run covers; the seeds in `proptest-regressions/` replay before any random
 case at every setting, so past failures are always re-checked.
 

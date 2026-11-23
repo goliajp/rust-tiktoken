@@ -11,6 +11,8 @@
 >
 > **4.0 へのアップグレード：** トークン id と API は変わりません。唯一の破壊的変更は、語彙が既定で有効な `vocab-*` 機能の下に移ったことです。`default-features = false` と書いている依存は、使う語彙を明示してください。
 >
+> **5.2 へのアップグレード：** API の変更はありません。32 KiB 以上のテキストはデフォルトで複数スレッドでエンコードされるようになりました（`tiktoken::set_parallelism(1)` または `TIKTOKEN_THREADS=1` で無効化）。wasm パッケージは WebAssembly SIMD が必要です（Chrome 91、Firefox 89、Safari 16.4）。また、新しい Unicode バージョンでのみ数字とされる 336 個のコードポイントは、`mistral_v15` と `deepseek_v3` / `deepseek_v4` での分割が変わります。詳細は [CHANGELOG](tiktoken/CHANGELOG.md#520---2026-11-23)。
+>
 > **5.0 へのアップグレード：** 破壊的変更は 2 つです。料金関連の構造体と `VisionPricing` が `#[non_exhaustive]` になったため、`match` には `_` の分岐が必要で、構造体をリテラルで作ることもできなくなりました。また Llama 4、Qwen 3.5〜3.8、Mistral Large 4、`deepseek-flash` は実際に使う語彙に対応付けられるようになったため、トークン数が変わります。5.1 は語彙データをベンダーごとの `tiktoken-vocab-*` クレートに移しただけで、ほかは変わりません。
 
 最速の Rust BPE トークナイザーと、その WebAssembly バインディング。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）もサポート。手書きスキャナが ASCII と CJK の両方を扱い、キー長で階層化した語彙と断片の丸ごとメモ化により、**ネイティブで tiktoken-rs の 3.7〜20 倍**、**ブラウザ内で gpt-tokenizer の 1.1〜2.7 倍** 高速——日本語・中国語の文章でも優位です。
@@ -27,9 +29,9 @@
 
 ## 特長
 
-- **手書きの事前トークナイザーが ASCII と CJK を処理** — 英字・数字・記号・短縮形に加え、漢字・かな・ハングル・全角形も正規表現エンジンを使わずに解決。正解はあくまで正規表現側（プロパティテストで等価を担保）で、稀な形状のフォールバックも正規表現が受け持ちます。
+- **実行時に正規表現を使わない** — 全エンコーディングの分割パターンを、生成した Unicode テーブルに基づくテーブル駆動のスキャナで再現。cl100k 系と o200k 系は SIMD（NEON、SSE2、wasm simd128）で 64 バイト単位に断片の開始位置を判定します。`regex` クレートはスキャナを検証するテスト用の参照実装としてのみ使います。
 - **20 エンコーディング・153 モデル・11 プロバイダ** — OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2〜3.8、Mistral（Large 4 を含む）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3。さらに USD のコスト見積もり（料金は Anthropic・Google も含む）。
-- **軽量・移植性** — 20 語彙を合計 7.8 MB で埋め込み、語彙ごとにオプトアウト可能（cl100k のみなら 373 KB、cargo は有効にしたベンダーのデータだけをダウンロード）、キー長で階層化した語彙と断片のメモ化、線形/ヒープのハイブリッド BPE マージ、オプションの rayon 並列、ゼロアロケーションの `count()`、C 依存ゼロの純 Rust、自己完結の wasm ビルド。
+- **軽量・移植性** — 20 語彙を合計 7.8 MB で埋め込み、語彙ごとにオプトアウト可能（cl100k のみなら 373 KB、cargo は有効にしたベンダーのデータだけをダウンロード）、キー長で階層化した語彙と断片のメモ化、線形/ヒープのハイブリッド BPE マージ、長いテキストは内蔵の std のみのスレッドプールで自動的に並列エンコード、ゼロアロケーションの `count()`、C 依存ゼロの純 Rust（実行時の依存は `ruzstd` と語彙データクレートのみ）、自己完結の wasm ビルド。
 
 API・対応モデル表・ベンチマークは各 crate の README を参照：**[`tiktoken/`](tiktoken/README.md)** ·  **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。
 
@@ -101,7 +103,7 @@ git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
 # タグ `v*` が tiktoken crate を、`tiktoken-wasm-v*` が wasm crate + npm を公開
 ```
 
-23 個のプリトークナイザ用と 12 個のラウンドトリップ用のプロパティテストが、手書きスキャナを正規表現エンジンに対して固定しています。`PROPTEST_CASES` は 1 回の実行が新たに踏む範囲を決めるもので、`proptest-regressions/` のシードはどの設定でもランダムケースより先に再生されるため、過去に失敗した入力は常に再確認されます。
+7 個のプリトークナイザ用プロパティテスト（それぞれ全パターン系統で実行）、短い文字列の網羅テスト、12 個のラウンドトリップ用プロパティテストが、スキャナを `regex` クレートに対して固定しています。`PROPTEST_CASES` は 1 回の実行が新たに踏む範囲を決めるもので、`proptest-regressions/` のシードはどの設定でもランダムケースより先に再生されるため、過去に失敗した入力は常に再確認されます。
 
 ## ライセンス
 

@@ -93,6 +93,9 @@ impl CoreBpe {
     /// Special tokens like `<|endoftext|>` are treated as ordinary text.
     /// Use [`encode_with_special_tokens`](Self::encode_with_special_tokens) to recognize them.
     ///
+    /// A text of 32 KiB or more is encoded on several threads (see
+    /// [`set_parallelism`](crate::set_parallelism)); the ids are the same.
+    ///
     /// # Examples
     ///
     /// ```
@@ -201,6 +204,8 @@ impl CoreBpe {
     /// matching the behavior of [`encode`](Self::encode). Use
     /// [`count_with_special_tokens`](Self::count_with_special_tokens) if you
     /// need special tokens to be recognized.
+    ///
+    /// Like `encode`, a text of 32 KiB or more is counted on several threads.
     ///
     /// # Examples
     ///

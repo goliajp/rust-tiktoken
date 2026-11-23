@@ -13,6 +13,8 @@
 npm install @goliapkg/tiktoken-wasm
 ```
 
+模块用 WebAssembly SIMD（`simd128`）构建，需要 Chrome 91、Firefox 89 或 Safari 16.4 及以上；更旧的浏览器无法编译它。
+
 ## 从源码构建
 
 ```bash
@@ -24,11 +26,11 @@ wasm-pack build --target web --release --scope goliapkg
 输出在 `pkg/` 目录下，是一份可直接发 npm 的完整包：
 
 - `tiktoken_wasm.js` —— 带 WASM 加载器的 ES module
-- `tiktoken_wasm_bg.wasm` —— 编译后的 WASM 二进制（8.96 MB，gzip 后 8.22 MB，含全部 20 份词表）
+- `tiktoken_wasm_bg.wasm` —— 编译后的 WASM 二进制（8.65 MB，gzip 后 8.01 MB，含全部 20 份词表）
 - `tiktoken_wasm.d.ts` —— TypeScript 类型声明
 - `snippets/` —— 一小段 JavaScript，负责把文本和 token id 送进、取出 WASM 内存
 
-自己构建时加 `--no-default-features --features vocab-o200k_base`（或任意从 `tiktoken` 转发过来的 `vocab-*` / 厂商组 feature），体积降到 1.96 MB，gzip 后 1.22 MB。
+自己构建时加 `--no-default-features --features vocab-o200k_base`（或任意从 `tiktoken` 转发过来的 `vocab-*` / 厂商组 feature），体积降到 1.64 MB，gzip 后 1.00 MB。
 
 ## 使用
 

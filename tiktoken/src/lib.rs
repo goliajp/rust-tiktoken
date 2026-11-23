@@ -23,6 +23,16 @@
 //! let count = enc.count("hello world");
 //! assert_eq!(count, 2);
 //! ```
+//!
+//! # Threads
+//!
+//! [`CoreBpe::encode`], [`CoreBpe::count`] and their `_with_special_tokens`
+//! forms encode a text of 32 KiB or more on a process-wide pool of worker
+//! threads, with output identical to single-threaded encoding. The pool is
+//! created on the first such call and uses the performance cores by default;
+//! [`set_parallelism`] or the `TIKTOKEN_THREADS` environment variable changes
+//! the thread count, and `1` keeps every call on the calling thread. Shorter
+//! texts, and every call on `wasm32`, run on the calling thread.
 
 // Whatever a build leaves out, the machinery for it is still compiled and now
 // unreachable: an omitted vocabulary's split pattern and special-token table,
