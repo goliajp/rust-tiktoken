@@ -5,39 +5,43 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.2.0] - 2026-11-23
+
+Version lockstep with `tiktoken` 5.2.0: its regex-free pre-tokenizers, new
+vocabulary lookup and faster merges, and its change for 336 code points on
+`mistral_v15`, `deepseek_v3` and `deepseek_v4` (see that crate's changelog).
+The JavaScript API is unchanged. `count` and `encode` are substantially
+faster; updated benchmark tables will follow in a later release. The wasm
+build has no threads, so the native crate's automatic parallel encoding does
+not apply here.
 
 ### Changed
-- Built with WebAssembly SIMD (`simd128`): the pre-tokenizer classifies text
-  64 bytes at a time. The package now needs Chrome 91, Firefox 89 or
+- **Built with WebAssembly SIMD (`simd128`)**: the pre-tokenizer classifies
+  text 64 bytes at a time. The package now needs Chrome 91, Firefox 89 or
   Safari 16.4 and later; older browsers fail to compile the module.
 - Text reaches the tokenizer in a buffer kept across calls: through
   `TextEncoder.encodeInto`, or `TextEncoder.encode` plus a copy where that
   is faster (Safari; timed once on first use), or, when most of the text is
   outside ASCII, as UTF-16 code units converted to UTF-8 inside the module.
   Ids come back with one copy. The generated bindings copied ASCII one char
-  at a time and allocated on every call. In Chrome, `count` and `encode`
-  on ASCII text of 1 to 45 KB take 25 to 45% less time and `encode` on a
-  short string about 20% less; in Safari, CJK text takes 30 to 45% less.
-  `count` on a string of a few chars takes a few nanoseconds more (one more
-  call between JavaScript and WebAssembly).
-- Less memory: encodings with the same ranks (`o200k_base` and
-  `o200k_harmony`, `p50k_base` and `p50k_edit`, `deepseek_v3` and
-  `deepseek_v4`, `kimi_k2` and `kimi_k3`) share one vocabulary, and the
-  lookup tables are sized to the vocabulary instead of the next power of two.
-  All 20 encodings loaded and used take 197 MiB of linear memory (5.1.1:
-  196 MiB; the earlier unreleased build with full-size tables: 392 MiB).
+  at a time and allocated on every call. `count` on a string of a few chars
+  makes one more call between JavaScript and WebAssembly than before.
 - Where the engine has the JS string builtins (`wasm:js-string`; current
   Chrome, Safari and Node have them), text mostly outside ASCII is copied
   into the module by `intoCharCodeArray` instead of a JavaScript loop, and
   eight 3-byte chars are converted to UTF-8 at a time. Other engines keep
-  the loop. On 4 KB of CJK text in Chrome, `count` and `encode` take 10 to
-  20% less time.
+  the loop.
 - Each split pattern is compiled into a function of its own, and the module
-  is built without reference types. Safari kept the single large function
-  in its baseline tier: `count` and `encode` there take 5 to 20% less time
-  on text of 900 bytes and more, and `count` on a 13-byte string 45 to
-  48 ns instead of 70 to 80 ns.
+  is built without reference types, so that Safari no longer leaves the
+  tokenizer in its baseline tier.
+- Encodings with the same ranks (`o200k_base` and `o200k_harmony`,
+  `p50k_base` and `p50k_edit`, `deepseek_v3` and `deepseek_v4`, `kimi_k2`
+  and `kimi_k3`) share one vocabulary, and the lookup tables are sized to
+  the vocabulary instead of the next power of two. All 20 encodings loaded
+  and used take 197 MiB of linear memory (5.1.1: 196 MiB).
+- The `.wasm` with all 20 vocabularies is 8.65 MB, 8.01 MB gzipped (5.1.1:
+  8.96 MB, 8.22 MB); an o200k-only build is 1.64 MB, 1.00 MB gzipped (5.1.1:
+  1.96 MB, 1.22 MB). The `regex` crate is no longer compiled in.
 - `encode`, `encodeWithSpecialTokens`, `count` and `countWithSpecialTokens`
   throw a `TypeError` for an argument that is not a string.
 - The npm package carries the bindings' `snippets/` directory.
