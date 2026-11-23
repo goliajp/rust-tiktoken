@@ -260,6 +260,14 @@ impl CoreBpe {
         self.encode(text)
     }
 
+    /// A [`TextMemo`](crate::TextMemo) over this encoding, which answers a
+    /// text it has seen before without encoding it again. It holds at most
+    /// about `max_bytes` of texts and ids.
+    #[must_use]
+    pub fn memo(&self, max_bytes: usize) -> crate::TextMemo<'_> {
+        crate::TextMemo::new(self, max_bytes)
+    }
+
     /// Number of regular (non-special) tokens in the vocabulary.
     ///
     /// # Examples

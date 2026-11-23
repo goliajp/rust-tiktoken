@@ -33,6 +33,12 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## Unreleased
+
+- add `CoreBpe::memo` and `TextMemo`, an opt-in store of whole texts and their
+  ids for callers that encode the same text repeatedly; `encode` and `count`
+  are unchanged
+
 ## [5.2.1] - 2026-11-23
 
 Documentation only; the code is identical to 5.2.0.
