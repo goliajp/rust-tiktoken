@@ -46,9 +46,9 @@ const dict: Dict = {
   'front.title.b': { en: 'high-performance', zh: '高性能', ja: '高性能' },
   'front.title.c': { en: ' BPE tokenizer', zh: ' BPE 分词器', ja: ' BPE トークナイザー' },
   'front.abstract': {
-    en: 'Token counts drive billing, context limits and truncation, so a tokenizer has to be fast and exact at once. This one beats the fastest JavaScript tokenizers by 1.1–2.7× in the browser and tiktoken-rs by 3.7–20× natively, and each of its 20 encodings is checked byte-for-byte against the vendor’s own tokenizer — 53,275 differential cases, zero divergence. The playground below runs the published WebAssembly package itself, so both claims can be verified on this page.',
-    zh: 'token 数直接决定计费、上下文上限和截断位置，分词器必须又快又准。浏览器里，它比最快的 JavaScript 分词器快 1.1–2.7 倍；原生比 tiktoken-rs 快 3.7–20 倍。20 套编码逐一与厂商自己的分词器逐字节比对，53,275 组差分对照零分歧。下方试用区运行的就是发布的 WebAssembly 包本体 —— 这两件事都可以当场验证。',
-    ja: 'トークン数は課金・コンテキスト上限・打ち切り位置を直接決めるため、トークナイザーには速さと正確さの両方が要ります。本実装はブラウザ内で最速の JavaScript トークナイザーの 1.1〜2.7 倍、ネイティブでは tiktoken-rs の 3.7〜20 倍高速。20 のエンコーディングはすべてベンダー自身のトークナイザーとバイト単位で照合済みで、53,275 件の差分照合に相違はありません。下のプレイグラウンドは公開中の WebAssembly パッケージそのもの——どちらの主張もこのページで確かめられます。',
+    en: 'Token counts drive billing, context limits and truncation, so a tokenizer has to be fast and exact at once. This one beats the fastest JavaScript tokenizers by 5.8–7.0× in the browser and tiktoken-rs by 22–83× natively, and each of its 20 encodings is checked byte-for-byte against the vendor’s own tokenizer — 53,275 differential cases, zero divergence. The playground below runs the published WebAssembly package itself, so both claims can be verified on this page.',
+    zh: 'token 数直接决定计费、上下文上限和截断位置，分词器必须又快又准。浏览器里，它比最快的 JavaScript 分词器快 5.8–7.0 倍；原生比 tiktoken-rs 快 22–83 倍。20 套编码逐一与厂商自己的分词器逐字节比对，53,275 组差分对照零分歧。下方试用区运行的就是发布的 WebAssembly 包本体 —— 这两件事都可以当场验证。',
+    ja: 'トークン数は課金・コンテキスト上限・打ち切り位置を直接決めるため、トークナイザーには速さと正確さの両方が要ります。本実装はブラウザ内で最速の JavaScript トークナイザーの 5.8〜7.0 倍、ネイティブでは tiktoken-rs の 22〜83 倍高速。20 のエンコーディングはすべてベンダー自身のトークナイザーとバイト単位で照合済みで、53,275 件の差分照合に相違はありません。下のプレイグラウンドは公開中の WebAssembly パッケージそのもの——どちらの主張もこのページで確かめられます。',
   },
   'front.fig.comparisons': {
     en: 'differential cases, zero divergence',
@@ -139,19 +139,19 @@ const dict: Dict = {
   // performance
   'perf.heading': { en: 'Measured performance', zh: '实测性能', ja: '実測性能' },
   'perf.blurb': {
-    en: 'Two machines, two sets of rivals, identical corpora. Token outputs are asserted identical across implementations before anything is timed; each figure is one full pass, median of 9 rounds after warmup, cl100k_base. Both tables reproduce from commands in the repository.',
-    zh: '两台机器、两组对手、同一批语料。计时前先断言各实现的 token 输出完全一致；每个数字是一次完整处理，预热后取 9 轮中位数，cl100k_base 编码。两张表都可以用仓库里的命令复现。',
-    ja: '2 台のマシン、2 組の比較相手、同一のコーパス。計測前に各実装のトークン出力が完全に一致することを確認し、各数値はウォームアップ後 9 回の中央値です（cl100k_base）。どちらの表もリポジトリのコマンドで再現できます。',
+    en: 'One machine, two sets of rivals, identical corpora. Token outputs are asserted identical across implementations before anything is timed; each figure is one full pass, median of 9 rounds after warmup, cl100k_base. Both tables reproduce from commands in the repository, except the fastokens column, which comes from a separate same-process harness.',
+    zh: '同一台机器、两组对手、同一批语料。计时前先断言各实现的 token 输出完全一致；每个数字是一次完整处理，预热后取 9 轮中位数，cl100k_base 编码。两张表都可以用仓库里的命令复现；fastokens 一列除外，它来自另一套同进程测试程序。',
+    ja: '同一マシン、2 組の比較相手、同一のコーパス。計測前に各実装のトークン出力が完全に一致することを確認し、各数値はウォームアップ後 9 回の中央値です（cl100k_base）。どちらの表もリポジトリのコマンドで再現できます（fastokens の列のみ、同一プロセスで測る別のハーネスの値です）。',
   },
   'perf.browser.h': {
-    en: 'In the browser — Apple M4 Mac mini, Chromium · npm run bench',
-    zh: '浏览器内 —— Apple M4 Mac mini、Chromium · npm run bench',
-    ja: 'ブラウザ内 — Apple M4 Mac mini・Chromium · npm run bench',
+    en: 'In the browser — Apple M4 Pro Mac mini, Chromium · npm run bench',
+    zh: '浏览器内 —— Apple M4 Pro Mac mini、Chromium · npm run bench',
+    ja: 'ブラウザ内 — Apple M4 Pro Mac mini・Chromium · npm run bench',
   },
   'perf.native.h': {
-    en: 'Native — Apple M4 Mac mini, single thread · cargo run -p bench-compare',
-    zh: '原生 —— Apple M4 Mac mini、单线程 · cargo run -p bench-compare',
-    ja: 'ネイティブ — Apple M4 Mac mini・シングルスレッド · cargo run -p bench-compare',
+    en: 'Native — Apple M4 Pro Mac mini, single thread · cargo run -p bench-compare',
+    zh: '原生 —— Apple M4 Pro Mac mini、单线程 · cargo run -p bench-compare',
+    ja: 'ネイティブ — Apple M4 Pro Mac mini・シングルスレッド · cargo run -p bench-compare',
   },
   'perf.corpus.zh': { en: 'Chinese prose (4.3 KB)', zh: '中文散文（4.3 KB）', ja: '中国語の文章（4.3 KB）' },
   'perf.corpus.ja': { en: 'Japanese prose (4.6 KB)', zh: '日文散文（4.6 KB）', ja: '日本語の文章（4.6 KB）' },
@@ -167,14 +167,14 @@ const dict: Dict = {
   'perf.caption.label': { en: 'Table 2.', zh: '表 2.', ja: '表 2.' },
   'perf.caption.browser.label': { en: 'Table 1.', zh: '表 1.', ja: '表 1.' },
   'perf.caption.browser': {
-    en: 'gpt-tokenizer is the fastest JavaScript tokenizer; js-tiktoken the most downloaded. The adversarial corpus never repeats a piece, which disables every implementation’s memoisation — it is the floor, and the lead holds there too.',
-    zh: 'gpt-tokenizer 是浏览器里最快的 JavaScript 分词器，js-tiktoken 是下载量最大的。对抗语料不含任何重复片段，各实现的缓存全部失效 —— 那一行是下界，领先在下界处依然成立。',
-    ja: 'gpt-tokenizer は最速の JavaScript トークナイザー、js-tiktoken はダウンロード数首位のものです。敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にします——その行が下限であり、下限でも優位は変わりません。',
+    en: 'encode(). tiktoken-fast is another wasm build, gpt-tokenizer the fastest JavaScript tokenizer, js-tiktoken the most downloaded. tiktoken-fast comes within about 10% on the two mixed-script rows once it has seen the text, and is 1.8–6.6× slower on a first encounter. The adversarial corpus never repeats a piece, which disables every implementation’s memoisation; the lead holds there too.',
+    zh: 'encode()。tiktoken-fast 是另一个 wasm 分词器，gpt-tokenizer 是浏览器里最快的 JavaScript 分词器，js-tiktoken 是下载量最大的。两行混排语料在 tiktoken-fast 见过之后差距约 10%，首次遇到时它慢 1.8–6.6 倍。对抗语料不含任何重复片段，各实现的缓存全部失效，领先依然成立。',
+    ja: 'encode()。tiktoken-fast は別の wasm 実装、gpt-tokenizer は最速の JavaScript トークナイザー、js-tiktoken はダウンロード数首位のものです。混在文字の 2 行では、tiktoken-fast は一度見たテキストなら約 10% の差まで迫り、初見では 1.8〜6.6 倍遅くなります。敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にしますが、優位は変わりません。',
   },
   'perf.caption': {
-    en: 'Rust rivals, same corpora, encode(). The scanners and the layered vocabulary keep CJK off the regex engine, so it holds 3.7–18× alongside ASCII’s 15–20×.',
-    zh: 'Rust 同行对比，同一批语料，encode()。扫描器和分层词表让 CJK 不进正则引擎 —— CJK 快 3.7–18 倍，ASCII 快 15–20 倍。',
-    ja: 'Rust 実装との比較、同一コーパス、encode()。スキャナと階層化した語彙が CJK を正規表現エンジンに通さないため、CJK で 3.7〜18 倍、ASCII で 15〜20 倍を保ちます。',
+    en: 'Rust rivals, same corpora, encode(). Against tiktoken-rs the rows here are 36–83×; against fastokens, 1.5–12×. Texts of 32 KiB and more also run on several threads by default: 3× ahead of fastokens on a 200 KB book.',
+    zh: 'Rust 同行对比，同一批语料，encode()。这几行比 tiktoken-rs 快 36–83 倍，比 fastokens 快 1.5–12 倍。32 KiB 及以上的文本默认还会用多个线程：200 KB 书籍比 fastokens 快 3 倍。',
+    ja: 'Rust 実装との比較、同一コーパス、encode()。ここの各行は tiktoken-rs の 36〜83 倍、fastokens の 1.5〜12 倍。32 KiB 以上のテキストは既定で複数スレッドでも処理され、200 KB の書籍では fastokens の 3 倍です。',
   },
 
   // install
@@ -235,7 +235,7 @@ const LATIN = /[0-9A-Za-z]/
  * "特殊 token 表" are single terms, and a fold there reads as a mistake. Make
  * exactly that space non-breaking and leave everything else alone.
  *
- * A space between two Latin words ("Apple M4 Mac mini") is a real separator
+ * A space between two Latin words ("Apple M4 Pro Mac mini") is a real separator
  * and stays breakable.
  *
  * Deliberately a plain string transform: emitting `<wbr>` or splitting into

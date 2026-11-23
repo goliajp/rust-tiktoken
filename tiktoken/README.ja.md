@@ -8,7 +8,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
-最速の Rust BPE トークナイザ — ネイティブで tiktoken-rs の 3.7〜20 倍（日本語・中国語の文章で 14〜18 倍）、ブラウザ内（wasm）で gpt-tokenizer の 1.1〜2.7 倍。手書きスキャナが ASCII と CJK の両方を扱い、語彙はキー長で階層化、繰り返し断片は丸ごとメモ化。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
+最速の Rust BPE トークナイザ — ネイティブで tiktoken-rs の 22〜83 倍（日本語・中国語の文章で 50〜82 倍）、fastokens の 1.5〜12 倍、ブラウザ内（wasm）で gpt-tokenizer の 5.8〜7.0 倍。手書きスキャナが ASCII と CJK の両方を扱い、語彙はキー長で階層化、繰り返し断片は丸ごとメモ化。OpenAI [tiktoken](https://github.com/openai/tiktoken) 互換で、**主要な全 LLM トークナイザ**をサポート — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
 
 ## 特徴
 
@@ -25,40 +25,78 @@
 ウォームアップ後 9 回の中央値です。コーパスはすべてのハーネスでバイト単位に
 同一（`bench-compare/`・`benches/bench_python.py`・`web/bench/`）。
 
-#### ネイティブ — Apple M4 Mac mini・シングルスレッド・`encode`
+#### ネイティブ — Apple M4 Pro Mac mini・シングルスレッド・`encode`
 
-`cargo run --release -p bench-compare`
+`TIKTOKEN_THREADS=1 cargo run --release -p bench-compare`
 
 | コーパス | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| 短文 (13 B) | 1.3 µs | 581 ns | **29 ns** | **20x** | **45x** |
-| 中程度 (900 B) | 23.3 µs | 19.7 µs | **1.1 µs** | **18x** | **21x** |
-| 英語の文章 (45 KB) | 1,100 µs | 956 µs | **52.6 µs** | **18x** | **21x** |
-| 中国語の文章 (4.3 KB) | 114.0 µs | 96.1 µs | **6.7 µs** | **14x** | **17x** |
-| 日本語の文章 (4.6 KB) | 131.3 µs | 113.9 µs | **6.5 µs** | **18x** | **20x** |
-| CJK 混在 ×50 (4.5 KB) | 122.1 µs | 106.7 µs | **15.4 µs** | **6.9x** | **7.9x** |
-| 敵対的 CJK・繰り返しなし (3.9 KB) | 113.8 µs | 92.5 µs | **24.7 µs** | **3.7x** | **4.6x** |
-| コード (3.9 KB) | 180.0 µs | 159.4 µs | **11.0 µs** | **15x** | **16x** |
+| 短文 (13 B) | 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
+| 中程度 (900 B) | 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
+| 英語の文章 (45 KB) | 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
+| 中国語の文章 (4.3 KB) | 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
+| 日本語の文章 (4.6 KB) | 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
+| CJK 混在 ×50 (4.5 KB) | 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
+| 敵対的 CJK・繰り返しなし (3.9 KB) | 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
+| コード (3.9 KB) | 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
 
-o200k_base は tiktoken-rs の 2.8〜14 倍です。`count()` は id ベクタを
-一切確保しないため、`encode` よりさらに 6〜35% 高速です。
+o200k_base はシングルスレッドで tiktoken-rs の 12〜80 倍です。`count()` は
+短いテキストで `encode` より最大 36% 高速、長いテキストではほぼ同等です（id
+ベクタを一切確保しません）。既定のスレッド数では 45 KB のテキストが 6.2 µs です。
 
-#### ブラウザ内 — Apple M4 Mac mini・Chromium
+#### 最速クラスの他実装との比較 — Apple M4 Pro Mac mini・シングルスレッド・cl100k_base・`encode`
 
-`web/` で `npm run bench` — 本クレートの wasm ビルドを、主要な 2 つの
-JavaScript トークナイザーと比較。
+より速い可能性のある実装を見つけた限りすべて、同一プロセス・同一入力で、id の
+完全一致を確認してから計測しました（`bench-compare` とは別のハーネス）。数値は
+3 回の中央値、`tiktoken` は crates.io の 5.2.0 です。
 
-| コーパス | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
-|---|---|---|---|
-| 中国語の文章 (4.3 KB) | 33.0 µs | 6,669 µs | **12.9 µs** |
-| 日本語の文章 (4.6 KB) | 29.4 µs | 12,885 µs | **13.9 µs** |
-| CJK 混在 ×50 (4.5 KB) | 40.8 µs | 3,917 µs | **23.4 µs** |
-| 敵対的 CJK・繰り返しなし (3.9 KB) | 43.6 µs | 2,741 µs | **38.4 µs** |
-| 英語の文章 (45 KB) | 276 µs | 7,522 µs | **102.0 µs** |
-| コード (3.9 KB) | 32.0 µs | 1,020 µs | **17.5 µs** |
+| コーパス | **tiktoken** | [fastokens](https://crates.io/crates/fastokens) 0.3.6 | [HF tokenizers](https://crates.io/crates/tokenizers) 1.0-rc.5 | [toks](https://github.com/actual-computer/toks) 0.3.3 | [toktok-rs](https://crates.io/crates/toktok-rs) 0.5 | [magi-tokenizer](https://crates.io/crates/magi-tokenizer) 0.1 | [bpe-openai](https://crates.io/crates/bpe-openai) 0.3 |
+|---|---|---|---|---|---|---|---|
+| 短文 (13 B) | **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
+| 中程度 (900 B) | **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
+| 英語の文章 (45 KB) | **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
+| 中国語の文章 (4.3 KB) | **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
+| 日本語の文章 (4.6 KB) | **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
+| CJK 混在 ×50 (4.5 KB) | **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
+| 敵対的 CJK・繰り返しなし (3.9 KB) | **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
+| コード (3.9 KB) | **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
+| 英語の書籍 (200 KB) | **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
+| Rust ソース (100 KB) | **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
 
-敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にします —
-それが下限であり、下限でも優位は変わりません。
+- **fastokens** — シングルスレッドで 1.5〜12 倍遅い。既定のスレッド数では書籍 50.3 µs、
+  Rust ソース 36.3 µs に対し、本クレートは 16.7 µs と 12.5 µs（3.0 倍、2.9 倍）
+- **短文**: 13 バイトの行では magi-tokenizer との差は 4〜12%
+- **初めて見るテキスト**（キャッシュなし・シングルスレッド）: fastokens の 1.7〜6.2 倍高速、
+  書籍は 392 µs に対して 228 µs。13 バイトを超えるテキストでは他のどのライブラリより
+  1.17 倍以上高速。13 バイトでは複数のライブラリがタイマーの分解能 42 ns で並ぶ。既定の
+  スレッド数の書籍では、fastokens のワーカーがキャッシュを保持している場合の差は 8〜20%
+- **toks** は全文メモを無効にした値。有効にすると、*同じ*テキストの再エンコードでは保存済みの
+  結果を返すため、本クレートの再エンコードより 3〜20 倍速い
+- そのほかに試したライブラリ（tiktoken-rs、tokensim、riptoken、kitoken、basetenkenizer、
+  Hugging Face tokenizers 0.23）はすべての行で 3.4 倍以上遅い（Hugging Face 0.23 と kitoken は Rust ソースで
+  id が一致せず、その行は計測していない）。Python からのみ呼べる
+  Gigatoken は、呼び出しのオーバーヘッド込みで 1.4〜11 倍遅い
+
+#### ブラウザ内 — Apple M4 Pro Mac mini・Chromium
+
+`web/` で `npm run bench` — 本クレートの wasm ビルドを、別の wasm トークナイザーと
+主要な 2 つの JavaScript トークナイザーと比較。すべて `encode` の値です。
+
+| コーパス | tiktoken-fast 0.1 (wasm) | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+|---|---|---|---|---|
+| 中国語の文章 (4.3 KB) | 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
+| 日本語の文章 (4.6 KB) | 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
+| CJK 混在 ×50 (4.5 KB) | 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
+| 敵対的 CJK・繰り返しなし (3.9 KB) | 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
+| 英語の文章 (45 KB) | 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
+| コード (3.9 KB) | 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
+
+tiktoken-fast は、一度見たテキストなら混在文字の 2 コーパスで 10% ほどの差まで迫り
+ますが、初めて見るテキストでは 1.8〜6.6 倍遅くなります。Safari では gpt-tokenizer の
+3.3〜7.9 倍、tiktoken-fast の 1.5〜2.2 倍高速です。
+
+敵対的コーパスは断片の繰り返しを一切含まず、各実装のメモ化を無効にしますが、
+優位は変わりません。
 
 <details>
 <summary>なぜ速いのか</summary>

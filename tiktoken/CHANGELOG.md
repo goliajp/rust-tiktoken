@@ -33,6 +33,19 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [5.2.1] - 2026-11-23
+
+Documentation only; the code is identical to 5.2.0.
+
+- Benchmark tables measured on the published 5.2.0: 22–83x faster than
+  tiktoken-rs and 43–92x faster than Python tiktoken on one thread
+  (cl100k_base, the README corpora).
+- New comparison with the fastest alternatives: fastokens, Hugging Face
+  tokenizers 1.0-rc.5, toks, toktok-rs, magi-tokenizer and bpe-openai.
+- The browser benchmark compares `encode` with `encode` (it used to time our
+  `count` against the others' `encode`) and includes tiktoken-fast. The browser
+  ratios of 5.1 and earlier were measured the old way.
+
 ## [5.2.0] - 2026-11-23
 
 A rewrite of the encode path: pre-tokenization without the `regex` crate, a

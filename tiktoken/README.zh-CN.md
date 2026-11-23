@@ -8,7 +8,7 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器 — 原生比 tiktoken-rs 快 3.7〜20 倍（中日文散文 14〜18 倍），浏览器内（wasm）比 gpt-tokenizer 快 1.1〜2.7 倍。手写扫描器同时覆盖 ASCII 与 CJK，词表按 key 长度分层，重复片段整片记忆。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
+最快的 Rust BPE 分词器 — 原生比 tiktoken-rs 快 22〜83 倍（中日文散文 50〜82 倍），比 fastokens 快 1.5〜12 倍，浏览器内（wasm）比 gpt-tokenizer 快 5.8〜7.0 倍。手写扫描器同时覆盖 ASCII 与 CJK，词表按 key 长度分层，重复片段整片记忆。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
 
 ## 特性
 
@@ -25,40 +25,77 @@
 9 轮中位数。语料在所有基准衣架中逐字节相同（`bench-compare/`、
 `benches/bench_python.py`、`web/bench/`）。
 
-#### 原生 — Apple M4 Mac mini、单线程、`encode`
+#### 原生 — Apple M4 Pro Mac mini、单线程、`encode`
 
-`cargo run --release -p bench-compare`
+`TIKTOKEN_THREADS=1 cargo run --release -p bench-compare`
 
 | 语料 | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | vs rs | vs Python |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1.3 µs | 581 ns | **29 ns** | **20x** | **45x** |
-| 中等文本 (900 B) | 23.3 µs | 19.7 µs | **1.1 µs** | **18x** | **21x** |
-| 英文文本 (45 KB) | 1,100 µs | 956 µs | **52.6 µs** | **18x** | **21x** |
-| 中文散文 (4.3 KB) | 114.0 µs | 96.1 µs | **6.7 µs** | **14x** | **17x** |
-| 日文散文 (4.6 KB) | 131.3 µs | 113.9 µs | **6.5 µs** | **18x** | **20x** |
-| 多语混排 ×50 (4.5 KB) | 122.1 µs | 106.7 µs | **15.4 µs** | **6.9x** | **7.9x** |
-| 对抗语料：CJK 无重复 (3.9 KB) | 113.8 µs | 92.5 µs | **24.7 µs** | **3.7x** | **4.6x** |
-| 代码 (3.9 KB) | 180.0 µs | 159.4 µs | **11.0 µs** | **15x** | **16x** |
+| 短文本 (13 B) | 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
+| 中等文本 (900 B) | 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
+| 英文文本 (45 KB) | 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
+| 中文散文 (4.3 KB) | 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
+| 日文散文 (4.6 KB) | 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
+| 多语混排 ×50 (4.5 KB) | 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
+| 对抗语料：CJK 无重复 (3.9 KB) | 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
+| 代码 (3.9 KB) | 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
 
-o200k_base 比 tiktoken-rs 快 2.8〜14 倍。`count()` 比 `encode`
-再快 6〜35% —— 它从不分配 id 向量。
+o200k_base 单线程比 tiktoken-rs 快 12〜80 倍。`count()` 在短文本上比 `encode`
+最多快 36%，长文本上两者相当 —— 它从不分配 id 向量。用默认线程数时，45 KB
+文本只要 6.2 µs。
 
-#### 浏览器内 — Apple M4 Mac mini、Chromium
+#### 与最快的其他实现对比 — Apple M4 Pro Mac mini、单线程、cl100k_base、`encode`
 
-在 `web/` 目录 `npm run bench` —— 本 crate 编译为 wasm，对比两个主流
-JavaScript 分词器。
+我们找到的、有可能更快的实现，都在同一个进程里用同样的输入测，先逐个 id
+核对一致；这套测试程序独立于 `bench-compare`。数字是 3 遍的中位数，
+`tiktoken` 用的是 crates.io 上的 5.2.0。
 
-| 语料 | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
-|---|---|---|---|
-| 中文散文 (4.3 KB) | 33.0 µs | 6,669 µs | **12.9 µs** |
-| 日文散文 (4.6 KB) | 29.4 µs | 12,885 µs | **13.9 µs** |
-| 多语混排 ×50 (4.5 KB) | 40.8 µs | 3,917 µs | **23.4 µs** |
-| 对抗语料：CJK 无重复 (3.9 KB) | 43.6 µs | 2,741 µs | **38.4 µs** |
-| 英文文本 (45 KB) | 276 µs | 7,522 µs | **102.0 µs** |
-| 代码 (3.9 KB) | 32.0 µs | 1,020 µs | **17.5 µs** |
+| 语料 | **tiktoken** | [fastokens](https://crates.io/crates/fastokens) 0.3.6 | [HF tokenizers](https://crates.io/crates/tokenizers) 1.0-rc.5 | [toks](https://github.com/actual-computer/toks) 0.3.3 | [toktok-rs](https://crates.io/crates/toktok-rs) 0.5 | [magi-tokenizer](https://crates.io/crates/magi-tokenizer) 0.1 | [bpe-openai](https://crates.io/crates/bpe-openai) 0.3 |
+|---|---|---|---|---|---|---|---|
+| 短文本 (13 B) | **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
+| 中等文本 (900 B) | **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
+| 英文文本 (45 KB) | **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
+| 中文散文 (4.3 KB) | **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
+| 日文散文 (4.6 KB) | **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
+| 多语混排 ×50 (4.5 KB) | **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
+| 对抗语料：CJK 无重复 (3.9 KB) | **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
+| 代码 (3.9 KB) | **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
+| 英文书籍 (200 KB) | **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
+| Rust 源码 (100 KB) | **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
 
-对抗语料不含任何重复片段，各实现的记忆化全部失效 —— 那是下界，领先在下界处
-依然成立。
+- **fastokens**：单线程比本库慢 1.5〜12 倍。默认线程数下，英文书籍它用 50.3 µs、
+  Rust 源码 36.3 µs，本库是 16.7 µs 和 12.5 µs（分别快 3.0 倍和 2.9 倍）
+- **短文本**：13 字节那一行，magi-tokenizer 与本库相差 4〜12%
+- **首次遇到的文本**（缓存清空、单线程）：比 fastokens 快 1.7〜6.2 倍，英文书籍 228 µs
+  对 392 µs；13 字节以上的文本比其他库至少快 1.17 倍；13 字节时几个库都落在计时器的
+  42 ns 分辨率上，算平手。默认线程数下的英文书籍，fastokens 的工作线程保留缓存时，
+  本库领先 8〜20%
+- **toks** 列出的是关闭整篇文本记忆的成绩。打开后，再次编码*同一篇*文本时它直接返回
+  存下的结果，比本库重新编码快 3〜20 倍
+- 其余试过的库 —— tiktoken-rs、tokensim、riptoken、kitoken、basetenkenizer、
+  Hugging Face tokenizers 0.23 —— 每一行都至少慢 3.4 倍（Hugging Face 0.23 和
+  kitoken 在 Rust 源码上输出的 id 不一致，那一行没有计时）。Gigatoken 只能从 Python
+  调用，含调用开销慢 1.4〜11 倍
+
+#### 浏览器内 — Apple M4 Pro Mac mini、Chromium
+
+在 `web/` 目录 `npm run bench` —— 本 crate 编译为 wasm，对比另一个 wasm 分词器和两个
+主流 JavaScript 分词器。各列都是 `encode`。
+
+| 语料 | tiktoken-fast 0.1 (wasm) | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
+|---|---|---|---|---|
+| 中文散文 (4.3 KB) | 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
+| 日文散文 (4.6 KB) | 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
+| 多语混排 ×50 (4.5 KB) | 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
+| 对抗语料：CJK 无重复 (3.9 KB) | 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
+| 英文文本 (45 KB) | 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
+| 代码 (3.9 KB) | 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
+
+两份多语混排语料在 tiktoken-fast 见过之后，差距缩小到 10% 左右；首次遇到时它慢
+1.8〜6.6 倍。在 Safari 里，本库比 gpt-tokenizer 快 3.3〜7.9 倍，比 tiktoken-fast
+快 1.5〜2.2 倍。
+
+对抗语料不含任何重复片段，各实现的记忆化全部失效，领先依然成立。
 
 <details>
 <summary>为什么更快？</summary>

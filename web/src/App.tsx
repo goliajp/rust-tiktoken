@@ -121,11 +121,11 @@ export function App() {
 
           <div className="figures">
             <div className="figure">
-              <div className="v">1.1–2.7×</div>
+              <div className="v">5.8–7.0×</div>
               <div className="k"><T k="front.fig.browser" /></div>
             </div>
             <div className="figure">
-              <div className="v">3.7–20×</div>
+              <div className="v">22–83×</div>
               <div className="k"><T k="front.fig.speed" /></div>
             </div>
             <div className="figure">

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Serves .bench-dist and drives bench.ts in a real browser, because wasm and
-// two JIT'd JS tokenizers are all being compared and only a browser runs all
-// three the way a user would.
+// Serves .bench-dist and drives bench.ts in a real browser, because two wasm
+// and two JIT'd JS tokenizers are being compared and only a browser runs them
+// the way a user would.
 //
 //   npm run bench
 //
@@ -54,17 +54,24 @@ page.on('pageerror', (e) => {
   process.exitCode = 1
 })
 await page.goto(url, { waitUntil: 'networkidle', timeout: 180_000 })
-const r = await page.waitForFunction(() => globalThis.RESULT, { timeout: 180_000 })
+const r = await page.waitForFunction(() => globalThis.RESULT, { timeout: 600_000 })
 const { initMs, jsInitMs, out } = await r.jsonValue()
 await browser.close()
 server.close()
 
-const us = (ns) => (ns / 1000).toFixed(1).padStart(9) + ' µs'
+const us = (ns) => (ns / 1000).toFixed(2).padStart(9) + ' µs'
 console.log(`\nwasm init ${initMs} ms · js-tiktoken init ${jsInitMs} ms\n`)
-console.log('corpus'.padEnd(20) + 'ours (wasm)'.padStart(12) + 'gpt-tokenizer'.padStart(15) + 'js-tiktoken'.padStart(15) + '  tokens')
+console.log(
+  'corpus'.padEnd(20) +
+    ['ours encode', 'ours count', 'tiktoken-fast', 'gpt-tokenizer', 'js-tiktoken'].map((h) => h.padStart(15)).join('') +
+    '  tokens',
+)
 for (const o of out) {
-  if (!o.agree) throw new Error(`${o.name}: the three tokenizers disagree — timings are meaningless`)
+  if (!o.agree) throw new Error(`${o.name}: the tokenizers disagree — timings are meaningless`)
   console.log(
-    o.name.padEnd(20) + us(o.wasm) + us(o.gptTokenizer) + us(o.jsTiktoken) + '  ' + o.tokens,
+    o.name.padEnd(20) +
+      [o.wasm, o.wasmCount, o.tiktokenFast, o.gptTokenizer, o.jsTiktoken].map((v) => us(v).padStart(15)).join('') +
+      '  ' +
+      o.tokens,
   )
 }

@@ -15,7 +15,7 @@
 >
 > **Upgrading to 5.0?** Two breaks. The pricing structs and `VisionPricing` are `#[non_exhaustive]`, so a `match` needs a `_` arm and the structs can no longer be built with literals. And Llama 4, Qwen 3.5–3.8, Mistral Large 4 and `deepseek-flash` now resolve to the vocabularies those models really use, so their token counts change. 5.1 moves the vocabulary data into per-vendor `tiktoken-vocab-*` crates without changing anything else.
 
-The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **3.7–20x faster than tiktoken-rs** natively and **1.1–2.7x faster than gpt-tokenizer in the browser** — CJK prose included.
+The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **22–83x faster than tiktoken-rs** and **1.5–12x faster than fastokens** natively, and **5.8–7.0x faster than gpt-tokenizer in the browser** — CJK prose included.
 
 ## Crates in this workspace
 
@@ -72,7 +72,7 @@ const tokens = enc.encode('hello world')
 
 ## Performance
 
-On an Apple M4 Mac mini, `encode` is **3.7–20x faster than tiktoken-rs** and **4.6–45x faster than Python tiktoken**: 15–20x on ASCII, 14–18x on Chinese and Japanese prose, 3.7x on an adversarial no-repeat CJK corpus. In the browser (wasm) it is 1.1–2.7x faster than gpt-tokenizer. Full tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
+On an Apple M4 Pro Mac mini, `encode` is **22–83x faster than tiktoken-rs** and **43–92x faster than Python tiktoken** on one thread: 22–83x on ASCII, 50–82x on Chinese and Japanese prose, 36x on an adversarial no-repeat CJK corpus. It is 1.5–12x faster than fastokens on one thread and 3x with default threads on a 200 KB book. In the browser (wasm) it is 5.8–7.0x faster than gpt-tokenizer and 1.1–2.5x faster than tiktoken-fast. Full tables and methodology: [`tiktoken/README.md#performance`](tiktoken/README.md#performance).
 
 ## Build
 
