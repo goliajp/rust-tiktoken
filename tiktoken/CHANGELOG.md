@@ -2,10 +2,11 @@
 
 ## Upgrading from 3.5.x — token id changes
 
-Versions 3.6.0, 3.8.0 and 5.0.0 change token ids for some inputs. That is the point
-of the fixes — the previous ids diverged from the reference tokenizers — but
-any cached token counts or stored id sequences produced by 3.5.1 or earlier
-should be recomputed after upgrading. Affected:
+Versions 3.6.0, 3.8.0, 5.0.0 and 5.2.0 change token ids for some inputs. That
+is the point of the fixes — the previous ids diverged from the reference
+tokenizers or depended on the Rust toolchain — but any cached token counts or
+stored id sequences produced by 3.5.1 or earlier should be recomputed after
+upgrading. Affected:
 
 - newline-containing text on `cl100k_base` / `o200k_base` / `o200k_harmony` /
   `llama3` / `mistral_v3` / `qwen2` / `deepseek_v3` (3.6.0)
@@ -25,9 +26,89 @@ should be recomputed after upgrading. Affected:
   Mistral Large 4 / `mistral-large-latest` (`mistral_v3` → `mistral_v15`), and
   `deepseek-flash` (`deepseek_v3` → `deepseek_v4`). The old ids were wrong for
   these models; no encoding's own output changed.
+- `mistral_v15` / `deepseek_v3` / `deepseek_v4` text containing one of 336
+  code points that are numeric in newer Unicode versions but unassigned in
+  Unicode 16.0, which the split patterns are matched against (5.2.0)
 
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
+
+## [5.2.0] - 2026-11-23
+
+A rewrite of the encode path: pre-tokenization without the `regex` crate, a
+new vocabulary lookup, and long texts encoded on several threads by default.
+Encoding and counting are substantially faster across encodings, text kinds
+and lengths; updated benchmark tables will follow in a later release, and the
+figures in the READMEs are still those of 5.1. No API is removed, and token
+ids change only for the code points listed under "Changed — token ids". The
+data crates stay at 1.0.0.
+
+### Changed — token ids
+
+- **336 code points split differently on `mistral_v15`, `deepseek_v3` and
+  `deepseek_v4`.** These code points are numeric in the Unicode version of
+  the Rust standard library (18.0 on the current stable toolchain) but
+  unassigned in Unicode 16.0, the version of the Unicode tables every split
+  pattern is matched against (those of `regex-syntax` 0.8). Two rules used to
+  ask `char::is_numeric` instead of the pattern's `\p{N}`: `mistral_v15`'s
+  grouping of digit runs into threes, and the point where a `deepseek_v3` /
+  `deepseek_v4` whitespace run ends before a digit. Both now follow the
+  pattern's tables like every other rule, so these 336 code points are no
+  longer treated as digits there. Output differs only on text that contains
+  one of them, and it no longer depends on the toolchain the crate was built
+  with. Every other code point, and every other encoding, gives the same ids
+  as 5.1.1.
+
+### Changed
+
+- **No regex at runtime.** Every encoding's split pattern is reproduced by a
+  table-driven scanner over generated Unicode category tables, pinned to the
+  Unicode version of `regex-syntax`. The cl100k family (`cl100k_base`,
+  `llama3`, `qwen2`, `qwen3_5`, `glm4`, `glm5`) and the o200k family decide
+  piece starts 64 bytes at a time from class bitmaps, with NEON, SSE2, wasm
+  simd128 or a portable fallback; runs of non-ASCII text are scanned per
+  code point without leaving the fast path. `regex` remains only as a
+  dev-dependency: the reference the scanners are tested against, by property
+  tests on every pattern family and an exhaustive sweep of short strings,
+  and the source of the generated tables.
+- **Special tokens** (`encode_with_special_tokens`,
+  `count_with_special_tokens`) are found by a hand-written multi-literal
+  matcher instead of a regex alternation; the tokens found are the same.
+- **Vocabulary lookup.** Tokens of up to 15 bytes sit as packed keys in one
+  open-addressed table, two slots per cache line. A piece of up to 15 bytes
+  that is not a token is merged once and its ids added to the same table,
+  where every thread finds them, until the table's free slots run out;
+  longer pieces have their own thread-local and shared caches.
+- **Faster BPE merges.** Pieces made mostly of multibyte chars start from
+  whole chars and from the parts of chars that never join their neighbours,
+  and short pieces that miss every table are merged several at a time by
+  token id.
+- **Long texts are encoded in parallel by default.** `encode`, `count`,
+  `encode_with_special_tokens` and `count_with_special_tokens` cut a text of
+  32 KiB or more into chunks and encode them on a process-wide pool of
+  worker threads, built on `std` only and created on the first such call.
+  The output is identical to single-threaded encoding. The default thread
+  count is the number of performance cores (all cores where the system does
+  not tell them apart). One parallel call runs at a time; a call that finds
+  the pool busy runs on its own thread instead of waiting, so an application
+  that already encodes from several threads never gets more encoding threads
+  than that. There are no threads on `wasm32`.
+- **`encode_parallel` is the same as `encode`**, kept for existing code, and
+  no longer needs the `parallel` feature. The `parallel` feature still
+  exists, empty, so manifests that name it keep building.
+- **Dependencies:** `regex`, `rustc-hash` and `rayon` are gone from the
+  runtime dependencies; what remains is `ruzstd` and the vocabulary data
+  crates you enable.
+
+### Added
+
+- **`set_parallelism(threads)`** sets how many threads one call may use on a
+  long text, the calling thread included: `1` turns the pool off (every call
+  runs on the calling thread and no worker thread is ever started), `0`
+  restores the default.
+- **`TIKTOKEN_THREADS`** environment variable: a positive integer replaces
+  the default thread count; `TIKTOKEN_THREADS=1` keeps every call
+  single-threaded without a code change.
 
 ## [5.1.1] - 2026-11-21
 

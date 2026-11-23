@@ -2,15 +2,20 @@
 //!
 //! Each encoding consists of:
 //! - A `.tkv.zst` data file (see [`parse_tkv`] for the format), embedded at compile time
-//! - A regex pattern that splits input text into pieces before BPE processing
+//! - A regex pattern that splits input text into pieces before BPE processing,
+//!   implemented by a hand-written scanner (`FastPath`); the pattern string is
+//!   the definition the scanner is tested against
 //! - A set of special tokens (e.g. `<|endoftext|>`) with designated token ids
 //!
 //! Pattern source: <https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py>
 
-use rustc_hash::FxHashMap;
+use std::sync::{Arc, Mutex, Weak};
+
+use crate::hash::FxHashMap;
 
 use crate::bpe::CoreBpe;
 use crate::pretokenize::{FastPath, WhitespaceRules};
+use crate::vocab::Vocab;
 
 // Embedded vocabulary frames, decompressed on first use via the OnceLocks in
 // lib.rs. The data lives in the tiktoken-vocab-* crates, one per vendor, built
@@ -89,9 +94,8 @@ pub(crate) const GLM5_CHAIN: &[&[u8]] = &[GLM4_TKV, GLM5_TAIL_TKV];
 pub(crate) const P50K_BASE_CHAIN: &[&[u8]] = &[R50K_BASE_TKV, P50K_BASE_TAIL_TKV];
 
 // cl100k pattern: handles English contractions, Unicode letters/numbers, punctuation, whitespace.
-// original tiktoken uses `\s+(?!\S)|\s+` but we use plain `\s+` and emulate the negative
-// lookahead in bpe.rs::adjust_whitespace_end — this lets us use the `regex` crate's DFA engine
-// instead of a slower backtracking engine like fancy-regex or pcre2.
+// original tiktoken uses `\s+(?!\S)|\s+`; the patterns here spell plain `\s+` so the `regex`
+// crate accepts them, and the scanners and their test reference implement the lookahead.
 pub(crate) const CL100K_PATTERN: &str = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+";
 
 // o200k pattern: similar to cl100k but with finer Unicode category distinctions
@@ -148,8 +152,8 @@ const LLAMA4_PATTERN: &str = MINIMAX_M2_PATTERN;
 // dedicated leading `[\p{Han}]+` branch, then o200k-style case-splitting rules
 // whose letter classes use set intersection to exclude Han (so CJK never mixes
 // into a case-split word), then the digit/punct/whitespace rules shared with
-// o200k. The original ends `\s+(?!\S)|\s+`; the lookahead is emulated via
-// `WhitespaceRules::NewlineFirst` like the other patterns.
+// o200k. The original ends `\s+(?!\S)|\s+`, written here as `\s+` like the
+// other patterns.
 pub(crate) const KIMI_PATTERN: &str = concat!(
     r"[\p{Han}]+",
     r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]*[\p{Ll}\p{Lm}\p{Lo}\p{M}&&[^\p{Han}]]+",
@@ -200,8 +204,8 @@ pub(crate) const MISTRAL_V3_PATTERN: &str = concat!(
 // mistral v15 (Tekken v15, Mistral Large 4) pattern: v3's, except digits. The
 // upstream rule `\p{N}{1,3}(?=(?:\p{N}{3})*(?!\p{N}))|\p{N}{1,2}` groups a digit
 // run in threes from the right; the lookahead is out of the `regex` crate's
-// reach, so `FastPath::Tekken15` cuts digit runs before the regex runs, and
-// the regex only needs to classify them.
+// reach, so `FastPath::Tekken15` cuts digit runs before any other rule, and
+// the pattern here only needs to classify them.
 pub(crate) const MISTRAL_V15_PATTERN: &str = concat!(
     r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+",
     r"|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*",
@@ -246,6 +250,33 @@ pub(crate) fn parse_tkv(chain: &[&[u8]]) -> FxHashMap<Vec<u8>, u32> {
         insert_frame(&data, &mut ranks);
     }
     ranks
+}
+
+/// The vocabulary of `chain`, built once for all encodings that name the
+/// same `key` and kept while any of them is alive. Encodings that differ only
+/// in special tokens (o200k_base and o200k_harmony, for one) then share its
+/// tables, and the merge results cached in them.
+pub(crate) fn shared_vocab(key: &'static str, chain: &[&[u8]]) -> Arc<Vocab> {
+    static BUILT: Mutex<Vec<(&'static str, Weak<Vocab>)>> = Mutex::new(Vec::new());
+    let find = |built: &[(&'static str, Weak<Vocab>)]| {
+        built
+            .iter()
+            .find(|(k, _)| *k == key)
+            .and_then(|(_, v)| v.upgrade())
+    };
+    if let Some(v) = find(&BUILT.lock().unwrap()) {
+        return v;
+    }
+    // built outside the lock, so that other vocabularies load meanwhile
+    let entries: Vec<(Vec<u8>, u32)> = parse_tkv(chain).into_iter().collect();
+    let vocab = Arc::new(Vocab::from_entries(entries));
+    let mut built = BUILT.lock().unwrap();
+    if let Some(v) = find(&built) {
+        return v;
+    }
+    built.retain(|(_, v)| v.strong_count() > 0);
+    built.push((key, Arc::downgrade(&vocab)));
+    vocab
 }
 
 /// Decode one decompressed TKV1 frame into `ranks`.
@@ -335,14 +366,14 @@ pub(crate) fn parse_tiktoken_data_for_test() -> FxHashMap<Vec<u8>, u32> {
 /// hide: every shipped frame chain is decoded here and diffed against them,
 /// entry by entry.
 #[cfg(test)]
-mod vocab_oracle {
+pub(crate) mod vocab_oracle {
     use super::*;
     use base64::Engine;
 
     /// Every vocabulary this build carries, as (name, frame chain).
     // the pushes are cfg-gated, so a collect() would not express this
     #[allow(clippy::vec_init_then_push)]
-    fn chains() -> Vec<(&'static str, &'static [&'static [u8]])> {
+    pub(crate) fn chains() -> Vec<(&'static str, &'static [&'static [u8]])> {
         #[allow(unused_mut)]
         let mut chains: Vec<(&'static str, &'static [&'static [u8]])> = Vec::new();
         #[cfg(feature = "vocab-cl100k_base")]
@@ -437,5 +468,31 @@ mod vocab_oracle {
                 assert_eq!(derived.get(&token), Some(&rank), "token {token:?}");
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "vocab-o200k_base", feature = "vocab-p50k_base"))]
+mod shared_vocab_tests {
+    use std::sync::Arc;
+
+    #[test]
+    fn encodings_on_the_same_ranks_share_one_vocabulary() {
+        let a = crate::get_encoding("o200k_base").unwrap();
+        let b = crate::get_encoding("o200k_harmony").unwrap();
+        assert!(Arc::ptr_eq(&a.vocab, &b.vocab));
+        // an owned instance joins while the cached ones are alive
+        let c = super::o200k_base();
+        assert!(Arc::ptr_eq(&a.vocab, &c.vocab));
+        let p = super::p50k_base();
+        let q = super::p50k_edit();
+        assert!(Arc::ptr_eq(&p.vocab, &q.vocab));
+        assert!(!Arc::ptr_eq(&a.vocab, &p.vocab));
+        // the special tokens stay each encoding's own
+        let text = "hi<|endoftext|><|return|>";
+        assert_ne!(
+            a.encode_with_special_tokens(text),
+            b.encode_with_special_tokens(text)
+        );
+        assert_eq!(a.encode(text), b.encode(text));
     }
 }

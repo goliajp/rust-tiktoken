@@ -1,10 +1,21 @@
-use regex::Regex;
-use rustc_hash::FxHashMap;
+use std::sync::Arc;
 
-use crate::merge;
+use crate::hash::FxHashMap;
+
+use crate::encode_loop::{Engine, id_capacity};
 use crate::piece_cache;
-use crate::pretokenize::{FastPath, PreTokenizer, RegexPreTokenizer, WhitespaceRules};
+use crate::pretokenize::{FastPath, ScalarPreTokenizer, WhitespaceRules};
+use crate::special::SpecialMatcher;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::split;
 use crate::vocab::Vocab;
+
+/// Texts at least this long are cut into chunks and encoded on the worker
+/// pool (see [`set_parallelism`](crate::set_parallelism)). Measured on a
+/// 10-performance-core M4 Pro, four 8 KiB chunks already beat one thread
+/// 2-3x, including when the workers are parked and must be woken first.
+#[cfg(not(target_arch = "wasm32"))]
+const PARALLEL_MIN: usize = 32 * 1024;
 
 /// A Byte Pair Encoding tokenizer engine.
 ///
@@ -28,13 +39,14 @@ use crate::vocab::Vocab;
 /// assert_eq!(enc.count("hello world"), 2);
 /// ```
 pub struct CoreBpe {
-    vocab: Vocab,
+    /// Shared by the encodings built on the same ranks.
+    pub(crate) vocab: Arc<Vocab>,
     /// Identity for the thread-local piece cache — a nonce, never an address.
     cache_id: u64,
     special_encoder: FxHashMap<Vec<u8>, u32>,
     special_decoder: FxHashMap<u32, Vec<u8>>,
-    pre_tokenizer: RegexPreTokenizer,
-    special_regex: Option<Regex>,
+    pre_tokenizer: ScalarPreTokenizer,
+    special_matcher: Option<SpecialMatcher>,
 }
 
 impl CoreBpe {
@@ -45,30 +57,26 @@ impl CoreBpe {
         fast: FastPath,
         ws: WhitespaceRules,
     ) -> Self {
-        let pre_tokenizer = RegexPreTokenizer::new(pattern, fast, ws);
+        let entries: Vec<(Vec<u8>, u32)> = encoder.into_iter().collect();
+        let vocab = Arc::new(Vocab::from_entries(entries));
+        Self::with_vocab(vocab, special_encoder, pattern, fast, ws)
+    }
 
-        let special_regex = if special_encoder.is_empty() {
-            None
-        } else {
-            debug_assert!(
-                special_encoder.keys().all(|k| !k.is_empty()),
-                "special token keys must not be empty"
-            );
-            let pat = special_encoder
-                .keys()
-                .map(|k| regex::escape(&String::from_utf8_lossy(k)))
-                .collect::<Vec<_>>()
-                .join("|");
-            Some(Regex::new(&pat).expect("invalid special regex"))
-        };
+    /// [`new`](Self::new) on a vocabulary built before.
+    pub(crate) fn with_vocab(
+        vocab: Arc<Vocab>,
+        special_encoder: FxHashMap<Vec<u8>, u32>,
+        pattern: &str,
+        fast: FastPath,
+        ws: WhitespaceRules,
+    ) -> Self {
+        let pre_tokenizer = ScalarPreTokenizer::new(pattern, fast, ws);
+        let special_matcher = SpecialMatcher::new(&special_encoder);
 
         let special_decoder = special_encoder
             .iter()
             .map(|(k, &v)| (v, k.clone()))
             .collect();
-
-        let entries: Vec<(Vec<u8>, u32)> = encoder.into_iter().collect();
-        let vocab = Vocab::from_entries(entries);
 
         Self {
             vocab,
@@ -76,7 +84,7 @@ impl CoreBpe {
             special_encoder,
             special_decoder,
             pre_tokenizer,
-            special_regex,
+            special_matcher,
         }
     }
 
@@ -84,6 +92,9 @@ impl CoreBpe {
     ///
     /// Special tokens like `<|endoftext|>` are treated as ordinary text.
     /// Use [`encode_with_special_tokens`](Self::encode_with_special_tokens) to recognize them.
+    ///
+    /// A text of 32 KiB or more is encoded on several threads (see
+    /// [`set_parallelism`](crate::set_parallelism)); the ids are the same.
     ///
     /// # Examples
     ///
@@ -95,8 +106,14 @@ impl CoreBpe {
     #[inline]
     #[must_use]
     pub fn encode(&self, text: &str) -> Vec<u32> {
-        let mut result = Vec::with_capacity(text.len() / 3);
-        self.encode_into(text, &mut result);
+        #[cfg(not(target_arch = "wasm32"))]
+        if text.len() >= PARALLEL_MIN {
+            let mut result = Vec::new();
+            split::encode(&self.engine(), text, split::CHUNK, None, &mut result);
+            return result;
+        }
+        let mut result = Vec::with_capacity(id_capacity(text));
+        self.engine().encode_into(text, &mut result);
         result
     }
 
@@ -114,29 +131,20 @@ impl CoreBpe {
     /// ```
     #[must_use]
     pub fn encode_with_special_tokens(&self, text: &str) -> Vec<u32> {
-        let special_regex = match &self.special_regex {
-            Some(r) => r,
+        let special = match &self.special_matcher {
+            Some(m) => m,
             None => return self.encode(text),
         };
 
-        let mut result = Vec::with_capacity(text.len() / 3);
+        let mut result = Vec::with_capacity(id_capacity(text));
         let mut start = 0;
 
-        for mat in special_regex.find_iter(text) {
-            if mat.start() > start {
-                self.encode_into(&text[start..mat.start()], &mut result);
+        while let Some((s, e, token)) = special.find(text.as_bytes(), start) {
+            if s > start {
+                self.encode_into(&text[start..s], &mut result);
             }
-            let piece = &text.as_bytes()[mat.start()..mat.end()];
-            if let Some(&token) = self.special_encoder.get(piece) {
-                result.push(token);
-            } else {
-                debug_assert!(
-                    false,
-                    "special regex matched {:?} but no encoder entry found",
-                    String::from_utf8_lossy(piece)
-                );
-            }
-            start = mat.end();
+            result.push(token);
+            start = e;
         }
 
         if start < text.len() {
@@ -197,6 +205,8 @@ impl CoreBpe {
     /// [`count_with_special_tokens`](Self::count_with_special_tokens) if you
     /// need special tokens to be recognized.
     ///
+    /// Like `encode`, a text of 32 KiB or more is counted on several threads.
+    ///
     /// # Examples
     ///
     /// ```
@@ -207,23 +217,11 @@ impl CoreBpe {
     #[inline]
     #[must_use]
     pub fn count(&self, text: &str) -> usize {
-        let mut count = 0;
-        let mut pos = 0;
-
-        while let Some((start, end)) = self.pre_tokenizer.next_match(text, pos) {
-            let piece = &text.as_bytes()[start..end];
-            if self.vocab.contains_key(piece) {
-                count += 1;
-            } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
-                count += piece_cache::count_piece(self.cache_id, piece, |buf| {
-                    merge::bpe_encode_buf(piece, &self.vocab, buf)
-                });
-            } else {
-                count += merge::bpe_count(piece, &self.vocab);
-            }
-            pos = end;
+        #[cfg(not(target_arch = "wasm32"))]
+        if text.len() >= PARALLEL_MIN {
+            return split::count(&self.engine(), text, split::CHUNK, None);
         }
-        count
+        self.engine().count(text)
     }
 
     /// Count tokens, recognizing special tokens.
@@ -232,20 +230,20 @@ impl CoreBpe {
     /// [`encode_with_special_tokens`](Self::encode_with_special_tokens).
     #[must_use]
     pub fn count_with_special_tokens(&self, text: &str) -> usize {
-        let special_regex = match &self.special_regex {
-            Some(r) => r,
+        let special = match &self.special_matcher {
+            Some(m) => m,
             None => return self.count(text),
         };
 
         let mut total = 0;
         let mut start = 0;
 
-        for mat in special_regex.find_iter(text) {
-            if mat.start() > start {
-                total += self.count(&text[start..mat.start()]);
+        while let Some((s, e, _)) = special.find(text.as_bytes(), start) {
+            if s > start {
+                total += self.count(&text[start..s]);
             }
             total += 1; // special token = 1 token
-            start = mat.end();
+            start = e;
         }
 
         if start < text.len() {
@@ -255,69 +253,11 @@ impl CoreBpe {
         total
     }
 
-    /// Encode text using multiple threads for large inputs.
-    ///
-    /// Falls back to single-threaded encoding for texts smaller than 4 KB.
-    /// Results are identical to [`encode`](Self::encode).
-    ///
-    /// Requires the `parallel` feature.
-    #[cfg(feature = "parallel")]
+    /// Same as [`encode`](Self::encode), which already spreads long texts
+    /// over several threads; kept for code written against older versions.
     #[must_use]
     pub fn encode_parallel(&self, text: &str) -> Vec<u32> {
-        use rayon::prelude::*;
-
-        // Below this size, single-threaded encode wins: the ASCII fast-path made
-        // serial tokenization cheap, and pre-tokenization (~60% of the work)
-        // stays serial here, so rayon's dispatch/join overhead dominates. Measured
-        // break-even on an M4 Pro is ~460 KB (45 KB: 1.8x slower; 180 KB: 1.1x
-        // slower; 900 KB: 1.2x faster). 512 KB keeps the parallel path strictly a
-        // win. Even above it the ceiling is only ~20% (Amdahl, serial pre-tokenize).
-        const THRESHOLD: usize = 512 * 1024;
-        if text.len() < THRESHOLD {
-            return self.encode(text);
-        }
-
-        // collect all pre-tokenizer match ranges
-        let mut ranges = Vec::new();
-        let mut pos = 0;
-        while let Some((start, end)) = self.pre_tokenizer.next_match(text, pos) {
-            ranges.push((start, end));
-            pos = end;
-        }
-
-        // Encode the pieces in parallel, but grouped into contiguous chunks so
-        // each rayon task fills a single local buffer instead of allocating one
-        // Vec per piece (which would be tens of thousands of tiny allocations on
-        // large inputs). Aim for a few chunks per worker thread for load balance.
-        let bytes = text.as_bytes();
-        let chunk_size = ranges
-            .len()
-            .div_ceil(rayon::current_num_threads() * 4)
-            .max(1);
-        let parts: Vec<Vec<u32>> = ranges
-            .par_chunks(chunk_size)
-            .map(|chunk| {
-                let span = chunk.last().map_or(0, |&(_, end)| end)
-                    - chunk.first().map_or(0, |&(start, _)| start);
-                let mut local = Vec::with_capacity(span / 3 + 1);
-                for &(start, end) in chunk {
-                    let piece = &bytes[start..end];
-                    if let Some(token) = self.vocab.get(piece) {
-                        local.push(token);
-                    } else {
-                        merge::bpe_encode(piece, &self.vocab, &mut local);
-                    }
-                }
-                local
-            })
-            .collect();
-
-        let total: usize = parts.iter().map(|c| c.len()).sum();
-        let mut result = Vec::with_capacity(total);
-        for part in parts {
-            result.extend_from_slice(&part);
-        }
-        result
+        self.encode(text)
     }
 
     /// Number of regular (non-special) tokens in the vocabulary.
@@ -348,26 +288,49 @@ impl CoreBpe {
         self.special_encoder.len()
     }
 
-    /// Main encoding hot loop. Iterates pre-tokenizer matches over the input,
-    /// then for each matched piece: (1) try direct vocab lookup (fast path for
-    /// known tokens), (2) fall back to BPE merge for unknown multi-byte pieces.
-    fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
-        let bytes = text.as_bytes();
-        let mut pos = 0;
+    #[cfg(test)]
+    pub(crate) fn special_tokens(&self) -> &FxHashMap<Vec<u8>, u32> {
+        &self.special_encoder
+    }
 
-        while let Some((start, end)) = self.pre_tokenizer.next_match(text, pos) {
-            let piece = &bytes[start..end];
-            if let Some(token) = self.vocab.get(piece) {
-                result.push(token);
-            } else if (3..=piece_cache::KEY_MAX).contains(&piece.len()) {
-                piece_cache::encode_piece(self.cache_id, piece, result, |buf| {
-                    merge::bpe_encode_buf(piece, &self.vocab, buf)
-                });
-            } else {
-                merge::bpe_encode(piece, &self.vocab, result);
-            }
-            pos = end;
+    #[cfg(test)]
+    pub(crate) fn pre_tokenizer(&self) -> &ScalarPreTokenizer {
+        &self.pre_tokenizer
+    }
+
+    fn engine(&self) -> Engine<'_> {
+        Engine {
+            vocab: &self.vocab,
+            pre: &self.pre_tokenizer,
+            cache_id: self.cache_id,
         }
+    }
+
+    fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if text.len() >= PARALLEL_MIN {
+            split::encode(&self.engine(), text, split::CHUNK, None, result);
+            return;
+        }
+        self.engine().encode_into(text, result);
+    }
+
+    /// [`encode`](Self::encode)'s parallel path at any length, with chunks of
+    /// about `chunk` bytes and no cap on their number. For tests and
+    /// benchmarks; not a stable API.
+    #[doc(hidden)]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn __encode_chunks(&self, text: &str, chunk: usize) -> Vec<u32> {
+        let mut result = Vec::new();
+        split::encode(&self.engine(), text, chunk, Some(usize::MAX), &mut result);
+        result
+    }
+
+    /// The counting twin of [`__encode_chunks`](Self::__encode_chunks).
+    #[doc(hidden)]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn __count_chunks(&self, text: &str, chunk: usize) -> usize {
+        split::count(&self.engine(), text, chunk, Some(usize::MAX))
     }
 }
 
@@ -389,7 +352,7 @@ mod tests {
             encoder,
             special,
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         )
     }
@@ -402,7 +365,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("x");
@@ -419,7 +382,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("ab");
@@ -435,7 +398,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("ab");
@@ -477,7 +440,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("def");
@@ -492,7 +455,7 @@ mod tests {
             encoder,
             FxHashMap::default(),
             r"[\s\S]+",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         assert!(bpe.decode_to_string(&[0]).is_err());
@@ -515,7 +478,7 @@ mod tests {
             encoder,
             special,
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode_with_special_tokens("x<|end|>y");
@@ -532,7 +495,7 @@ mod tests {
             encoder,
             special,
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let decoded = bpe.decode(&[0, 99]);
@@ -551,7 +514,7 @@ mod tests {
             ranks.clone(),
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode("abc");
@@ -564,7 +527,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens2 = bpe2.encode("abcd");
@@ -586,7 +549,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         assert_eq!(bpe.encode("abcx"), vec![1]);
@@ -601,7 +564,7 @@ mod tests {
             ranks,
             FxHashMap::default(),
             r"\w+|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         assert_eq!(bpe.count("ab"), 2);
@@ -619,7 +582,7 @@ mod tests {
             encoder,
             special,
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
 
@@ -646,7 +609,7 @@ mod tests {
             encoder,
             special,
             r"\w|\S",
-            FastPath::None,
+            FastPath::P50k,
             WhitespaceRules::Generic,
         );
         let tokens = bpe.encode_with_special_tokens("a<|s|>b");

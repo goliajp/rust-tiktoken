@@ -1,6 +1,6 @@
 [package]
 name = "tiktoken-wasm"
-version = "5.1.1"
+version = "5.2.0"
 edition = "2024"
 description = "WASM bindings for the tiktoken BPE tokenizer"
 license = "MIT OR Apache-2.0"
@@ -10,8 +10,8 @@ repository = "https://github.com/goliajp/rust-tiktoken"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tiktoken = { path = "../tiktoken", version = "5.1.1", default-features = false }
-wasm-bindgen = "^0.2"
+tiktoken = { path = "../tiktoken", version = "5.2.0", default-features = false }
+wasm-bindgen = "0.2.114"
 
 # Forwarded from `tiktoken` so a wasm build can carry only the vocabularies it
 # needs. The published npm package is built with the default (all of them).
@@ -46,7 +46,11 @@ vocab-minimax_m2 = ["tiktoken/vocab-minimax_m2"]
 # data, so `-O3` on the code section costs a few hundred KB against 6 MB —
 # while `-Os` was taxing every count()/encode() call in the browser.
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-O3", "--enable-bulk-memory"]
+# `strip` drops the target-features section, so wasm-opt is told about simd.
+# `-ocimfs` stops wasm-opt from inlining large functions into their only
+# caller: the per-pattern split functions kept apart in the core crate would
+# otherwise merge back into one that JavaScriptCore leaves in its baseline tier.
+wasm-opt = ["-O3", "-ocimfs=1000", "--enable-bulk-memory", "--enable-simd", "--enable-nontrapping-float-to-int"]
 
 [profile.release]
 lto = true

@@ -88,14 +88,11 @@ pub fn qwen3_5() -> CoreBpe {
         ("<tts_text_bos_single>", 248075),
         ("<|audio_pad|>", 248076),
     ]);
-    // qwen2's scanner is exact here too: it only commits on chars whose class
-    // it is certain of, none of which are combining marks, and defers the rest
-    // to this pattern.
     CoreBpe::new(
         encoder,
         special,
         QWEN3_5_PATTERN,
-        FastPath::Qwen2,
+        FastPath::Qwen35,
         WhitespaceRules::NewlineFirst,
     )
 }

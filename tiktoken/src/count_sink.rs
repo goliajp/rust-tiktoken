@@ -1,0 +1,148 @@
+//! The counting sink of the windowed scan: the same probes as the encoding
+//! sink in `encode_sink`, adding up id counts instead of writing ids.
+
+use crate::encode_loop::{Engine, NO_KEY, piece_key, probe, probe_entry};
+use crate::miss_batch::Batch;
+use crate::pretokenize::windowed::PieceSink;
+use crate::vocab::{Home, HomeProbe};
+
+/// The counting twin of `encode_hits` in `encode_sink`.
+#[inline(never)]
+fn count_hits(
+    home: HomeProbe<'_>,
+    buf: &[u8],
+    start: usize,
+    offs: &[u16],
+    i: usize,
+    mut count: usize,
+) -> (usize, usize, (u64, u64)) {
+    if i + 1 >= offs.len() {
+        return (i, count, NO_KEY);
+    }
+    let base = offs.as_ptr();
+    // SAFETY: i + 1 < offs.len(), and `last` is the last offset
+    let (mut o, last, mut a) = unsafe { (base.add(i), base.add(offs.len() - 1), *base.add(i)) };
+    // SAFETY: `o` lies in `offs`
+    let at = |o: *const u16| unsafe { o.offset_from(base) as usize };
+    while o < last {
+        // SAFETY: o < last, so o + 1 is in bounds
+        let b = unsafe { *o.add(1) };
+        let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
+            return (at(o), count, NO_KEY);
+        };
+        let found = match home.lookup(lo, hi) {
+            Home::Miss => home.lookup_chain(lo, hi),
+            h => h,
+        };
+        match found {
+            Home::Token(_) => count += 1,
+            Home::Derived(e) => count += e.len(),
+            Home::Miss => return (at(o), count, (lo, hi)),
+        }
+        a = b;
+        // SAFETY: o < last
+        o = unsafe { o.add(1) };
+    }
+    (at(o), count, NO_KEY)
+}
+
+pub(crate) struct CountSink<'e> {
+    pub(crate) engine: &'e Engine<'e>,
+    pub(crate) home: HomeProbe<'e>,
+    pub(crate) count: usize,
+    // short misses waiting to be merged together
+    pub(crate) batch: Batch,
+}
+
+impl CountSink<'_> {
+    /// The count, with the waiting misses resolved.
+    pub(crate) fn finish(mut self) -> usize {
+        if let Some(m) = self.batch.pending() {
+            self.count += m.flush_count(self.engine);
+        }
+        self.count
+    }
+}
+
+/// The count of a short piece whose probe chain was walked without finding
+/// it, or nothing yet when it waits for a batch of misses.
+#[inline(never)]
+fn count_short_miss(
+    engine: &Engine<'_>,
+    batch: &mut Batch,
+    piece: &[u8],
+    key: (u64, u64),
+) -> usize {
+    let Some(m) = batch.take(engine.vocab, piece) else {
+        return engine.count_unheld(piece, key);
+    };
+    if m.push(key, 0) {
+        m.flush_count(engine)
+    } else {
+        0
+    }
+}
+
+/// Ids of a piece the home-line probe did not answer.
+#[inline(never)]
+fn count_miss(engine: &Engine<'_>, piece: &[u8], key: (u64, u64)) -> usize {
+    if key == NO_KEY {
+        return engine.count_piece(piece, key);
+    }
+    match engine.vocab.entry(key.0, key.1) {
+        Some(e) => e.len(),
+        // the lookup walked the whole probe chain
+        None => engine.count_unheld(piece, key),
+    }
+}
+
+impl PieceSink for CountSink<'_> {
+    #[inline(always)]
+    fn window(&mut self) {}
+
+    // out of line: it runs once per batch, and inlined under the window
+    // loop it measured slower
+    #[inline(never)]
+    fn pieces(&mut self, buf: &[u8], start: usize, offs: &[u16]) {
+        let mut i = 0;
+        while i + 1 < offs.len() {
+            let (at, count, key) = count_hits(self.home, buf, start, offs, i, self.count);
+            self.count = count;
+            i = at;
+            if i + 1 < offs.len() {
+                // the leaf walked the chain: a long piece or one the table
+                // does not hold
+                let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
+                self.count += if key != NO_KEY {
+                    count_short_miss(self.engine, &mut self.batch, piece, key)
+                } else {
+                    self.engine.count_piece(piece, key)
+                };
+                i += 1;
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn piece(&mut self, buf: &[u8], start: usize, end: usize) {
+        match probe(&self.home, buf, start, end) {
+            Ok(_) => self.count += 1,
+            Err(key) => self.count += count_miss(self.engine, &buf[start..end], key),
+        }
+    }
+
+    #[inline(always)]
+    fn dense_piece(&mut self, buf: &[u8], start: usize, end: usize) {
+        match probe_entry(self.engine.vocab, buf, start, end) {
+            Ok(e) => self.count += e.len(),
+            Err(NO_KEY) => {
+                let piece = &buf[start..end];
+                self.count += match self.engine.vocab.long_ids(piece) {
+                    Some(ids) => ids.len(),
+                    None => self.engine.count_unheld(piece, NO_KEY),
+                }
+            }
+            Err(key) => self.count += self.engine.count_unheld(&buf[start..end], key),
+        }
+    }
+}
