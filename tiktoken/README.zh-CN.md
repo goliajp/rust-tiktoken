@@ -13,8 +13,8 @@
 ## 特性
 
 - **多厂商**：20 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
-- **高性能**：手写扫描器覆盖 ASCII 与 CJK（绕开正则）、词表按 key 长度分层、重复片段整片记忆、混合 BPE 合并
-- **并行编码**：可选的 rayon 多线程编码，适用于长文本
+- **高性能**：每套编码都有查表实现的预分词器（运行时不用正则），cl100k 与 o200k 系列用 SIMD 判定片段起点，词表按 key 长度分层，重复片段整片记忆且跨线程共享，混合 BPE 合并
+- **并行编码**：32 KiB 及以上的文本自动用多个线程编码，线程池内置、只依赖 std
 - **费用估算**：覆盖 11 家厂商共 153 个模型
 - **体积紧凑**：20 份词表共 7.8 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据，cargo 也只下载启用的厂商的数据
 - **零分配计数**：`count()` 不分配 token 向量
@@ -65,14 +65,14 @@ JavaScript 分词器。
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| 预分词 | 手写扫描器同时覆盖 ASCII 与 CJK（汉字/假名/谚文、全角形式）；正则只作判准与罕见形状的兜底 | 总是走正则 | 总是走正则 |
-| 正则引擎（兜底） | `regex`（DFA，线性时间） | `fancy-regex`（回溯） | `regex` 经 PyO3 + FFI 开销 |
-| 词表查找 | 按 key 长度分层：1〜2 字节直查表、3〜8 字节内联槽开放寻址、更长的带 tag 的 arena 槽 | `HashMap<Vec<u8>>`（20 万次分配） | PyO3 背后的 Rust `HashMap` |
-| 重复片段 | 线程局部直接映射记忆化，字节键 | 无 | 无 |
-| BPE 合并 | 混合：栈上线性扫描（短片段）+ 堆（长片段） | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
+| 预分词 | 每套编码都用查表实现的扫描器，Unicode 表按切分规则所依据的 Unicode 版本生成；cl100k 与 o200k 系列用 SIMD（NEON / SSE2 / wasm simd128）一次判定 64 字节内的片段起点 | 总是走正则 | 总是走正则 |
+| 正则引擎 | 运行时不用（`regex` 只是开发依赖，作为测试扫描器的对照实现） | `fancy-regex`（回溯） | `regex` 经 PyO3 + FFI 开销 |
+| 词表查找 | 按 key 长度分层：15 字节以内的 key 压缩存进一张开放寻址表（每个缓存行两个槽），更长的用带哈希 tag 的 arena 槽，1〜2 字节另有直查表 | `HashMap<Vec<u8>>`（20 万次分配） | PyO3 背后的 Rust `HashMap` |
+| 重复片段 | 不在词表里的片段，合并结果写进共享的查找表，所有线程都能复用；长片段另有线程局部和共享的缓存 | 无 | 无 |
+| BPE 合并 | 混合：栈上线性扫描（短片段）+ 堆（长片段）；查不到的短片段按 token id 成批合并 | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
 | 零分配 `count()` | 有 | 无 | 无 |
 
-扫描器由属性测试钉死在正则语义上（每轮数十万条随机输入）；每套编码由
+扫描器由属性测试（每轮数十万条随机输入）和短字符串穷举钉死在 `regex` crate 的语义上；每套编码由
 53,275 组差分 fixture 钉死在厂商自己的分词器上。
 
 基准测试源码：[`benches/`](benches/)、[`../bench-compare/`](../bench-compare/)。
@@ -85,10 +85,9 @@ JavaScript 分词器。
 ```toml
 [dependencies]
 tiktoken = "5"
-
-# 可选：大文本多线程编码
-tiktoken = { version = "5", features = ["parallel"] }
 ```
+
+运行时依赖只有 `ruzstd` 和启用的词表数据 crate。早期版本的 `parallel` 特性仍然保留，写了它的清单照样能构建，但它不再有任何作用：不开它，长文本也会并行编码。
 
 ### 选择词表
 
@@ -188,12 +187,25 @@ let count = enc.count_with_special_tokens("hello<|endoftext|>world");
 
 ### 并行编码
 
+`encode`、`count`、`encode_with_special_tokens` 和 `count_with_special_tokens`
+遇到 32 KiB 及以上的文本时，会把它切成若干块，交给进程内共用的工作线程池编码；线程池在第一次这样调用时创建。输出与单线程编码完全一致。
+
 ```rust
-// 需要 `parallel` feature
 let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-let tokens = enc.encode_parallel("...非常长的文本...");
-// 输出完全一致，>= 4KB 文本时使用 rayon 并行
+let text = "word ".repeat(20_000);
+let tokens = enc.encode(&text); // 100 KB：多线程编码
+
+// 每次调用可用的线程数，含调用方线程；1 = 单线程，0 = 恢复默认
+tiktoken::set_parallelism(1);
+assert_eq!(enc.encode(&text), tokens);
+tiktoken::set_parallelism(0);
 ```
+
+- 默认线程数是性能核的数量（系统不区分核类型时为全部核数）；环境变量 `TIKTOKEN_THREADS` 是正整数时以它为准。
+- `TIKTOKEN_THREADS=1` 或 `set_parallelism(1)` 关闭并行：每次调用都在调用方线程上执行，不会启动任何工作线程。
+- 同一时间只有一个并行调用。发现线程池正忙的调用（比如应用本身已经在多个线程上编码）不会等待，直接在自己的线程上执行，所以进程里用于编码的线程不会超过设定的数量。
+- `encode_parallel` 现在等同于 `encode`，只为兼容旧代码保留，不再需要 `parallel` 特性。
+- `wasm32` 上没有线程，所有调用都是单线程。
 
 ### 费用估算
 
@@ -230,7 +242,7 @@ assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_som
 
 ## WebAssembly
 
-npm 包 [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)，可直接在浏览器和 Node.js 中使用。
+npm 包 [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)，可直接在浏览器和 Node.js 中使用。包用 WebAssembly SIMD 构建，需要 Chrome 91、Firefox 89 或 Safari 16.4 及以上。
 
 ```bash
 npm install @goliapkg/tiktoken-wasm

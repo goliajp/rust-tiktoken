@@ -12,9 +12,9 @@ use super::*;
 /// `|`; `<|EOT|>` is the one exception and really is ASCII.
 #[cfg(feature = "vocab-deepseek_v3")]
 pub fn deepseek_v3() -> CoreBpe {
-    let encoder = parse_tkv(DEEPSEEK_V3_CHAIN);
-    CoreBpe::new(
-        encoder,
+    let vocab = shared_vocab("deepseek_v3", DEEPSEEK_V3_CHAIN);
+    CoreBpe::with_vocab(
+        vocab,
         deepseek_v3_special_tokens(),
         DEEPSEEK_V3_PATTERN,
         FastPath::Deepseek,
@@ -61,7 +61,7 @@ fn deepseek_v3_special_tokens() -> FxHashMap<Vec<u8>, u32> {
 /// placeholders (`<|place_holder_mm_span_0021|>`..=`_0435|>`).
 #[cfg(feature = "vocab-deepseek_v3")]
 pub fn deepseek_v4() -> CoreBpe {
-    let encoder = parse_tkv(DEEPSEEK_V3_CHAIN);
+    let vocab = shared_vocab("deepseek_v3", DEEPSEEK_V3_CHAIN);
     let mut special = deepseek_v3_special_tokens();
     for (name, id) in [
         ("<｜begin▁of▁repo▁name｜>", 128815_u32),
@@ -125,8 +125,8 @@ pub fn deepseek_v4() -> CoreBpe {
             128847 + (n - 21),
         );
     }
-    CoreBpe::new(
-        encoder,
+    CoreBpe::with_vocab(
+        vocab,
         special,
         DEEPSEEK_V3_PATTERN,
         FastPath::Deepseek,

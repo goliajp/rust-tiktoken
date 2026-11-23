@@ -13,6 +13,9 @@ WebAssembly bindings for the [tiktoken](https://crates.io/crates/tiktoken) BPE t
 npm install @goliapkg/tiktoken-wasm
 ```
 
+The module is built with WebAssembly SIMD (`simd128`) and needs Chrome 91,
+Firefox 89 or Safari 16.4 and later; older browsers fail to compile it.
+
 ## Build from source
 
 ```bash
@@ -23,12 +26,13 @@ wasm-pack build --target web --release --scope goliapkg
 
 Output is in `pkg/` — a complete npm-ready package containing:
 - `tiktoken_wasm.js` — ES module with WASM loader
-- `tiktoken_wasm_bg.wasm` — compiled WASM binary (8.96 MB, 8.22 MB gzipped, all 20 vocabularies)
+- `tiktoken_wasm_bg.wasm` — compiled WASM binary (8.65 MB, 8.01 MB gzipped, all 20 vocabularies)
 - `tiktoken_wasm.d.ts` — TypeScript type definitions
+- `snippets/` — a small JavaScript helper that moves text and token ids in and out of WASM memory
 
 Building it yourself, `--no-default-features --features vocab-o200k_base` (or
 any other `vocab-*` / vendor group forwarded from `tiktoken`) drops that to
-1.96 MB / 1.22 MB gzipped.
+1.64 MB / 1.00 MB gzipped.
 
 ## Usage
 

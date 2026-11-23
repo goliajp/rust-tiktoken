@@ -1,0 +1,9 @@
+# The pre-tokenizer classifies 64 bytes at a time with SIMD; without simd128
+# it falls back to a scalar loop. simd128 needs Chrome 91, Firefox 89 or
+# Safari 16.4 and later.
+# Without reference types the bindings pass the text and the returned ids
+# through a JS-side table instead of as externref: JavaScriptCore spends about
+# 10 ns more per call on an externref argument, a fifth of `count` on a short
+# string.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128,-reference-types"]

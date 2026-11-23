@@ -13,6 +13,8 @@
 npm install @goliapkg/tiktoken-wasm
 ```
 
+モジュールは WebAssembly SIMD（`simd128`）でビルドしているため、Chrome 91、Firefox 89、Safari 16.4 以降が必要です。それより古いブラウザではコンパイルに失敗します。
+
 ## ソースからビルド
 
 ```bash
@@ -24,10 +26,11 @@ wasm-pack build --target web --release --scope goliapkg
 出力は `pkg/` に入ります — そのまま npm に公開できる完全なパッケージ:
 
 - `tiktoken_wasm.js` — WASM ローダ付きの ES モジュール
-- `tiktoken_wasm_bg.wasm` — コンパイル済み WASM バイナリ（8.96 MB、gzip 後 8.22 MB、全 20 語彙を含む）
+- `tiktoken_wasm_bg.wasm` — コンパイル済み WASM バイナリ（8.65 MB、gzip 後 8.01 MB、全 20 語彙を含む）
 - `tiktoken_wasm.d.ts` — TypeScript 型定義
+- `snippets/` — テキストとトークン ID を WASM メモリへ出し入れする小さな JavaScript
 
-自分でビルドする場合、`--no-default-features --features vocab-o200k_base`（または `tiktoken` から転送される任意の `vocab-*` / ベンダー単位の feature）を付けると 1.96 MB、gzip 後 1.22 MB になります。
+自分でビルドする場合、`--no-default-features --features vocab-o200k_base`（または `tiktoken` から転送される任意の `vocab-*` / ベンダー単位の feature）を付けると 1.64 MB、gzip 後 1.00 MB になります。
 
 ## 使い方
 

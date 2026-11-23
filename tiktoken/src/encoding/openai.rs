@@ -28,13 +28,13 @@ pub fn cl100k_base() -> CoreBpe {
 /// Vocabulary size: 50,256 regular tokens + 1 special token.
 #[cfg(feature = "vocab-p50k_base")]
 pub fn p50k_base() -> CoreBpe {
-    let encoder = parse_tkv(P50K_BASE_CHAIN);
+    let vocab = shared_vocab("p50k_base", P50K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 50256)]);
-    CoreBpe::new(
-        encoder,
+    CoreBpe::with_vocab(
+        vocab,
         special,
         P50K_PATTERN,
-        FastPath::None,
+        FastPath::P50k,
         WhitespaceRules::Generic,
     )
 }
@@ -43,18 +43,18 @@ pub fn p50k_base() -> CoreBpe {
 /// Same merge ranks as p50k_base but with additional FIM (fill-in-middle) special tokens.
 #[cfg(feature = "vocab-p50k_base")]
 pub fn p50k_edit() -> CoreBpe {
-    let encoder = parse_tkv(P50K_BASE_CHAIN);
+    let vocab = shared_vocab("p50k_base", P50K_BASE_CHAIN);
     let special = special_tokens(&[
         ("<|endoftext|>", 50256),
         ("<|fim_prefix|>", 50281),
         ("<|fim_middle|>", 50282),
         ("<|fim_suffix|>", 50283),
     ]);
-    CoreBpe::new(
-        encoder,
+    CoreBpe::with_vocab(
+        vocab,
         special,
         P50K_PATTERN,
-        FastPath::None,
+        FastPath::P50k,
         WhitespaceRules::Generic,
     )
 }
@@ -63,10 +63,10 @@ pub fn p50k_edit() -> CoreBpe {
 /// Vocabulary size: 199,998 regular tokens + 2 special tokens.
 #[cfg(feature = "vocab-o200k_base")]
 pub fn o200k_base() -> CoreBpe {
-    let encoder = parse_tkv(O200K_BASE_CHAIN);
+    let vocab = shared_vocab("o200k_base", O200K_BASE_CHAIN);
     let special = special_tokens(&[("<|endoftext|>", 199999), ("<|endofprompt|>", 200018)]);
-    CoreBpe::new(
-        encoder,
+    CoreBpe::with_vocab(
+        vocab,
         special,
         O200K_PATTERN,
         FastPath::O200k,
@@ -84,7 +84,7 @@ pub fn o200k_base() -> CoreBpe {
 /// at the same id; this mirrors the upstream Python implementation.
 #[cfg(feature = "vocab-o200k_base")]
 pub fn o200k_harmony() -> CoreBpe {
-    let encoder = parse_tkv(O200K_BASE_CHAIN);
+    let vocab = shared_vocab("o200k_base", O200K_BASE_CHAIN);
     let mut special: FxHashMap<Vec<u8>, u32> = FxHashMap::default();
     for (name, id) in [
         ("<|startoftext|>", 199998_u32),
@@ -108,8 +108,8 @@ pub fn o200k_harmony() -> CoreBpe {
     for id in 200013..=201087_u32 {
         special.insert(format!("<|reserved_{id}|>").into_bytes(), id);
     }
-    CoreBpe::new(
-        encoder,
+    CoreBpe::with_vocab(
+        vocab,
         special,
         O200K_PATTERN,
         FastPath::O200k,
@@ -128,7 +128,7 @@ pub fn r50k_base() -> CoreBpe {
         encoder,
         special,
         P50K_PATTERN,
-        FastPath::None,
+        FastPath::P50k,
         WhitespaceRules::Generic,
     )
 }

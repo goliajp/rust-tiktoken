@@ -13,8 +13,8 @@ The fastest Rust BPE tokenizer — 3.7–20x faster than tiktoken-rs natively (1
 ## Features
 
 - **Multi-provider**: 20 encodings across 8 vendors (OpenAI, Meta, DeepSeek, Alibaba, Mistral, Moonshot, Zhipu, MiniMax)
-- **Fast**: hand-written pre-tokenizer for ASCII and CJK (bypasses the regex), key-size-layered vocabulary, whole-piece memoisation, hybrid BPE merge
-- **Parallel encoding**: optional rayon-based multi-threaded encoding for large texts
+- **Fast**: table-driven pre-tokenizers for every encoding (no regex at runtime), SIMD piece-start detection for the cl100k and o200k families, key-size-layered vocabulary, whole-piece memoisation shared across threads, hybrid BPE merge
+- **Parallel encoding**: texts of 32 KiB and more are encoded on several threads automatically, on a built-in std-only pool
 - **Pricing**: cost estimation for 153 models across 11 providers
 - **Compact**: all 20 vocabularies embedded in 7.8 MB, and opt-out per vocabulary — a cl100k-only build carries 373 KB of data, and cargo downloads only the vendors you enable
 - **Zero-alloc counting**: `count()` path avoids token vector allocation
@@ -66,16 +66,17 @@ implementation's memoisation — it is the floor, and the lead holds there too.
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| Pre-tokenize | Hand-written scanners for ASCII **and** CJK (Han/kana/hangul, fullwidth forms); regex only as arbiter and rare-case fallback | always runs the regex | always runs the regex |
-| Regex engine (fallback) | `regex` (DFA, linear time) | `fancy-regex` (backtracking) | `regex` via PyO3 + FFI overhead |
-| Vocab lookup | Layered by key size: direct-indexed tables for 1–2-byte keys, open addressing with inlined keys for 3–8, tagged arena slots above | `HashMap<Vec<u8>>` (200k allocs) | Rust `HashMap` behind PyO3 |
-| Repeated pieces | Thread-local direct-mapped memoisation, byte keys | none | none |
-| BPE merge | Hybrid: stack linear-scan (short pieces) + heap (long) | O(n*m) linear scan | O(n*m) linear scan |
+| Pre-tokenize | Table-driven scanners for every encoding, on Unicode tables generated from the patterns' own Unicode version; the cl100k and o200k families decide piece starts 64 bytes at a time with SIMD (NEON / SSE2 / wasm simd128) | always runs the regex | always runs the regex |
+| Regex engine | none at runtime (`regex` is a dev-dependency, the reference the scanners are tested against) | `fancy-regex` (backtracking) | `regex` via PyO3 + FFI overhead |
+| Vocab lookup | Layered by key size: packed keys of up to 15 bytes in one open-addressed table (two slots per cache line), hash-tagged arena slots above, direct-indexed tables for 1–2-byte keys | `HashMap<Vec<u8>>` (200k allocs) | Rust `HashMap` behind PyO3 |
+| Repeated pieces | Merge results of non-vocabulary pieces are added to the shared lookup table, so every thread reuses them; long pieces have their own thread-local and shared caches | none | none |
+| BPE merge | Hybrid: stack linear-scan (short pieces) + heap (long); short pieces that miss are merged several at a time by token id | O(n*m) linear scan | O(n*m) linear scan |
 | `count()` without alloc | yes | no | no |
 
-The scanners are pinned to the regex by property tests (hundreds of thousands
-of random inputs per run), and every encoding is pinned to its vendor's
-tokenizer by 53,275 differential fixture cases.
+The scanners are pinned to the `regex` crate by property tests (hundreds of
+thousands of random inputs per run) and an exhaustive sweep of short strings,
+and every encoding is pinned to its vendor's tokenizer by 53,275 differential
+fixture cases.
 
 Benchmark source: [`benches/`](benches/), [`../bench-compare/`](../bench-compare/). Reproducible via `cargo bench` / `cargo run -p bench-compare`.
 
@@ -86,10 +87,12 @@ Benchmark source: [`benches/`](benches/), [`../bench-compare/`](../bench-compare
 ```toml
 [dependencies]
 tiktoken = "5"
-
-# optional: multi-threaded encoding for large texts
-tiktoken = { version = "5", features = ["parallel"] }
 ```
+
+The runtime dependencies are `ruzstd` and the vocabulary data crates you
+enable. The `parallel` feature of earlier versions still exists so that
+manifests naming it keep building, but it does nothing: long texts are
+encoded in parallel without it.
 
 ### Picking vocabularies
 
@@ -202,12 +205,35 @@ let count = enc.count_with_special_tokens("hello<|endoftext|>world");
 
 ### Parallel encoding
 
+`encode`, `count`, `encode_with_special_tokens` and `count_with_special_tokens`
+cut a text of 32 KiB or more into chunks and encode them on a process-wide
+pool of worker threads, created on the first such call. The output is
+identical to single-threaded encoding.
+
 ```rust
-// requires `parallel` feature
 let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-let tokens = enc.encode_parallel("...very long text...");
-// identical output, uses rayon for texts >= 4KB
+let text = "word ".repeat(20_000);
+let tokens = enc.encode(&text); // 100 KB: encoded on several threads
+
+// threads per call, the calling thread included; 1 = single-threaded,
+// 0 = back to the default
+tiktoken::set_parallelism(1);
+assert_eq!(enc.encode(&text), tokens);
+tiktoken::set_parallelism(0);
 ```
+
+- The default thread count is the number of performance cores (all cores
+  where the system does not tell them apart), or the `TIKTOKEN_THREADS`
+  environment variable when it holds a positive integer.
+- `TIKTOKEN_THREADS=1` or `set_parallelism(1)` turns it off: every call runs
+  on the calling thread and no worker thread is ever started.
+- One parallel call runs at a time. A call that finds the pool busy — for
+  example because the application already encodes from several threads —
+  runs on its own thread instead of waiting, so the process never runs more
+  encoding threads than the configured number.
+- `encode_parallel` is now the same as `encode`, kept for existing code; it
+  no longer needs the `parallel` feature.
+- On `wasm32` there are no threads, and every call runs single-threaded.
 
 ### Cost estimation
 
@@ -245,7 +271,7 @@ Mistral, Moonshot, Zhipu, MiniMax and Voyage.
 
 ## WebAssembly
 
-Available as [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) on npm.
+Available as [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) on npm. The package is built with WebAssembly SIMD and needs Chrome 91, Firefox 89 or Safari 16.4 and later.
 
 ```bash
 npm install @goliapkg/tiktoken-wasm
