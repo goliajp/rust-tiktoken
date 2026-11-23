@@ -16,6 +16,7 @@ mod frags;
 mod key;
 mod long;
 mod long_derived;
+mod splits;
 mod walls;
 
 pub(crate) use atoms::{Atoms, char_len};
@@ -26,6 +27,7 @@ pub(crate) use key::{FAST_KEY_MAX, KEY_READ, key_in, key_of, key_padded};
 use long::LongTable;
 use long_derived::LongDerived;
 pub(crate) use long_derived::{LONG_KEY_MAX, LongIds};
+pub(crate) use splits::{NO_ID, Splits};
 use std::sync::OnceLock;
 pub(crate) use walls::{Start, cp_at};
 
@@ -105,6 +107,8 @@ pub struct Vocab {
     long_derived: OnceLock<LongDerived>,
     // chars a merge may start from whole, built on first use
     atoms: OnceLock<Atoms>,
+    // merge results by token id, built on the first batch of misses
+    splits: OnceLock<Option<Splits>>,
     // indexed by rank: (offset, len) into the arena, for decode
     decoder: Box<[(u32, u16)]>,
 }
@@ -169,6 +173,7 @@ impl Vocab {
             long,
             long_derived: OnceLock::new(),
             atoms: OnceLock::new(),
+            splits: OnceLock::new(),
             arena,
             every_byte: !single.contains(&ABSENT),
             single,
@@ -319,6 +324,20 @@ impl Vocab {
         })
     }
 
+    /// The merge results by token id, or `None` for a vocabulary they do
+    /// not fit (see [`Splits::build`]).
+    #[inline]
+    pub(crate) fn splits(&self) -> Option<&Splits> {
+        self.splits.get_or_init(|| Splits::build(self)).as_ref()
+    }
+
+    /// Whether merges may go by token id: every byte is a token and every id
+    /// fits [`Splits`].
+    #[inline]
+    pub(crate) fn merges_by_id(&self) -> bool {
+        self.every_byte && self.decoder.len() < NO_ID as usize
+    }
+
     /// Whether the shared table still takes derived entries.
     #[inline]
     pub(crate) fn accepts_derived(&self) -> bool {
@@ -374,6 +393,12 @@ impl Vocab {
     fn decode(&self, rank: u32) -> &[u8] {
         let (offset, len) = self.decoder[rank as usize];
         &self.arena[offset as usize..(offset as usize + len as usize)]
+    }
+
+    /// One past the highest rank.
+    #[cfg(test)]
+    pub(crate) fn decoder_len(&self) -> usize {
+        self.decoder.len()
     }
 
     /// Number of entries in the vocabulary.

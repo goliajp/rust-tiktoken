@@ -2,6 +2,7 @@
 //! sink in `encode_sink`, adding up id counts instead of writing ids.
 
 use crate::encode_loop::{Engine, NO_KEY, piece_key, probe, probe_entry};
+use crate::miss_batch::Batch;
 use crate::pretokenize::windowed::PieceSink;
 use crate::vocab::{Home, HomeProbe};
 
@@ -49,6 +50,37 @@ pub(crate) struct CountSink<'e> {
     pub(crate) engine: &'e Engine<'e>,
     pub(crate) home: HomeProbe<'e>,
     pub(crate) count: usize,
+    // short misses waiting to be merged together
+    pub(crate) batch: Batch,
+}
+
+impl CountSink<'_> {
+    /// The count, with the waiting misses resolved.
+    pub(crate) fn finish(mut self) -> usize {
+        if let Some(m) = self.batch.pending() {
+            self.count += m.flush_count(self.engine);
+        }
+        self.count
+    }
+}
+
+/// The count of a short piece whose probe chain was walked without finding
+/// it, or nothing yet when it waits for a batch of misses.
+#[inline(never)]
+fn count_short_miss(
+    engine: &Engine<'_>,
+    batch: &mut Batch,
+    piece: &[u8],
+    key: (u64, u64),
+) -> usize {
+    let Some(m) = batch.take(engine.vocab, piece) else {
+        return engine.count_unheld(piece, key);
+    };
+    if m.push(key, 0) {
+        m.flush_count(engine)
+    } else {
+        0
+    }
 }
 
 /// Ids of a piece the home-line probe did not answer.
@@ -82,7 +114,7 @@ impl PieceSink for CountSink<'_> {
                 // does not hold
                 let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
                 self.count += if key != NO_KEY {
-                    self.engine.count_unheld(piece, key)
+                    count_short_miss(self.engine, &mut self.batch, piece, key)
                 } else {
                     self.engine.count_piece(piece, key)
                 };

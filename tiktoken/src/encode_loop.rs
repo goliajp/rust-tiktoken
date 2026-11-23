@@ -20,6 +20,7 @@
 use crate::count_sink::CountSink;
 use crate::encode_miss;
 use crate::encode_sink::{EncodeSink, ROOM};
+use crate::miss_batch::Batch;
 use crate::pretokenize::window::{CaseRules, Cl100kRules, WindowRules};
 use crate::pretokenize::windowed::{self, PieceSink};
 use crate::pretokenize::{PreTokenizer, ScalarPreTokenizer, WindowKind};
@@ -91,9 +92,10 @@ impl Engine<'_> {
                 engine: self,
                 home: self.vocab.home_probe(),
                 count: 0,
+                batch: Batch::new(),
             };
             window_dispatch(self.pre, kind, text, &mut sink);
-            return sink.count;
+            return sink.finish();
         }
         self.count_scalar(text)
     }

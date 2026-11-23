@@ -226,7 +226,7 @@ fn atoms_at(atoms: &Atoms, piece: &[u8], i: usize, l: usize) -> Option<u32> {
 /// atoms pays off on such pieces; on words with a curly quote or an accent
 /// the extra lookups cost more than the merges they save.
 #[inline(always)]
-fn mostly_multibyte(piece: &[u8]) -> bool {
+pub(crate) fn mostly_multibyte(piece: &[u8]) -> bool {
     // most words of Latin script end in ASCII: one compare turns them away
     if piece[piece.len() - 1] < 0x80 {
         return false;
@@ -392,6 +392,9 @@ pub fn bpe_count(piece: &[u8], vocab: &Vocab) -> usize {
 
 #[path = "merge_chars.rs"]
 mod chars;
+
+#[path = "merge_lanes.rs"]
+pub(crate) mod lanes;
 
 #[cfg(test)]
 #[path = "merge_atoms_tests.rs"]
