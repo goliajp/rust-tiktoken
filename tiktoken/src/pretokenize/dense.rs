@@ -132,14 +132,18 @@ fn word_end<const CASE: bool>(
         // word of `bits` covers the 64 code points that share all but the
         // last byte's payload
         let c = b[j];
+        // SAFETY (reads past `j`): `b` is valid utf-8, so a lead byte has all
+        // the continuation bytes it announces
         if c & 0xF0 == 0xE0 {
-            let word = bits[(c as usize & 0x0F) << 6 | (b[j + 1] as usize & 0x3F)];
-            if word >> (b[j + 2] & 0x3F) & 1 == 0 {
+            let (c1, c2) = unsafe { (*b.get_unchecked(j + 1), *b.get_unchecked(j + 2)) };
+            let word = bits[(c as usize & 0x0F) << 6 | (c1 as usize & 0x3F)];
+            if word >> (c2 & 0x3F) & 1 == 0 {
                 break;
             }
             j += 3;
         } else if c & 0xE0 == 0xC0 {
-            if bits[c as usize & 0x1F] >> (b[j + 1] & 0x3F) & 1 == 0 {
+            let c1 = unsafe { *b.get_unchecked(j + 1) };
+            if bits[c as usize & 0x1F] >> (c1 & 0x3F) & 1 == 0 {
                 break;
             }
             j += 2;

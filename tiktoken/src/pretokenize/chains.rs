@@ -12,6 +12,7 @@
 use std::mem::MaybeUninit;
 
 use super::ScalarPreTokenizer;
+use super::bitops::below_lowest;
 use super::classify::{Bitmaps, M_CONT, M_L, M_LW, M_NL, M_SP};
 use super::window::{Masks, WindowRules};
 use super::windowed::{PieceSink, scalar_end};
@@ -162,6 +163,23 @@ pub(super) fn decide_chunk<R: WindowRules, const CONT: bool, S: PieceSink, const
     reach
 }
 
+/// Piece starts in a window that the neighbouring bytes alone decide,
+/// below the window's first hard byte: a space next to a non-whitespace
+/// byte, a newline after a letter or digit, and punctuation other than an
+/// apostrophe after a letter or digit (an apostrophe may begin a
+/// contraction suffix of the word before it). Every pattern starts a piece
+/// there whatever follows, so the window's decision has these starts.
+#[inline(always)]
+fn free_starts<R: WindowRules>(m: &Masks) -> u64 {
+    let ok = below_lowest(m.hard) & m.v;
+    let words = if R::CASE { m.l | m.lw } else { m.l } | m.n;
+    let nonws = !m.w & ok;
+    let mut f = m.sp & ((nonws << 1) | (nonws >> 1));
+    f |= m.nl & (words << 1);
+    f |= nonws & !words & !m.cont & !m.ap & (words << 1);
+    f & ok & !1
+}
+
 /// One window of a chain at `r`; returns the next window start.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
@@ -186,6 +204,10 @@ fn step<R: WindowRules, const CONT: bool, const W: usize>(
     debug_assert!(base < buf.len());
     // SAFETY: the window lies inside the classified bytes of `buf`
     let win = unsafe { buf.get_unchecked(base..) };
+    // the next window opens at the last start that needs no decision: the
+    // decision has a start there and keeps every start below it, and the
+    // chain does not wait for the decision
+    let free = free_starts::<R>(&m);
     // most windows of a chunk with some non-ASCII bytes have none of their
     // own, and the rules without continuation bytes are much shorter
     let (s, cut) = if CONT && m.cont & m.v != 0 {
@@ -193,6 +215,13 @@ fn step<R: WindowRules, const CONT: bool, const W: usize>(
     } else {
         R::decide::<false>(&m, false, win)
     };
+    if free != 0 {
+        let b = 63 - free.leading_zeros();
+        debug_assert!(b <= cut && s >> b & 1 == 1, "{b} {cut} {s:#x}");
+        let keep = (end - r).min(b as usize);
+        starts.or_at(r, s & ((1u64 << keep) - 1));
+        return r + b as usize;
+    }
     if cut == 0 {
         starts.or_at(r, 1);
         let e = scalar_end(pre, text, base) - start;
@@ -243,24 +272,28 @@ static BYTE_BITS: [[u16; 8]; 256] = {
 #[inline(always)]
 fn flatten(word: u64, k: usize, pos: *mut u16, n: usize) -> usize {
     debug_assert!(n <= POS_BATCH);
-    // bit counts per byte, then the count of all bytes below each byte
+    // bit counts per byte, then twice the count of all bytes below each
+    // byte: the byte offset of its entries, at most 112
     let mut c = word - ((word >> 1) & 0x5555_5555_5555_5555);
     c = (c & 0x3333_3333_3333_3333) + ((c >> 2) & 0x3333_3333_3333_3333);
     c = (c + (c >> 4)) & 0x0F0F_0F0F_0F0F_0F0F;
-    let below = c.wrapping_mul(0x0101_0101_0101_0100);
+    let below2 = c.wrapping_mul(0x0202_0202_0202_0200);
+    let total = ((below2 >> 57) + (c >> 56)) as usize;
+    // SAFETY: n <= POS_BATCH
+    let out = unsafe { pos.add(n).cast::<u8>() };
+    let base = (64 * k) as u16;
     for j in 0..8 {
         let b = (word >> (8 * j)) as u8;
-        let at = n + ((below >> (8 * j)) & 0xFF) as usize;
-        let base = (64 * k + 8 * j) as u16;
-        let v = BYTE_BITS[b as usize].map(|x| x + base);
+        let at = ((below2 >> (8 * j)) & 0xFF) as usize;
+        let v = BYTE_BITS[b as usize].map(|x| x + (base + 8 * j as u16));
         // entries past the byte's count are overwritten by the next byte or
         // left past the word's count
-        debug_assert!(at + 8 <= POS_CAP);
-        // SAFETY: n <= POS_BATCH and at <= n + 56, so the eight entries end
+        debug_assert!(n + at / 2 + 8 <= POS_CAP);
+        // SAFETY: n <= POS_BATCH and at / 2 <= 56, so the eight entries end
         // inside POS_CAP
-        unsafe { pos.add(at).cast::<[u16; 8]>().write_unaligned(v) };
+        unsafe { out.add(at).cast::<[u16; 8]>().write_unaligned(v) };
     }
-    n + word.count_ones() as usize
+    n + total
 }
 
 /// Hand the pieces between consecutive starts below `reach` to `sink`, the
@@ -298,6 +331,70 @@ fn walk<S: PieceSink, const W: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use super::super::classify::{BODY_WORDS, classify};
+    use super::super::window::{CaseRules, Cl100kRules};
+
+    // every free start is a start the window decides, so the highest one
+    // never passes the cut; at every window position of random texts
+    fn free_starts_are_decided<R: WindowRules>(text: &[u8]) {
+        let blocks = (text.len() - 16) / 64;
+        let mut maps = Bitmaps::<BODY_WORDS>::new();
+        let cont = if R::CASE {
+            classify::<true, BODY_WORDS>(R::classes(), text, 0, blocks, &mut maps)
+        } else {
+            classify::<false, BODY_WORDS>(R::classes(), text, 0, blocks, &mut maps)
+        };
+        for r in 0..=64 * blocks - 64 {
+            // windows open at char boundaries
+            if text[r] & 0xC0 == 0x80 {
+                continue;
+            }
+            let m = if R::CASE {
+                Masks::load_body::<true, BODY_WORDS>(&maps, r)
+            } else {
+                Masks::load_body::<false, BODY_WORDS>(&maps, r)
+            };
+            let (s, cut) = if cont {
+                R::decide::<true>(&m, false, &text[r..])
+            } else {
+                R::decide::<false>(&m, false, &text[r..])
+            };
+            let free = free_starts::<R>(&m);
+            let ctx = String::from_utf8_lossy(&text[r..r + 64]);
+            assert_eq!(free & !s, 0, "{r} {free:#x} {s:#x} {ctx:?}");
+            if free != 0 {
+                assert!(63 - free.leading_zeros() <= cut, "{r} {ctx:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn free_starts_are_a_subset_of_the_decided_starts() {
+        const CHARS: &[&str] = &[
+            "a", "b", "Z", "Q", "s", "t", "e", "l", "'", "0", "7", " ", " ", " ", "\t", "\n", "\r",
+            ".", ",", "/", "-", "(", "’", "“", "é", "É", "世", "\u{3000}", "\u{301}", "²", "😀",
+            "ʰ",
+        ];
+        let mut x = 0x2545_F491_4F6C_DD1Du64;
+        for _ in 0..60 {
+            let mut text = String::new();
+            while text.len() < 1200 {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                let i = (x % CHARS.len() as u64) as usize;
+                for _ in 0..1 + (x >> 40) % 4 {
+                    text.push_str(CHARS[i]);
+                }
+            }
+            let t = text.as_bytes();
+            free_starts_are_decided::<Cl100kRules<3, false>>(t);
+            free_starts_are_decided::<Cl100kRules<1, true>>(t);
+            free_starts_are_decided::<CaseRules<true, 3>>(t);
+            free_starts_are_decided::<CaseRules<false, 1>>(t);
+        }
+    }
 
     #[test]
     fn flatten_lists_every_set_bit() {

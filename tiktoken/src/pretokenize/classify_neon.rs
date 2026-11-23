@@ -89,3 +89,15 @@ pub(super) fn block<const CASE: bool>(block: &[u8; 64]) -> BlockMasks {
         out
     }
 }
+
+/// Utf-8 continuation bytes (`0x80..0xC0`) of a block.
+#[inline(always)]
+pub(super) fn cont_mask(block: &[u8; 64]) -> u64 {
+    // SAFETY: neon is always available on aarch64, and the load reads
+    // exactly the 64 bytes of `block`
+    unsafe {
+        let x = vld4q_u8(block.as_ptr());
+        let c = |v: uint8x16_t| vceqq_u8(vandq_u8(v, vdupq_n_u8(0xC0)), vdupq_n_u8(0x80));
+        movemask([c(x.0), c(x.1), c(x.2), c(x.3)])
+    }
+}
