@@ -71,10 +71,12 @@ pub mod pricing;
 mod special;
 #[cfg(not(target_arch = "wasm32"))]
 mod split;
+mod text_memo;
 mod unicode;
 mod vocab;
 
 pub use bpe::CoreBpe;
+pub use text_memo::TextMemo;
 
 use std::sync::{LazyLock, OnceLock};
 
