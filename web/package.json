@@ -1,7 +1,7 @@
 {
   "name": "tiktoken-web",
   "private": true,
-  "version": "5.1.1",
+  "version": "5.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,7 @@
     "bench": "vite build --config vite.bench.config.ts && node bench/run.mjs"
   },
   "dependencies": {
-    "@goliapkg/tiktoken-wasm": "^5.1.1",
+    "@goliapkg/tiktoken-wasm": "^5.2.0",
     "lucide-react": "^1.76.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
@@ -23,6 +23,7 @@
     "gpt-tokenizer": "^4.1.2",
     "js-tiktoken": "^1.0.21",
     "playwright-core": "1.65",
+    "tiktoken-fast": "^0.1.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
   }

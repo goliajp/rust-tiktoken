@@ -54,26 +54,27 @@ export function EncodingTable() {
 // Benchmark data — one full pass over the corpus, cl100k_base, warmup then
 // median of 9 rounds, token outputs asserted identical across implementations
 // before anything is timed. Corpora are byte-identical in every harness.
-//   browser — Apple M4 Mac mini, Chromium: `npm run bench` in web/
-//   native  — Apple M4 Mac mini, single thread: `cargo run -p bench-compare`
+//   browser — Apple M4 Pro Mac mini, Chromium: `npm run bench` in web/
+//   native  — Apple M4 Pro Mac mini, single thread: `TIKTOKEN_THREADS=1 cargo run -p bench-compare`;
+//             fastokens from a separate same-process harness
 // Corpus labels are i18n'd; the numbers are not.
 
-const BROWSER: { key: string; ours: string; gpt: string; js: string }[] = [
-  { key: 'zh', ours: '12.9 µs', gpt: '33.0 µs', js: '6,669 µs' },
-  { key: 'ja', ours: '13.9 µs', gpt: '29.4 µs', js: '12,885 µs' },
-  { key: 'uni', ours: '23.4 µs', gpt: '40.8 µs', js: '3,917 µs' },
-  { key: 'varied', ours: '38.4 µs', gpt: '43.6 µs', js: '2,741 µs' },
-  { key: 'ascii', ours: '102.0 µs', gpt: '276 µs', js: '7,522 µs' },
-  { key: 'code', ours: '17.5 µs', gpt: '32.0 µs', js: '1,020 µs' },
+const BROWSER: { key: string; ours: string; fast: string; gpt: string; js: string }[] = [
+  { key: 'zh', ours: '4.8 µs', fast: '6.4 µs', gpt: '31.9 µs', js: '6,625 µs' },
+  { key: 'ja', ours: '4.2 µs', fast: '6.6 µs', gpt: '29.2 µs', js: '12,825 µs' },
+  { key: 'uni', ours: '6.3 µs', fast: '7.0 µs', gpt: '40.3 µs', js: '3,975 µs' },
+  { key: 'varied', ours: '6.1 µs', fast: '6.7 µs', gpt: '42.2 µs', js: '2,756 µs' },
+  { key: 'ascii', ours: '47.7 µs', fast: '118 µs', gpt: '277 µs', js: '9,638 µs' },
+  { key: 'code', ours: '5.1 µs', fast: '8.9 µs', gpt: '30.4 µs', js: '1,120 µs' },
 ]
 
-const NATIVE: { key: string; ours: string; rs: string; py: string }[] = [
-  { key: 'zh', ours: '6.7 µs', rs: '96 µs', py: '114 µs' },
-  { key: 'ja', ours: '6.5 µs', rs: '114 µs', py: '131 µs' },
-  { key: 'uni', ours: '15.4 µs', rs: '107 µs', py: '122 µs' },
-  { key: 'varied', ours: '24.7 µs', rs: '92 µs', py: '114 µs' },
-  { key: 'ascii', ours: '52.6 µs', rs: '956 µs', py: '1,100 µs' },
-  { key: 'code', ours: '11.0 µs', rs: '159 µs', py: '180 µs' },
+const NATIVE: { key: string; ours: string; fastokens: string; rs: string; py: string }[] = [
+  { key: 'zh', ours: '2.0 µs', fastokens: '8.0 µs', rs: '97.8 µs', py: '114 µs' },
+  { key: 'ja', ours: '1.4 µs', fastokens: '17.2 µs', rs: '119 µs', py: '131 µs' },
+  { key: 'uni', ours: '2.5 µs', fastokens: '3.9 µs', rs: '108 µs', py: '122 µs' },
+  { key: 'varied', ours: '2.6 µs', fastokens: '5.3 µs', rs: '94.0 µs', py: '114 µs' },
+  { key: 'ascii', ours: '19.9 µs', fastokens: '35.6 µs', rs: '955 µs', py: '1,100 µs' },
+  { key: 'code', ours: '1.9 µs', fastokens: '3.9 µs', rs: '163 µs', py: '179 µs' },
 ]
 
 export function BrowserPerfTable() {
@@ -85,6 +86,7 @@ export function BrowserPerfTable() {
           <tr>
             <th>{t('perf.col.input')}</th>
             <th>tiktoken (wasm)</th>
+            <th>tiktoken-fast 0.1</th>
             <th>gpt-tokenizer 4.1</th>
             <th>js-tiktoken 1.0</th>
           </tr>
@@ -96,6 +98,7 @@ export function BrowserPerfTable() {
               <td>
                 <span className="hl">{r.ours}</span>
               </td>
+              <td className="mono">{r.fast}</td>
               <td className="mono">{r.gpt}</td>
               <td className="mono">{r.js}</td>
             </tr>
@@ -115,6 +118,7 @@ export function NativePerfTable() {
           <tr>
             <th>{t('perf.col.input')}</th>
             <th>tiktoken</th>
+            <th>fastokens 0.3</th>
             <th>tiktoken-rs 0.12</th>
             <th>Python tiktoken 0.14</th>
           </tr>
@@ -126,6 +130,7 @@ export function NativePerfTable() {
               <td>
                 <span className="hl">{r.ours}</span>
               </td>
+              <td className="mono">{r.fastokens}</td>
               <td className="mono">{r.rs}</td>
               <td className="mono">{r.py}</td>
             </tr>

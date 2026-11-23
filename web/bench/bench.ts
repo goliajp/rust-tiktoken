@@ -1,8 +1,8 @@
 import { encodingForModel } from 'js-tiktoken'
 import { encode as gptEncode } from 'gpt-tokenizer/encoding/cl100k_base'
+import initFast, { get_encoding as getFastEncoding } from 'tiktoken-fast/web'
 
 import init, { getEncoding } from '@goliapkg/tiktoken-wasm'
-
 
 // Deterministic varied-CJK corpus: an LCG walk over Han/Kana/Hangul/Arabic
 // blocks, so pre-token pieces rarely repeat. gpt-tokenizer memoises whole
@@ -59,30 +59,27 @@ const t1 = performance.now()
 const js = encodingForModel('gpt-4')
 const jsInitMs = performance.now() - t1
 
+await initFast()
+const fast = getFastEncoding('cl100k_base')
+
+// median ns per call of 9 rounds after warmup; a round lasts at least 30 ms so
+// the timer's resolution stays well under 1%
 function timeIt(text: string, fn: (t: string) => unknown) {
-  for (let i = 0; i < 20; i++) fn(text)
+  let n = 1
+  for (;;) {
+    const s = performance.now()
+    for (let i = 0; i < n; i++) fn(text)
+    if (performance.now() - s >= 30) break
+    n *= 2
+  }
   const runs: number[] = []
   for (let r = 0; r < 9; r++) {
-    const n = text.length < 100 ? 5000 : text.length < 2000 ? 500 : 50
     const s = performance.now()
     for (let i = 0; i < n; i++) fn(text)
     runs.push(((performance.now() - s) * 1e6) / n)
   }
   runs.sort((a, b) => a - b)
-  return Math.round(runs[4])
-}
-
-function bench(text: string) {
-  for (let i = 0; i < 50; i++) enc.count(text)
-  const runs: number[] = []
-  for (let r = 0; r < 9; r++) {
-    const n = text.length < 100 ? 20000 : text.length < 2000 ? 2000 : 200
-    const s = performance.now()
-    for (let i = 0; i < n; i++) enc.count(text)
-    runs.push(((performance.now() - s) * 1e6) / n) // ns per op
-  }
-  runs.sort((a, b) => a - b)
-  return runs[4]
+  return Math.round(runs[4]!)
 }
 
 // Their pipeline, split the same way ours is: regex pre-tokenize, then
@@ -99,20 +96,27 @@ function gptRegexOnly(text: string): number {
   return acc
 }
 
-// Sanity: all three must agree on the token count, or the timings compare
+const same = (a: ArrayLike<number>, b: ArrayLike<number>) =>
+  a.length === b.length && Array.from(a).every((v, i) => v === b[i])
+
+// Sanity: all of them must produce the same ids, or the timings compare
 // different work.
 const out = CASES.map(([name, text]) => {
-  const a = enc.count(text)
-  const b = js.encode(text).length
-  const c = gptEncode(text).length
+  const ids = enc.encode(text)
   return {
     name,
     bytes: new TextEncoder().encode(text).length,
-    tokens: a,
-    agree: a === b && a === c,
-    wasm: Math.round(bench(text)),
-    jsTiktoken: timeIt(text, (t) => js.encode(t)),
+    tokens: ids.length,
+    agree:
+      enc.count(text) === ids.length &&
+      same(ids, js.encode(text)) &&
+      same(ids, gptEncode(text)) &&
+      same(ids, fast.encode_ordinary(text)),
+    wasm: timeIt(text, (t) => enc.encode(t)),
+    wasmCount: timeIt(text, (t) => enc.count(t)),
+    tiktokenFast: timeIt(text, (t) => fast.encode_ordinary(t)),
     gptTokenizer: timeIt(text, (t) => gptEncode(t)),
+    jsTiktoken: timeIt(text, (t) => js.encode(t)),
     gptRegex: timeIt(text, (t) => gptRegexOnly(t)),
   }
 })
