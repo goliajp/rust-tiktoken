@@ -52,6 +52,7 @@ mod encode_sink;
 pub mod encoding;
 mod hash;
 mod merge;
+mod miss_batch;
 mod piece_cache;
 #[cfg(not(target_arch = "wasm32"))]
 mod pool;

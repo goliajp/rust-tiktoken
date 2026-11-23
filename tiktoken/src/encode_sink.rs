@@ -3,6 +3,7 @@
 //! never check it per id.
 
 use crate::encode_loop::{Engine, NO_KEY, piece_key, probe, probe_entry};
+use crate::miss_batch::Batch;
 use crate::pretokenize::windowed::PieceSink;
 use crate::vocab::{Entry, Home, HomeProbe, LongIds, copy_ids};
 
@@ -27,6 +28,8 @@ pub(crate) struct EncodeSink<'e, 'v> {
     ptr: *mut u32,
     len: usize,
     cap: usize,
+    // short misses waiting to be merged together
+    batch: Batch,
 }
 
 impl<'e, 'v> EncodeSink<'e, 'v> {
@@ -39,6 +42,7 @@ impl<'e, 'v> EncodeSink<'e, 'v> {
             len: out.len(),
             cap: out.capacity(),
             out,
+            batch: Batch::new(),
         }
     }
 
@@ -50,8 +54,11 @@ impl<'e, 'v> EncodeSink<'e, 'v> {
     }
 
     #[inline(always)]
-    pub(crate) fn finish(self) {
-        // SAFETY: `len` ids were written below `cap`
+    pub(crate) fn finish(mut self) {
+        if let Some(m) = self.batch.pending() {
+            self.len = m.flush_into(self.engine, self.out, self.len);
+        }
+        // SAFETY: `len` ids were written below `cap`, or by the flush
         unsafe { self.out.set_len(self.len) }
     }
 }
@@ -197,6 +204,32 @@ fn encode_miss(
     out.len()
 }
 
+/// A short piece whose probe chain was walked without finding it: left for
+/// a batch of misses when it can wait, written after `len` ids at `ptr`
+/// otherwise; returns the new length, with room for the rest of the window.
+#[inline(never)]
+fn encode_short_miss(
+    engine: &Engine<'_>,
+    batch: &mut Batch,
+    out: &mut Vec<u32>,
+    ptr: *mut u32,
+    len: usize,
+    piece: &[u8],
+    key: (u64, u64),
+) -> usize {
+    let Some(m) = batch.take(engine.vocab, piece) else {
+        return encode_miss(engine, out, ptr, len, piece, key, None);
+    };
+    if !m.push(key, len) {
+        return len;
+    }
+    let len = m.flush_into(engine, out, len);
+    if out.capacity() - len < ROOM {
+        out.reserve(ROOM);
+    }
+    len
+}
+
 /// A piece the shared tables were found not to hold, written after `len`
 /// ids; returns the new length, with [`ROOM`] to spare.
 #[inline(never)]
@@ -249,7 +282,11 @@ impl PieceSink for EncodeSink<'_, '_> {
             if i < end {
                 let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
                 let (out, ptr) = (&mut *self.out, self.ptr);
-                self.len = encode_miss(self.engine, out, ptr, self.len, piece, key, entry);
+                self.len = if entry.is_none() && key != NO_KEY {
+                    encode_short_miss(self.engine, &mut self.batch, out, ptr, self.len, piece, key)
+                } else {
+                    encode_miss(self.engine, out, ptr, self.len, piece, key, entry)
+                };
                 self.reload();
                 i += 1;
             }
