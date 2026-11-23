@@ -7,7 +7,7 @@
 //! runs hold one or two parts, which need at most one lookup; longer runs
 //! merge with the parts packed at the front of small arrays.
 
-use crate::vocab::{ABSENT, Atoms, RankProbe, Vocab};
+use crate::vocab::{ABSENT, Atoms, RankProbe, Vocab, copy_ids};
 
 /// Most parts in one run; a piece with a longer run takes the general merge.
 const RUN_MAX: usize = 32;
@@ -136,7 +136,10 @@ pub(super) fn merge_chars(
                 }
                 _ => {
                     let k = merge_run(&mut id, &mut at, m, piece, probe);
-                    ids[c..c + k].copy_from_slice(&id[..k]);
+                    assert!(c + k <= ids.len());
+                    // SAFETY: both ranges are in bounds, and the merge
+                    // leaves at least one part
+                    unsafe { copy_ids(id.as_ptr(), ids.as_mut_ptr().add(c), k) };
                     c += k;
                 }
             }
@@ -169,7 +172,18 @@ pub(super) fn merge_chars(
                 push!(single(w >> (8 * j) & 0xFF), i + j, 1);
             }
         } else if let Some(r) = cw.atom() {
+            // an atom that merges with nothing on one side ends the run
+            // there
+            let (before, after) = cw.alone();
+            if before {
+                flush!();
+                m = 0;
+            }
             push!(r, i, l);
+            if after {
+                flush!();
+                m = 0;
+            }
         } else {
             flush!();
             m = 0;

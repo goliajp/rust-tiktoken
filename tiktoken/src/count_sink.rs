@@ -54,12 +54,14 @@ pub(crate) struct CountSink<'e> {
 /// Ids of a piece the home-line probe did not answer.
 #[inline(never)]
 fn count_miss(engine: &Engine<'_>, piece: &[u8], key: (u64, u64)) -> usize {
-    if key != NO_KEY
-        && let Some(e) = engine.vocab.entry(key.0, key.1)
-    {
-        return e.len();
+    if key == NO_KEY {
+        return engine.count_piece(piece, key);
     }
-    engine.count_piece(piece, key)
+    match engine.vocab.entry(key.0, key.1) {
+        Some(e) => e.len(),
+        // the lookup walked the whole probe chain
+        None => engine.count_unheld(piece, key),
+    }
 }
 
 impl PieceSink for CountSink<'_> {
@@ -79,7 +81,11 @@ impl PieceSink for CountSink<'_> {
                 // the leaf walked the chain: a long piece or one the table
                 // does not hold
                 let piece = &buf[start + offs[i] as usize..start + offs[i + 1] as usize];
-                self.count += self.engine.count_piece(piece, key);
+                self.count += if key != NO_KEY {
+                    self.engine.count_unheld(piece, key)
+                } else {
+                    self.engine.count_piece(piece, key)
+                };
                 i += 1;
             }
         }
@@ -101,10 +107,10 @@ impl PieceSink for CountSink<'_> {
                 let piece = &buf[start..end];
                 self.count += match self.engine.vocab.long_ids(piece) {
                     Some(ids) => ids.len(),
-                    None => self.engine.count_piece(piece, NO_KEY),
+                    None => self.engine.count_unheld(piece, NO_KEY),
                 }
             }
-            Err(key) => self.count += self.engine.count_piece(&buf[start..end], key),
+            Err(key) => self.count += self.engine.count_unheld(&buf[start..end], key),
         }
     }
 }

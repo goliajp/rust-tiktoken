@@ -11,9 +11,12 @@
 //! - longer still: a plain merge.
 
 use crate::CoreBpe;
+use crate::encode_loop::{Engine, NO_KEY};
 use crate::merge::{self, SMALL_MAX};
 use crate::piece_cache;
-use crate::vocab::{ABSENT, Entry, FAST_KEY_MAX, LONG_KEY_MAX, LongIds, LongPiece, Vocab};
+use crate::vocab::{
+    ABSENT, Entry, FAST_KEY_MAX, LONG_KEY_MAX, LongIds, LongPiece, Vocab, copy_ids,
+};
 
 /// Packed key of a piece of up to 15 bytes, or `None` for longer ones.
 pub(crate) type Key = Option<(u64, u64)>;
@@ -28,7 +31,10 @@ fn merge_checked(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
         ids[..out.len()].copy_from_slice(&out);
         out.len()
     };
-    assert!(!ids[..n].contains(&ABSENT), "single byte not in vocab");
+    assert!(
+        vocab.has_every_byte() || !ids[..n].contains(&ABSENT),
+        "single byte not in vocab"
+    );
     n
 }
 
@@ -48,7 +54,17 @@ impl Sink for &mut Vec<u32> {
     }
     #[inline(always)]
     fn ids(self, ids: &[u32]) {
-        self.extend_from_slice(ids);
+        // a piece has at least one id; copied in blocks rather than through
+        // a library call
+        let (len, n) = (self.len(), ids.len());
+        debug_assert!(n >= 1);
+        self.reserve(n);
+        // SAFETY: room for `n` more ids was reserved, and they are written
+        // before the length takes them in
+        unsafe {
+            copy_ids(ids.as_ptr(), self.as_mut_ptr().add(len), n);
+            self.set_len(len + n);
+        }
     }
     #[inline(always)]
     fn long(self, ids: LongIds<'_>) {
@@ -74,10 +90,18 @@ impl Sink for Count {
     }
 }
 
+/// The ids of `piece` into `sink`. `PROBED`: the caller found that the
+/// shared tables hold no entry for it.
 #[inline(always)]
-fn resolve<S: Sink>(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, sink: S) -> S::Out {
+fn resolve<S: Sink, const PROBED: bool>(
+    vocab: &Vocab,
+    cache_id: u64,
+    piece: &[u8],
+    key: Key,
+    sink: S,
+) -> S::Out {
     if let Some((lo, hi)) = key {
-        if let Some(e) = vocab.entry(lo, hi) {
+        if !PROBED && let Some(e) = vocab.entry(lo, hi) {
             return sink.entry(vocab, e);
         }
         if vocab.accepts_derived() {
@@ -99,7 +123,7 @@ fn resolve<S: Sink>(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, sink: 
     } else {
         if piece.len() <= LONG_KEY_MAX {
             let lp = vocab.long_piece(piece);
-            if let Some(ids) = vocab.long_ids_of(&lp) {
+            if !PROBED && let Some(ids) = vocab.long_ids_of(&lp) {
                 return sink.long(ids);
             }
             return if piece.len() <= MID_LONG {
@@ -151,11 +175,29 @@ fn long_miss<const M: usize, S: Sink>(
 }
 
 pub(crate) fn encode(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key, out: &mut Vec<u32>) {
-    resolve(vocab, cache_id, piece, key, out);
+    resolve::<_, false>(vocab, cache_id, piece, key, out);
 }
 
 pub(crate) fn count(vocab: &Vocab, cache_id: u64, piece: &[u8], key: Key) -> usize {
-    resolve(vocab, cache_id, piece, key, Count)
+    resolve::<_, false>(vocab, cache_id, piece, key, Count)
+}
+
+impl Engine<'_> {
+    /// [`encode_piece`](Engine::encode_piece) of a piece that the shared
+    /// tables were found not to hold.
+    #[inline(never)]
+    pub(crate) fn encode_unheld(&self, piece: &[u8], key: (u64, u64), out: &mut Vec<u32>) {
+        let key = (key != NO_KEY).then_some(key);
+        resolve::<_, true>(self.vocab, self.cache_id, piece, key, out);
+    }
+
+    /// [`count_piece`](Engine::count_piece) of a piece that the shared tables
+    /// were found not to hold.
+    #[inline(never)]
+    pub(crate) fn count_unheld(&self, piece: &[u8], key: (u64, u64)) -> usize {
+        let key = (key != NO_KEY).then_some(key);
+        resolve::<_, true>(self.vocab, self.cache_id, piece, key, Count)
+    }
 }
 
 impl CoreBpe {

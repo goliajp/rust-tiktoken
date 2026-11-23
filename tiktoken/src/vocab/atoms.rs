@@ -123,10 +123,19 @@ impl Atoms {
         let mut heads: HashMap<Vec<u8>, Vec<Box<[u8]>>> = HashMap::new();
         let mut tails: HashMap<Vec<u8>, Vec<Box<[u8]>>> = HashMap::new();
         let mut singles = Vec::new();
+        // by code point below 0x10000: some token has bytes before the char
+        // (bit 0), after it (bit 1)
+        let mut context = vec![0u8; 0x10000];
         for (rank, t) in tokens {
             if single_char(t) {
                 singles.push((rank, t));
                 continue;
+            }
+            for p in 0..t.len() {
+                let l = char_len(t[p]);
+                if let Some(cp) = cp_at(t, p, l) {
+                    context[cp as usize] |= u8::from(p > 0) | u8::from(p + l < t.len()) << 1;
+                }
             }
             for l in 2..=4.min(t.len() - 1) {
                 for c in [&t[..l], &t[t.len() - l..]] {
@@ -194,7 +203,7 @@ impl Atoms {
             let cp = cp_at(&b[..l], 0, l).filter(|_| b[l..].iter().all(|&x| x == 0))?;
             Some((cp, a.rank))
         });
-        let walls = Walls::build(&heads, &tails, short, &get);
+        let walls = Walls::build(&heads, &tails, short, &context, &get);
         let size = (atoms.len() * 2).max(16).next_power_of_two();
         let mut slots = vec![Slot::default(); size].into_boxed_slice();
         let mut filter = Box::new([0u64; FILTER_WORDS]);

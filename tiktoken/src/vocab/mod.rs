@@ -12,6 +12,7 @@
 mod atoms;
 mod fast;
 mod filter;
+mod frags;
 mod key;
 mod long;
 mod long_derived;
@@ -92,6 +93,8 @@ pub struct Vocab {
     arena: Box<[u8]>,
     // rank by byte, for 1-byte keys; ABSENT if missing
     single: Box<[u32; 256]>,
+    // every byte is a token, so a merge result never holds ABSENT
+    every_byte: bool,
     // rank by (first byte << 8 | second byte), for 2-byte keys
     pair: Box<[u32]>,
     fast: FastTable,
@@ -167,6 +170,7 @@ impl Vocab {
             long_derived: OnceLock::new(),
             atoms: OnceLock::new(),
             arena,
+            every_byte: !single.contains(&ABSENT),
             single,
             pair,
             decoder: decoder.into_boxed_slice(),
@@ -327,6 +331,12 @@ impl Vocab {
         if let Some(t) = self.long_derived.get() {
             t.clear();
         }
+    }
+
+    /// Whether every single byte is a token.
+    #[inline(always)]
+    pub(crate) fn has_every_byte(&self) -> bool {
+        self.every_byte
     }
 
     /// Rank of a 1-byte key, or [`ABSENT`].
