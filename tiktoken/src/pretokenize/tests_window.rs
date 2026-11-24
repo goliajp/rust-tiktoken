@@ -240,6 +240,46 @@ fn long_random_texts() {
     }
 }
 
+/// ASCII texts whose runs span whole 64-bit words of a chunk: whitespace
+/// with its newlines far apart, long numbers, punctuation with newline tails,
+/// and contractions, at random offsets.
+#[test]
+fn ascii_runs_across_words() {
+    const RUNS: &[(&str, u64)] = &[
+        (" ", 140),
+        ("\n", 3),
+        ("\r\n", 2),
+        ("\t", 70),
+        ("7", 130),
+        ("word", 1),
+        ("Ab", 40),
+        (".", 90),
+        ("!?", 3),
+        ("'", 1),
+        ("'s", 1),
+        ("'re", 1),
+        ("'LL", 1),
+        ("'ve", 1),
+        ("'x", 1),
+        ("/", 2),
+    ];
+    let mut s = 0x9E37_79B9_7F4A_7C15u64;
+    for round in 0..120 {
+        let mut text = String::new();
+        let len = 300 + round * 90;
+        while text.len() < len {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            let (run, max) = RUNS[(s % RUNS.len() as u64) as usize];
+            for _ in 0..1 + (s >> 32) % max {
+                text.push_str(run);
+            }
+        }
+        check_all(&text);
+    }
+}
+
 /// Dense CJK goes to the scalar scanner a chunk (or the tail) at a time;
 /// switching back and forth must not lose or split a piece.
 #[test]
