@@ -10,7 +10,8 @@ const NONE: usize = usize::MAX;
 struct Entry {
     fingerprint: u64,
     text: Box<str>,
-    ids: Box<[u32]>,
+    // kept as encoded: shrinking it would copy the ids once more
+    ids: Vec<u32>,
     // next entry with the same fingerprint
     next: usize,
     used: bool,
@@ -18,12 +19,12 @@ struct Entry {
 
 impl Entry {
     fn cost(&self) -> usize {
-        cost(self.text.len(), self.ids.len())
+        cost(self.text.len(), self.ids.capacity())
     }
 }
 
-fn cost(text: usize, ids: usize) -> usize {
-    text + ids * size_of::<u32>() + ENTRY_OVERHEAD
+fn cost(text: usize, id_capacity: usize) -> usize {
+    text + id_capacity * size_of::<u32>() + ENTRY_OVERHEAD
 }
 
 /// Remembers whole texts and their token ids, for callers that encode the
@@ -127,7 +128,7 @@ impl<'a> TextMemo<'a> {
     }
 
     fn insert(&mut self, fp: u64, text: &str, ids: Vec<u32>) -> Option<usize> {
-        let need = cost(text.len(), ids.len());
+        let need = cost(text.len(), ids.capacity());
         if need > self.max_bytes {
             self.oversized = ids;
             return None;
@@ -138,7 +139,7 @@ impl<'a> TextMemo<'a> {
         let entry = Entry {
             fingerprint: fp,
             text: text.into(),
-            ids: ids.into_boxed_slice(),
+            ids,
             next: self.heads.get(&fp).copied().unwrap_or(NONE),
             used: false,
         };
