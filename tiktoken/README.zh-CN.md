@@ -227,7 +227,7 @@ let count = enc.count_with_special_tokens("hello<|endoftext|>world");
 ### 重复文本
 
 `TextMemo` 保存整篇文本和对应的 id。见过的文本逐字节比对后，直接返回 id 切片；没见过的
-照常编码并存下，第一次最多多花约 18%（900 字节时）。不创建它，就不会保存任何文本。
+照常编码并存下。第一次遇到时，3 KB 以上的文本最多多花约 4%；900 字节的文本最多多花计时器的一格（42 ns）。不创建它，就不会保存任何文本。
 
 ```rust
 let enc = tiktoken::get_encoding("cl100k_base").unwrap();
