@@ -5,6 +5,11 @@ All notable changes to this crate / npm package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2026-11-24
+
+Version lockstep with `tiktoken` 5.3.0, which adds `CoreBpe::memo` / `TextMemo`
+on the Rust side. The wasm package itself is unchanged.
+
 ## [5.2.1] - 2026-11-23
 
 Version lockstep with `tiktoken` 5.2.1, a documentation release: benchmark
