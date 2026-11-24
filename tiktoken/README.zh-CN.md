@@ -8,114 +8,93 @@
 
 [English](README.md) | **简体中文** | [日本語](README.ja.md)
 
-最快的 Rust BPE 分词器 — 原生比 tiktoken-rs 快 22〜83 倍（中日文散文 50〜82 倍），比 fastokens 快 1.5〜12 倍，浏览器内（wasm）比 gpt-tokenizer 快 5.8〜7.0 倍。手写扫描器同时覆盖 ASCII 与 CJK，词表按 key 长度分层，重复片段整片记忆。兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，并支持**所有主流 LLM 分词器** — OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax。
+tiktoken 是速度最快的 Rust BPE 分词器。原生编码速度是 tiktoken-rs 的 22〜83 倍（中日文文章为 50〜82 倍）、fastokens 的 1.5〜12 倍。在浏览器中，wasm 版本的编码速度是 gpt-tokenizer 的 5.8〜7.0 倍。分词器用手写扫描器处理 ASCII 和 CJK，按键长组织词表，并缓存整个片段的编码结果供重复使用。本库兼容 OpenAI [tiktoken](https://github.com/openai/tiktoken)，支持所有主流大语言模型的分词器，包括 OpenAI、Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM 和 MiniMax。
 
 ## 特性
 
-- **多厂商**：20 种编码，覆盖 8 家厂商（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
-- **高性能**：每套编码都有查表实现的预分词器（运行时不用正则），cl100k 与 o200k 系列用 SIMD 判定片段起点，词表按 key 长度分层，重复片段整片记忆且跨线程共享，混合 BPE 合并
-- **并行编码**：32 KiB 及以上的文本自动用多个线程编码，线程池内置、只依赖 std
-- **费用估算**：覆盖 11 家厂商共 153 个模型
-- **体积紧凑**：20 份词表共 7.8 MB 编译期嵌入，且可按词表退订 —— 只要 cl100k 的构建仅带 373 KB 数据，cargo 也只下载启用的厂商的数据
-- **零分配计数**：`count()` 不分配 token 向量
+- **多厂商**：8 家厂商的 20 种编码（OpenAI、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax）
+- **快**：每种编码的预分词都靠查表完成，运行时不用正则；cl100k 和 o200k 系列用 SIMD 找片段起点；词表按 key 的长度分层；整个片段的编码结果在线程间共享；BPE 合并用混合算法
+- **并行编码**：32 KiB 及以上的文本自动分给多个线程编码，用的是内置线程池，只依赖标准库
+- **费用估算**：覆盖 11 家厂商的 153 个模型
+- **体积小**：20 份词表一共 7.8 MB，编译时内嵌，每份都能单独去掉。只要 cl100k 的构建只带 373 KB 数据，cargo 也只下载你启用的厂商的数据
+- **计数不分配内存**：`count()` 不构造 token 向量
 
 ## 性能
 
-计时前先断言各实现的 token 输出完全一致；每个数字是一次完整处理，预热后取
-9 轮中位数。语料在所有基准衣架中逐字节相同（`bench-compare/`、
-`benches/bench_python.py`、`web/bench/`）。
+测试程序在计时前逐一核对各实现输出的 token，确认完全一致后才开始计时。每轮处理一次完整语料，表中耗时取预热后 9 轮测量的中位数。各测试程序（`bench-compare/`、`benches/bench_python.py`、`web/bench/`）使用的语料逐字节相同。
 
-#### 原生 — Apple M4 Pro Mac mini、单线程、`encode`
+#### 原生单线程 `encode` 性能（Apple M4 Pro Mac mini）
 
 `TIKTOKEN_THREADS=1 cargo run --release -p bench-compare`
 
-| 语料 | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | vs rs | vs Python |
+| 语料 | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | 相对 tiktoken-rs 的速度倍数 | 相对 Python 的速度倍数 |
 |---|---|---|---|---|---|
-| 短文本 (13 B) | 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
-| 中等文本 (900 B) | 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
-| 英文文本 (45 KB) | 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
-| 中文散文 (4.3 KB) | 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
-| 日文散文 (4.6 KB) | 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
-| 多语混排 ×50 (4.5 KB) | 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
-| 对抗语料：CJK 无重复 (3.9 KB) | 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
-| 代码 (3.9 KB) | 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
+| 短文本（13 B） | 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
+| 中等文本（900 B） | 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
+| 英文文章（45 KB） | 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
+| 中文文章（4.3 KB） | 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
+| 日文文章（4.6 KB） | 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
+| CJK 混排 ×50（4.5 KB） | 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
+| 无重复片段的 CJK 对抗语料（3.9 KB） | 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
+| 代码（3.9 KB） | 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
 
-o200k_base 单线程比 tiktoken-rs 快 12〜80 倍。`count()` 在短文本上比 `encode`
-最多快 36%，长文本上两者相当 —— 它从不分配 id 向量。用默认线程数时，45 KB
-文本只要 6.2 µs。
+使用 o200k_base 时，本库的单线程速度是 tiktoken-rs 的 12〜80 倍。`count()` 无需分配 ID 向量，处理短文本时比 `encode` 最多快 36%，处理长文本时两者速度相近。使用默认线程数时，编码 45 KB 的文本耗时 6.2 µs。
 
-#### 与最快的其他实现对比 — Apple M4 Pro Mac mini、单线程、cl100k_base、`encode`
+#### 各高性能实现的单线程 `encode` 耗时（Apple M4 Pro Mac mini，cl100k_base）
 
-我们找到的、有可能更快的实现，都在同一个进程里用同样的输入测，先逐个 id
-核对一致；这套测试程序独立于 `bench-compare`。数字是 3 遍的中位数，
-`tiktoken` 用的是 crates.io 上的 5.2.0。
+我们将找到的所有可能更快的实现纳入比较，使用独立于 `bench-compare` 的测试程序。在同一进程中，各实现处理相同的输入，计时前同样逐一核对 token ID。表中耗时取 3 次测量的中位数，`tiktoken` 使用 crates.io 发布的 5.2.0 版。
 
 | 语料 | **tiktoken** | [fastokens](https://crates.io/crates/fastokens) 0.3.6 | [HF tokenizers](https://crates.io/crates/tokenizers) 1.0-rc.5 | [toks](https://github.com/actual-computer/toks) 0.3.3 | [toktok-rs](https://crates.io/crates/toktok-rs) 0.5 | [magi-tokenizer](https://crates.io/crates/magi-tokenizer) 0.1 | [bpe-openai](https://crates.io/crates/bpe-openai) 0.3 |
 |---|---|---|---|---|---|---|---|
-| 短文本 (13 B) | **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
-| 中等文本 (900 B) | **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
-| 英文文本 (45 KB) | **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
-| 中文散文 (4.3 KB) | **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
-| 日文散文 (4.6 KB) | **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
-| 多语混排 ×50 (4.5 KB) | **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
-| 对抗语料：CJK 无重复 (3.9 KB) | **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
-| 代码 (3.9 KB) | **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
-| 英文书籍 (200 KB) | **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
-| Rust 源码 (100 KB) | **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
+| 短文本（13 B） | **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
+| 中等文本（900 B） | **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
+| 英文文章（45 KB） | **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
+| 中文文章（4.3 KB） | **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
+| 日文文章（4.6 KB） | **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
+| CJK 混排 ×50（4.5 KB） | **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
+| 无重复片段的 CJK 对抗语料（3.9 KB） | **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
+| 代码（3.9 KB） | **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
+| 英文书籍（200 KB） | **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
+| Rust 源码（100 KB） | **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
 
-- **fastokens**：单线程比本库慢 1.5〜12 倍。默认线程数下，英文书籍它用 50.3 µs、
-  Rust 源码 36.3 µs，本库是 16.7 µs 和 12.5 µs（分别快 3.0 倍和 2.9 倍）
-- **短文本**：13 字节那一行，magi-tokenizer 与本库相差 4〜12%
-- **首次遇到的文本**（缓存清空、单线程）：比 fastokens 快 1.7〜6.2 倍，英文书籍 228 µs
-  对 392 µs；13 字节以上的文本比其他库至少快 1.17 倍；13 字节时几个库都落在计时器的
-  42 ns 分辨率上，算平手。默认线程数下的英文书籍，fastokens 的工作线程保留缓存时，
-  本库领先 8〜20%
-- **toks** 列出的是关闭整篇文本记忆的成绩。打开后，再次编码*同一篇*文本时它直接返回
-  存下的结果，比本库重新编码快 3〜20 倍。与这种模式对应的是本库的
-  [`CoreBpe::memo`](#重复文本)：直接返回存下的 id 时，在这组语料上（cl100k 和 o200k）比 toks
-  的记忆快 1.3〜6 倍；像 toks 那样把 id 复制到缓冲区时，最差慢 10%（45 KB），最好快 5 倍（13 字节）
-- 其余试过的库 —— tiktoken-rs、tokensim、riptoken、kitoken、basetenkenizer、
-  Hugging Face tokenizers 0.23 —— 每一行都至少慢 3.4 倍（Hugging Face 0.23 和
-  kitoken 在 Rust 源码上输出的 id 不一致，那一行没有计时）。Gigatoken 只能从 Python
-  调用，含调用开销慢 1.4〜11 倍
+- 本库的单线程速度是 fastokens 的 1.5〜12 倍。使用默认线程数时，fastokens 编码英文书籍耗时 50.3 µs，编码 Rust 源码耗时 36.3 µs。本库分别耗时 16.7 µs 和 12.5 µs，速度分别是 fastokens 的 3.0 倍和 2.9 倍
+- 编码 13 字节的字符串时，magi-tokenizer 与本库的耗时相差 4%〜12%
+- 清空缓存后首次以单线程编码时，本库的速度是 fastokens 的 1.7〜6.2 倍（英文书籍分别耗时 228 µs 和 392 µs）。输入超过 13 字节时，本库的速度至少是其余各库的 1.17 倍。输入恰好为 13 字节时，有几个库的耗时都等于计时器的最小刻度（42 ns）。使用默认线程数编码英文书籍时，如果 fastokens 的 worker 保留了缓存，本库仍快 8%〜20%
+- 表中 toks 的成绩使用了关闭全文缓存的配置。启用缓存后，toks 再次处理相同文本时会直接返回已有结果，速度是本库重新编码的 3〜20 倍。本库的 [`CoreBpe::memo`](#重复文本) 也支持全文缓存。在这组语料上使用 cl100k 和 o200k 时，直接返回缓存的 ID，速度是 toks 全文缓存的 1.3〜6 倍。如果和 toks 一样将 ID 复制到缓冲区，本库处理 45 KB 文本时比 toks 慢 10%，处理 13 字节文本时速度是 toks 的 5 倍，其他结果介于两者之间
+- 测试还涵盖 tiktoken-rs、tokensim、riptoken、kitoken、basetenkenizer 和 Hugging Face tokenizers 0.23。在每项有计时结果的测试中，本库的速度至少是这些库的 3.4 倍。Hugging Face 0.23 和 kitoken 处理 Rust 源码时输出的 ID 不一致，因此这项测试没有记录两者的耗时。Gigatoken 只能从 Python 调用，计入调用开销后，本库的速度是它的 1.4〜11 倍
 
-#### 浏览器内 — Apple M4 Pro Mac mini、Chromium
+#### 浏览器性能（Apple M4 Pro Mac mini，Chromium）
 
-在 `web/` 目录 `npm run bench` —— 本 crate 编译为 wasm，对比另一个 wasm 分词器和两个
-主流 JavaScript 分词器。各列都是 `encode`。
+在 `web/` 目录运行 `npm run bench`，即可比较本 crate 的 wasm 版本、另一款 wasm 分词器和两款主流 JavaScript 分词器。表中各列均为 `encode` 的耗时。
 
 | 语料 | tiktoken-fast 0.1 (wasm) | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
 |---|---|---|---|---|
-| 中文散文 (4.3 KB) | 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
-| 日文散文 (4.6 KB) | 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
-| 多语混排 ×50 (4.5 KB) | 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
-| 对抗语料：CJK 无重复 (3.9 KB) | 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
-| 英文文本 (45 KB) | 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
-| 代码 (3.9 KB) | 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
+| 中文文章（4.3 KB） | 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
+| 日文文章（4.6 KB） | 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
+| CJK 混排 ×50（4.5 KB） | 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
+| 无重复片段的 CJK 对抗语料（3.9 KB） | 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
+| 英文文章（45 KB） | 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
+| 代码（3.9 KB） | 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
 
-两份多语混排语料在 tiktoken-fast 见过之后，差距缩小到 10% 左右；首次遇到时它慢
-1.8〜6.6 倍。在 Safari 里，本库比 gpt-tokenizer 快 3.3〜7.9 倍，比 tiktoken-fast
-快 1.5〜2.2 倍。
+处理两组混合文字语料时，tiktoken-fast 如果已经编码过相同的输入，与本库的速度差距就在约 10% 以内。首次处理这些语料时，本库的速度是它的 1.8〜6.6 倍。在 Safari 中，本库的速度是 gpt-tokenizer 的 3.3〜7.9 倍、tiktoken-fast 的 1.5〜2.2 倍。
 
-对抗语料不含任何重复片段，各实现的记忆化全部失效，领先依然成立。
+对抗语料中的每个片段都只出现一次，各实现都无法复用缓存的结果。本库在这组语料上同样更快。
 
 <details>
 <summary>为什么更快？</summary>
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| 预分词 | 每套编码都用查表实现的扫描器，Unicode 表按切分规则所依据的 Unicode 版本生成；cl100k 与 o200k 系列用 SIMD（NEON / SSE2 / wasm simd128）一次判定 64 字节内的片段起点 | 总是走正则 | 总是走正则 |
-| 正则引擎 | 运行时不用（`regex` 只是开发依赖，作为测试扫描器的对照实现） | `fancy-regex`（回溯） | `regex` 经 PyO3 + FFI 开销 |
-| 词表查找 | 按 key 长度分层：15 字节以内的 key 压缩存进一张开放寻址表（每个缓存行两个槽），更长的用带哈希 tag 的 arena 槽，1〜2 字节另有直查表 | `HashMap<Vec<u8>>`（20 万次分配） | PyO3 背后的 Rust `HashMap` |
-| 重复片段 | 不在词表里的片段，合并结果写进共享的查找表，所有线程都能复用；长片段另有线程局部和共享的缓存 | 无 | 无 |
-| BPE 合并 | 混合：栈上线性扫描（短片段）+ 堆（长片段）；查不到的短片段按 token id 成批合并 | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
+| 预分词 | 所有编码都用扫描器查 Unicode 表，生成表时采用各切分规则对应的 Unicode 版本。cl100k 和 o200k 系列用 SIMD（NEON、SSE2、wasm simd128）每次检查 64 字节，找出片段起点 | 每次都执行正则表达式 | 每次都执行正则表达式 |
+| 正则引擎 | 运行时无需正则引擎（`regex` 仅作开发依赖，用于在测试中核对扫描结果） | `fancy-regex`（支持回溯） | 通过 PyO3 调用 `regex`，有 FFI 开销 |
+| 词表查找 | 按键长分层。最多 15 字节的键紧凑存放在同一张开放寻址表中，每个缓存行有两个槽位。更长的键存入带哈希标记的 arena 槽位。1〜2 字节的键可直接按索引查表 | `HashMap<Vec<u8>>`（20 万次分配） | 通过 PyO3 访问 Rust `HashMap` |
+| 重复片段 | 分词器将词表以外的片段合并后，把结果写入共享查找表，供所有线程复用。长片段另有线程局部缓存和共享缓存 | 无 | 无 |
+| BPE 合并 | 短片段在栈上线性扫描，长片段用堆处理。查表未命中的短片段按 token ID 成批合并 | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
 | 零分配 `count()` | 有 | 无 | 无 |
 
-扫描器由属性测试（每轮数十万条随机输入）和短字符串穷举钉死在 `regex` crate 的语义上；每套编码由
-53,275 组差分 fixture 钉死在厂商自己的分词器上。
+属性测试每次运行都生成数十万条随机输入，配合短字符串穷举测试，核对扫描器与 `regex` crate 的输出是否一致。另有 53,275 组差分测试用例，逐种编码核对本库与厂商分词器的输出。
 
-基准测试源码：[`benches/`](benches/)、[`../bench-compare/`](../bench-compare/)。
-可通过 `cargo bench` / `cargo run -p bench-compare` 复现。
+基准测试源码见 [`benches/`](benches/) 和 [`../bench-compare/`](../bench-compare/)。运行 `cargo bench` 或 `cargo run -p bench-compare` 可复现测试。
 
 </details>
 
@@ -126,11 +105,11 @@ o200k_base 单线程比 tiktoken-rs 快 12〜80 倍。`count()` 在短文本上�
 tiktoken = "5"
 ```
 
-运行时依赖只有 `ruzstd` 和启用的词表数据 crate。早期版本的 `parallel` 特性仍然保留，写了它的清单照样能构建，但它不再有任何作用：不开它，长文本也会并行编码。
+运行时只依赖 `ruzstd` 和已启用的词表数据 crate。为兼容旧的依赖声明，本库保留了早期版本的 `parallel` feature。该 feature 已无实际作用，长文本会自动并行编码。
 
 ### 选择词表
 
-20 种编码默认全开（7.8 MB 词表数据）。关掉默认特性、只点名用到的，二进制里就只带这些：
+默认启用全部 20 种编码，词表数据共占 7.8 MB。关闭默认 feature 后，可按需启用编码，这样二进制文件只包含选定的词表。
 
 ```toml
 # 只要 GPT-4o / GPT-5 —— 词表数据 815 KB 而非 7.8 MB
@@ -140,13 +119,13 @@ tiktoken = { version = "5", default-features = false, features = ["vocab-o200k_b
 tiktoken = { version = "5", default-features = false, features = ["vocab-openai"] }
 ```
 
-实测 `examples/count_tokens`（release，Linux x86_64）：全词表 9,463,280 字节，仅 `vocab-cl100k_base` 2,550,256 字节。
+在 Linux x86_64 上以 release 模式构建 `examples/count_tokens`，包含全部词表的可执行文件为 9,463,280 字节，只启用 `vocab-cl100k_base` 时为 2,550,256 字节。
 
-词表数据按厂商分在各自的 crate 里（`tiktoken-vocab-openai`、`-meta`、`-deepseek`、`-qwen`、`-mistral`、`-moonshot`、`-zhipu`、`-minimax`），由上面的特性引入，所以 cargo 只下载你启用的厂商：只用 OpenAI 约 1.5 MB，全部是 8.0 MB。
+每家厂商的词表数据单独存放在一个 crate 中（`tiktoken-vocab-openai`、`-meta`、`-deepseek`、`-qwen`、`-mistral`、`-moonshot`、`-zhipu`、`-minimax`）。上述 feature 会引入对应的 crate，Cargo 只下载所选厂商的数据。只启用 OpenAI 时下载量约为 1.5 MB，全部启用时为 8.0 MB。
 
-没编进来的编码就是不存在：`list_encodings()` 不列出它，`get_encoding()` 返回 `None`。`pricing` 表与词表无关，所以只做费用估算时可以一个 `vocab-*` 都不开。
+如果构建时未包含某份词表，`list_encodings()` 就不会列出对应的编码，`get_encoding()` 查询该编码时会返回 `None`。`pricing` 表独立于词表，只需估算费用时，可以关闭所有 `vocab-*` feature。
 
-厂商组：`vocab-openai`、`vocab-meta`、`vocab-deepseek`、`vocab-qwen`、`vocab-mistral`、`vocab-moonshot`、`vocab-zhipu`、`vocab-minimax`，以及默认的 `vocabs-all`。逐词表的 feature 见下表。
+按厂商启用词表可使用 `vocab-openai`、`vocab-meta`、`vocab-deepseek`、`vocab-qwen`、`vocab-mistral`、`vocab-moonshot`、`vocab-zhipu` 或 `vocab-minimax`。默认启用的 `vocabs-all` 包含所有词表。下表列出了各份词表对应的 feature。
 
 ## 快速开始
 
@@ -168,25 +147,25 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 
 ## 支持的编码
 
-`数据`列是该编码的 feature 给二进制增加的词表字节。共用同一份数据文件的编码第二次不再计费；标 `+ 基座` 的三个是秩对齐扩展，只存自己的尾部。
+`数据`列表示启用该编码的 feature 后，词表会占用多少额外的二进制空间。多个编码共用同一份数据文件时，只计入一次。标有 `+ 基座` 的三份词表沿用基础词表的 token 排名，只需存储末尾新增的部分。
 
 | 编码 | 厂商 | Feature | 数据 | 适用模型 |
 |---|---|---|---|---|
-| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o, GPT-4.1, GPT-4.5, GPT-5–5.6 (incl. Sol/Terra/Luna), GPT-6.x（推定，官方未公布）, o1, o3, o4-mini |
+| `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o、GPT-4.1、GPT-4.5、GPT-5〜5.6（含 Sol/Terra/Luna）、GPT-6.x（推定，官方未公布）、o1、o3、o4-mini |
 | `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony 对话格式） |
-| `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, text-embedding-*, davinci-002, babbage-002 |
-| `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + 基座 | text-davinci-002/003, code-davinci-*, code-cushman-* |
-| `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*, code-davinci-edit-* |
-| `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 时代：davinci, curie, babbage, ada |
+| `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4、GPT-4 Turbo、GPT-3.5 Turbo、text-embedding-*、davinci-002、babbage-002 |
+| `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + 基座 | text-davinci-002/003、code-davinci-*、code-cushman-* |
+| `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*、code-davinci-edit-* |
+| `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 时代：davinci、curie、babbage、ada |
 | `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` 的别名） |
-| `llama3` | Meta | `vocab-llama3` | 111 KB + 基座 | Llama 3, 3.1, 3.2, 3.3 |
-| `llama4` | Meta | `vocab-llama4` | 816 KB | Llama 4 Scout / Maverick, Muse |
-| `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3, R1 |
-| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash, V4.1 Flash（V3 词表 + V4 特殊 token） |
-| `qwen2` | 阿里巴巴 | `vocab-qwen2` | 564 KB | Qwen 2.5, Qwen 3 |
-| `qwen3_5` | 阿里巴巴 | `vocab-qwen3_5` | 989 KB | Qwen 3.5 – 3.8, Qwen 4（推定，官方未公布） |
-| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral, Mixtral, Large 3, Small 4（Tekken 分词器） |
-| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4 (Tekken v15) |
+| `llama3` | Meta | `vocab-llama3` | 111 KB + 基座 | Llama 3、3.1、3.2、3.3 |
+| `llama4` | Meta | `vocab-llama4` | 816 KB | Llama 4 Scout / Maverick、Muse |
+| `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3、R1 |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash、V4.1 Flash（V3 词表 + V4 特殊 token） |
+| `qwen2` | 阿里巴巴 | `vocab-qwen2` | 564 KB | Qwen 2.5、Qwen 3 |
+| `qwen3_5` | 阿里巴巴 | `vocab-qwen3_5` | 989 KB | Qwen 3.5〜3.8、Qwen 4（推定，官方未公布） |
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral、Mixtral、Large 3、Small 4（Tekken 分词器） |
+| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4（Tekken v15） |
 | `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
 | `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1（K2 词表 + K3 特殊 token） |
 | `glm4` | 智谱 | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
@@ -226,20 +205,18 @@ let count = enc.count_with_special_tokens("hello<|endoftext|>world");
 
 ### 重复文本
 
-`TextMemo` 保存整篇文本和对应的 id。见过的文本逐字节比对后，直接返回 id 切片；没见过的
-照常编码并存下。第一次遇到时，3 KB 以上的文本最多多花约 4%；900 字节的文本最多多花计时器的一格（42 ns）。不创建它，就不会保存任何文本。
+`TextMemo` 缓存完整文本及其 token ID。它逐字节核对输入，命中后以切片形式返回已有的 ID；未命中时则编码并保存结果。首次编码时，3 KB 及以上的文本最多增加约 4% 的耗时，900 字节的文本最多增加一个计时器刻度（42 ns）。不创建 `TextMemo`，就不会保存任何文本和 id。
 
 ```rust
 let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-let mut memo = enc.memo(64 << 20); // at most about 64 MiB of texts and ids
+let mut memo = enc.memo(64 << 20); // 文本和 id 合计最多约 64 MiB
 let first = memo.encode("a long system prompt").to_vec();
-assert_eq!(memo.encode("a long system prompt"), first); // answered from the memo
+assert_eq!(memo.encode("a long system prompt"), first); // 直接从 memo 取结果
 ```
 
 ### 并行编码
 
-`encode`、`count`、`encode_with_special_tokens` 和 `count_with_special_tokens`
-遇到 32 KiB 及以上的文本时，会把它切成若干块，交给进程内共用的工作线程池编码；线程池在第一次这样调用时创建。输出与单线程编码完全一致。
+`encode`、`count`、`encode_with_special_tokens` 和 `count_with_special_tokens` 会把 32 KiB 及以上的文本分块，交给整个进程共用的 worker 线程池编码。首次处理这类输入时才创建线程池，输出与单线程编码完全一致。
 
 ```rust
 let enc = tiktoken::get_encoding("cl100k_base").unwrap();
@@ -252,11 +229,11 @@ assert_eq!(enc.encode(&text), tokens);
 tiktoken::set_parallelism(0);
 ```
 
-- 默认线程数是性能核的数量（系统不区分核类型时为全部核数）；环境变量 `TIKTOKEN_THREADS` 是正整数时以它为准。
-- `TIKTOKEN_THREADS=1` 或 `set_parallelism(1)` 关闭并行：每次调用都在调用方线程上执行，不会启动任何工作线程。
-- 同一时间只有一个并行调用。发现线程池正忙的调用（比如应用本身已经在多个线程上编码）不会等待，直接在自己的线程上执行，所以进程里用于编码的线程不会超过设定的数量。
-- `encode_parallel` 现在等同于 `encode`，只为兼容旧代码保留，不再需要 `parallel` 特性。
-- `wasm32` 上没有线程，所有调用都是单线程。
+- 默认线程数等于性能核数量。如果系统不区分核心类型，则使用全部核心。可将环境变量 `TIKTOKEN_THREADS` 设为正整数来指定线程数
+- 设置 `TIKTOKEN_THREADS=1` 或调用 `set_parallelism(1)` 可关闭并行编码。此后每次调用都在调用方线程上执行，不会启动 worker 线程
+- 线程池一次只处理一个并行调用。如果线程池正忙，例如应用已经从多个线程发起编码，新调用会直接在调用方线程上执行，无需等待。这样进程中用于编码的线程数就不会超过设定值
+- 为兼容已有代码，本库保留了 `encode_parallel`。它与 `encode` 的行为相同，无需启用 `parallel` feature
+- `wasm32` 没有线程支持，所有调用都以单线程执行
 
 ### 费用估算
 
@@ -288,12 +265,11 @@ assert!(matches!(r.matched, pricing::Match::Normalized { .. }));
 assert!(pricing::estimate_cost("claude-haiku-4-5-20251001", 1_000, 1_000).is_some());
 ```
 
-支持 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、
-智谱、MiniMax、Voyage 共 153 个模型。
+费用估算支持 153 个模型，涵盖 OpenAI、Anthropic、Google、Meta、DeepSeek、阿里巴巴、Mistral、Moonshot、智谱、MiniMax 和 Voyage。
 
 ## WebAssembly
 
-npm 包 [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)，可直接在浏览器和 Node.js 中使用。包用 WebAssembly SIMD 构建，需要 Chrome 91、Firefox 89 或 Safari 16.4 及以上。
+npm 提供 [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)。该包使用 WebAssembly SIMD，支持的最低浏览器版本为 Chrome 91、Firefox 89 和 Safari 16.4。
 
 ```bash
 npm install @goliapkg/tiktoken-wasm
@@ -341,8 +317,10 @@ wasm-pack build --target web --release --scope goliapkg
 
 ## 许可证
 
-代码采用 [MIT](LICENSE-MIT) 或 [Apache-2.0](LICENSE-APACHE) 双重许可，由你任选其一。
+代码采用双重许可，可任选 [MIT](LICENSE-MIT) 或 [Apache-2.0](LICENSE-APACHE)。
 
-内嵌的词表不在此列，各自沿用发布方的许可证：[LICENSE-3RD-PARTY](LICENSE-3RD-PARTY) 列出每套词表的来源和许可证，[`licenses/`](licenses/) 收录全文，[NOTICE](NOTICE) 收录这些许可证要求的署名。其中一些许可证对使用附有条件：Llama 许可证（月活超过 7 亿的产品要向 Meta 另行申请许可）、`mistral_v15` 的 Mistral 许可证（经营「Model as a Service」业务的要另签商业许可）、Kimi 和 MiniMax 在规模超过门槛时的署名展示条款，以及 DeepSeek 的使用限制条款。不启用某套词表的 `vocab-*` 特性，构建产物里就不含这套词表。
+内嵌词表不在上述许可范围内，各自沿用发布方的许可证。[LICENSE-3RD-PARTY](LICENSE-3RD-PARTY) 列出了每份词表的来源和许可证，[`licenses/`](licenses/) 收录了许可证全文，[NOTICE](NOTICE) 列出了各许可证要求的署名。
+
+部分词表有额外的使用条件。根据 Llama 许可证，月活跃用户超过 7 亿的产品须向 Meta 取得许可。Mistral 要求提供模型即服务（Model-as-a-Service）的企业取得 `mistral_v15` 的商业许可。Kimi 和 MiniMax 的许可证对超过一定规模的使用者有展示方面的要求。DeepSeek 的许可证对用途有限制。构建时关闭某份词表的 `vocab-*` feature，即可从产物中排除该词表。
 
 Built with Llama.
