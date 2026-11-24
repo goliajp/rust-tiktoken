@@ -253,8 +253,8 @@ module.exports = {
 
 代码采用双重许可，可任选 [MIT](LICENSE-MIT) 或 [Apache-2.0](LICENSE-APACHE)。
 
-内嵌词表各自遵循发布方的许可证。[LICENSE-3RD-PARTY](LICENSE-3RD-PARTY) 列出了每份词表的来源和许可证，[`licenses/`](licenses/) 收录了许可证全文，[NOTICE](NOTICE) 列出了各许可证要求的署名。
+内嵌词表不在上述许可范围内，各自沿用发布方的许可证。[LICENSE-3RD-PARTY](LICENSE-3RD-PARTY) 列出了每份词表的来源和许可证，[`licenses/`](licenses/) 收录了许可证全文，[NOTICE](NOTICE) 列出了各许可证要求的署名。
 
-部分词表有额外的使用条件。根据 Llama 许可证，月活跃用户超过 7 亿的产品须向 Meta 取得许可。Mistral 要求提供模型即服务（Model-as-a-Service）的企业取得 `mistral_v15` 的商业许可。Kimi 和 MiniMax 的许可证规定，超过一定规模时须展示署名。DeepSeek 的许可证对用途有限制。构建时关闭某份词表的 `vocab-*` feature，即可从产物中排除该词表。
+部分词表有额外的使用条件。根据 Llama 许可证，月活跃用户超过 7 亿的产品须向 Meta 取得许可。Mistral 要求提供模型即服务（Model-as-a-Service）的企业取得 `mistral_v15` 的商业许可。Kimi 和 MiniMax 的许可证对超过一定规模的使用者有展示方面的要求。DeepSeek 的许可证对用途有限制。构建时关闭某份词表的 `vocab-*` feature，即可从产物中排除该词表。
 
 Built with Llama.

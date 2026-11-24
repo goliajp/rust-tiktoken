@@ -31,7 +31,7 @@ rust-tiktoken 提供速度最快的 Rust BPE 分词器及其 WebAssembly 绑定�
 
 - **运行时不用正则**：每种编码的切分规则都由查表的扫描器实现，表由 Unicode 数据生成。cl100k 和 o200k 系列用 SIMD（NEON、SSE2、wasm simd128）一次判断 64 字节里哪些位置是片段起点。`regex` crate 只在测试里用来核对扫描器的结果
 - **20 种编码、153 个模型、11 家厂商**：OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2〜3.8、Mistral（含 Large 4）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3。另外可以按美元估算费用，估算还覆盖 Anthropic 和 Google 的模型
-- **重复文本**：`enc.memo(max_bytes)` 返回一个 `TextMemo`，需要时才创建。遇到见过的文本，它直接从内存给出结果：一本 200 KB 的书重新编码要 110 µs，从 `TextMemo` 取只要 3.5 µs。`encode` 本身不保存任何文本
+- **重复文本**：`enc.memo(max_bytes)` 返回一个 `TextMemo`，需要时才创建。遇到见过的文本，它直接从内存给出结果：一本 200 KB 的书重新编码要 110 µs，从 `TextMemo` 取只要 3.5 µs。`encode` 本身什么都不保存
 - **小而可移植**：20 份词表一共 7.8 MB，编译时内嵌，每份都可以单独去掉。只要 cl100k 的构建只带 373 KB 词表数据，cargo 也只下载你启用的厂商的数据。词表按 key 的长度分层，整个片段的编码结果会被缓存，BPE 合并在线性扫描和堆之间切换。长文本由内置线程池分给多个线程编码，线程池只用标准库。`count()` 不分配内存。全部用 Rust 写成，没有 C 依赖，运行时只依赖 `ruzstd` 和词表数据 crate。wasm 构建不依赖其他文件
 
 各 crate 的 README 提供完整的 API 文档、支持的模型列表和基准测试结果，见 [`tiktoken/`](tiktoken/README.md) 和 [`tiktoken-wasm/`](tiktoken-wasm/README.md)。
@@ -110,8 +110,8 @@ git push origin master develop vX.Y.Z tiktoken-wasm-vX.Y.Z
 
 代码采用双重许可，可任选 [MIT](LICENSE-MIT) 或 [Apache-2.0](LICENSE-APACHE)。
 
-内嵌词表各自遵循发布方的许可证。[LICENSE-3RD-PARTY](tiktoken/LICENSE-3RD-PARTY) 列出了每份词表的来源和许可证，[`licenses/`](tiktoken/licenses/) 收录了许可证全文，[NOTICE](tiktoken/NOTICE) 列出了各许可证要求的署名。
+内嵌词表不在上述许可范围内，各自沿用发布方的许可证。[LICENSE-3RD-PARTY](tiktoken/LICENSE-3RD-PARTY) 列出了每份词表的来源和许可证，[`licenses/`](tiktoken/licenses/) 收录了许可证全文，[NOTICE](tiktoken/NOTICE) 列出了各许可证要求的署名。
 
-部分词表有额外的使用条件。根据 Llama 许可证，月活跃用户超过 7 亿的产品须向 Meta 取得许可。Mistral 要求提供模型即服务（Model-as-a-Service）的企业取得 `mistral_v15` 的商业许可。Kimi 和 MiniMax 的许可证规定，超过一定规模时须展示署名。DeepSeek 的许可证对用途有限制。构建时关闭某份词表的 `vocab-*` feature，即可从产物中排除该词表。
+部分词表有额外的使用条件。根据 Llama 许可证，月活跃用户超过 7 亿的产品须向 Meta 取得许可。Mistral 要求提供模型即服务（Model-as-a-Service）的企业取得 `mistral_v15` 的商业许可。Kimi 和 MiniMax 的许可证对超过一定规模的使用者有展示方面的要求。DeepSeek 的许可证对用途有限制。构建时关闭某份词表的 `vocab-*` feature，即可从产物中排除该词表。
 
 Built with Llama.
