@@ -31,6 +31,7 @@ The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatibl
 
 - **No regex at runtime** — every encoding's split pattern is reproduced by a table-driven scanner built on generated Unicode tables, and the cl100k and o200k families decide piece starts 64 bytes at a time with SIMD (NEON, SSE2, wasm simd128). The `regex` crate is only the reference the scanners are tested against.
 - **20 encodings · 153 models · 11 providers** — OpenAI (GPT-4/4o/4.1/4.5, GPT-5.x, GPT-6.x, o1/o3/o4-mini, gpt-oss), Llama 3/4, DeepSeek V3/V4, Qwen 2–3.8, Mistral (incl. Large 4), Kimi K2/K3, GLM-4/5, MiniMax M2/M3; plus USD cost estimation (Anthropic & Google included for pricing).
+- **Repeated texts** — `enc.memo(max_bytes)` gives an opt-in `TextMemo` that answers a text it has seen before from memory (3.5 µs for a 200 KB book instead of 110 µs); `encode` itself keeps nothing.
 - **Lean & portable** — all 20 vocabularies embedded in 7.8 MB and opt-out per vocabulary (a cl100k-only build carries 373 KB, and cargo only downloads the vendors you enable), key-size-layered vocabulary with whole-piece memoisation, hybrid linear/heap BPE merge, long texts encoded on several threads by a built-in std-only pool, allocation-free `count()`, pure Rust with zero C dependencies (runtime dependencies: `ruzstd` and the vocabulary data crates), and a self-contained wasm build.
 
 Full API, supported-model tables, and benchmarks live in the per-crate READMEs: **[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**.

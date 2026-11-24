@@ -250,7 +250,8 @@ let count = enc.count_with_special_tokens("hello<|endoftext|>world");
 
 A `TextMemo` keeps whole texts and their ids. A text seen before is compared byte for
 byte and its ids are returned as a slice; anything else is encoded and kept, which costs
-up to about 18% extra (900 bytes) the first time. Nothing is kept unless you create one.
+at most about 4% extra the first time on texts of 3 KB and more (on 900 bytes, at most one
+42 ns timer tick). Nothing is kept unless you create one.
 
 ```rust
 let enc = tiktoken::get_encoding("cl100k_base").unwrap();
