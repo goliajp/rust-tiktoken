@@ -71,7 +71,10 @@ o200k_base はシングルスレッドで tiktoken-rs の 12〜80 倍です。`c
   1.17 倍以上高速。13 バイトでは複数のライブラリがタイマーの分解能 42 ns で並ぶ。既定の
   スレッド数の書籍では、fastokens のワーカーがキャッシュを保持している場合の差は 8〜20%
 - **toks** は全文メモを無効にした値。有効にすると、*同じ*テキストの再エンコードでは保存済みの
-  結果を返すため、本クレートの再エンコードより 3〜20 倍速い
+  結果を返すため、本クレートの再エンコードより 3〜20 倍速い。これに対応するのが
+  [`CoreBpe::memo`](#繰り返しのテキスト)で、保存済みの id をそのまま返す場合、このコーパス群
+  （cl100k と o200k）では toks のメモより 1.3〜6 倍速い。toks のように id をバッファへ
+  コピーする場合は、10% 遅い（45 KB）から 5 倍速い（13 バイト）まで幅がある
 - そのほかに試したライブラリ（tiktoken-rs、tokensim、riptoken、kitoken、basetenkenizer、
   Hugging Face tokenizers 0.23）はすべての行で 3.4 倍以上遅い（Hugging Face 0.23 と kitoken は Rust ソースで
   id が一致せず、その行は計測していない）。Python からのみ呼べる
@@ -222,6 +225,19 @@ let count = enc.count("素早い茶色の狐が怠けた犬を飛び越えた。
 
 // 特殊トークン認識付きカウント
 let count = enc.count_with_special_tokens("hello<|endoftext|>world");
+```
+
+### 繰り返しのテキスト
+
+`TextMemo` はテキスト全体とその id を保持する。既出のテキストはバイト単位で比較したうえで
+id のスライスを返し、それ以外は通常どおりエンコードして保持する。初回の追加コストは、3 KB 以上の
+テキストで最大約 4%、900 バイトではタイマーの 1 刻み（42 ns）以内。作成しない限り、テキストは保持されない。
+
+```rust
+let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+let mut memo = enc.memo(64 << 20); // at most about 64 MiB of texts and ids
+let first = memo.encode("a long system prompt").to_vec();
+assert_eq!(memo.encode("a long system prompt"), first); // answered from the memo
 ```
 
 ### 並列エンコード

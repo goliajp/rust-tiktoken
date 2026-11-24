@@ -74,7 +74,10 @@ Figures are medians of 3 runs; `tiktoken` is 5.2.0 from crates.io.
   On the book with default threads the lead over fastokens is 8–20% when its workers
   keep their caches.
 - **toks** is listed without its whole-text memo. With the memo on, encoding the *same*
-  text again returns a stored result and is 3–20x faster than encoding it here.
+  text again returns a stored result and is 3–20x faster than encoding it here. Against
+  that mode, use [`CoreBpe::memo`](#repeated-texts): returning the stored ids it is 1.3–6x
+  faster than toks' memo on this corpus set (cl100k and o200k); copying them into a
+  buffer, as toks does, it ranges from 10% slower (45 KB) to 5x faster (13 bytes).
 - Every other library tried — tiktoken-rs, tokensim, riptoken, kitoken, basetenkenizer,
   Hugging Face tokenizers 0.23 — was at least 3.4x slower on every row (Hugging Face 0.23
   and kitoken produced different ids on the Rust source, which is not timed). Gigatoken,
@@ -241,6 +244,20 @@ let count = enc.count("The quick brown fox jumps over the lazy dog.");
 
 // count with special token recognition
 let count = enc.count_with_special_tokens("hello<|endoftext|>world");
+```
+
+### Repeated texts
+
+A `TextMemo` keeps whole texts and their ids. A text seen before is compared byte for
+byte and its ids are returned as a slice; anything else is encoded and kept, which costs
+at most about 4% extra the first time on texts of 3 KB and more (on 900 bytes, at most one
+42 ns timer tick). Nothing is kept unless you create one.
+
+```rust
+let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+let mut memo = enc.memo(64 << 20); // at most about 64 MiB of texts and ids
+let first = memo.encode("a long system prompt").to_vec();
+assert_eq!(memo.encode("a long system prompt"), first); // answered from the memo
 ```
 
 ### Parallel encoding

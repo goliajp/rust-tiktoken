@@ -31,6 +31,7 @@
 
 - **実行時に正規表現を使わない** — 全エンコーディングの分割パターンを、生成した Unicode テーブルに基づくテーブル駆動のスキャナで再現。cl100k 系と o200k 系は SIMD（NEON、SSE2、wasm simd128）で 64 バイト単位に断片の開始位置を判定します。`regex` クレートはスキャナを検証するテスト用の参照実装としてのみ使います。
 - **20 エンコーディング・153 モデル・11 プロバイダ** — OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2〜3.8、Mistral（Large 4 を含む）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3。さらに USD のコスト見積もり（料金は Anthropic・Google も含む）。
+- **繰り返しのテキスト** — `enc.memo(max_bytes)` が返すオプトインの `TextMemo` は、既出のテキストに保存済みの結果を返す（200 KB の書籍で 3.5 µs、再エンコードは 110 µs）。`encode` 自体は何も保持しない。
 - **軽量・移植性** — 20 語彙を合計 7.8 MB で埋め込み、語彙ごとにオプトアウト可能（cl100k のみなら 373 KB、cargo は有効にしたベンダーのデータだけをダウンロード）、キー長で階層化した語彙と断片のメモ化、線形/ヒープのハイブリッド BPE マージ、長いテキストは内蔵の std のみのスレッドプールで自動的に並列エンコード、ゼロアロケーションの `count()`、C 依存ゼロの純 Rust（実行時の依存は `ruzstd` と語彙データクレートのみ）、自己完結の wasm ビルド。
 
 API・対応モデル表・ベンチマークは各 crate の README を参照：**[`tiktoken/`](tiktoken/README.md)** ·  **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。

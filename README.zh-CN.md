@@ -31,6 +31,7 @@
 
 - **运行时不用正则** —— 每套编码的切分规则都由查表实现的扫描器复现，表格由 Unicode 数据生成；cl100k 和 o200k 两个系列用 SIMD（NEON、SSE2、wasm simd128）一次判定 64 字节内的片段起点。`regex` crate 只在测试里作为扫描器的对照实现。
 - **20 套编码 · 153 个模型 · 11 家厂商** —— OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2–3.8、Mistral（含 Large 4）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3；并提供美元成本估算（价格含 Anthropic、Google）。
+- **重复文本** —— `enc.memo(max_bytes)` 返回一个可选的 `TextMemo`，见过的文本直接从内存给出结果（200 KB 的书 3.5 µs，重新编码要 110 µs）；`encode` 本身不保存任何文本。
 - **轻量可移植** —— 20 份词表共 7.8 MB 编译期内嵌且可按词表退订（只要 cl100k 的构建仅带 373 KB，cargo 也只下载启用的厂商的数据）、按 key 长度分层的词表与整片记忆、线性/堆混合 BPE 合并、长文本由内置的纯 std 线程池自动多线程编码、零分配 `count()`、零 C 依赖的纯 Rust（运行时依赖只有 `ruzstd` 和各词表数据 crate）、自足的 wasm 构建。
 
 完整 API、支持模型表、基准测试见各 crate 的 README：**[`tiktoken/`](tiktoken/README.md)** · **[`tiktoken-wasm/`](tiktoken-wasm/README.md)**。

@@ -33,6 +33,17 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [5.3.0] - 2026-11-24
+
+### Added
+
+- `CoreBpe::memo(max_bytes)` and `TextMemo`: an opt-in store of whole texts and
+  their ids for callers that encode the same text repeatedly (a system prompt,
+  a chat history). A text seen before is compared byte for byte and its ids
+  are returned without encoding it again; texts and ids stay within the given
+  byte budget, and texts not asked for again are dropped first. `encode` and
+  `count` are unchanged and keep no text.
+
 ## [5.2.1] - 2026-11-23
 
 Documentation only; the code is identical to 5.2.0.

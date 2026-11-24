@@ -71,7 +71,9 @@ o200k_base 单线程比 tiktoken-rs 快 12〜80 倍。`count()` 在短文本上�
   42 ns 分辨率上，算平手。默认线程数下的英文书籍，fastokens 的工作线程保留缓存时，
   本库领先 8〜20%
 - **toks** 列出的是关闭整篇文本记忆的成绩。打开后，再次编码*同一篇*文本时它直接返回
-  存下的结果，比本库重新编码快 3〜20 倍
+  存下的结果，比本库重新编码快 3〜20 倍。与这种模式对应的是本库的
+  [`CoreBpe::memo`](#重复文本)：直接返回存下的 id 时，在这组语料上（cl100k 和 o200k）比 toks
+  的记忆快 1.3〜6 倍；像 toks 那样把 id 复制到缓冲区时，最差慢 10%（45 KB），最好快 5 倍（13 字节）
 - 其余试过的库 —— tiktoken-rs、tokensim、riptoken、kitoken、basetenkenizer、
   Hugging Face tokenizers 0.23 —— 每一行都至少慢 3.4 倍（Hugging Face 0.23 和
   kitoken 在 Rust 源码上输出的 id 不一致，那一行没有计时）。Gigatoken 只能从 Python
@@ -220,6 +222,18 @@ let count = enc.count("敏捷的棕色狐狸跳过了懒狗。");
 
 // 带特殊 token 识别的计数
 let count = enc.count_with_special_tokens("hello<|endoftext|>world");
+```
+
+### 重复文本
+
+`TextMemo` 保存整篇文本和对应的 id。见过的文本逐字节比对后，直接返回 id 切片；没见过的
+照常编码并存下。第一次遇到时，3 KB 以上的文本最多多花约 4%；900 字节的文本最多多花计时器的一格（42 ns）。不创建它，就不会保存任何文本。
+
+```rust
+let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+let mut memo = enc.memo(64 << 20); // at most about 64 MiB of texts and ids
+let first = memo.encode("a long system prompt").to_vec();
+assert_eq!(memo.encode("a long system prompt"), first); // answered from the memo
 ```
 
 ### 并行编码
