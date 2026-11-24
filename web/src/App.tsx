@@ -29,6 +29,10 @@ let enc = tiktoken::get_encoding("o200k_base").unwrap();
 let ids = enc.encode("hello world");  // [24912, 2375]
 let n = enc.count("hello world");     // zero-alloc
 
+// a text encoded again and again (a system prompt, a chat history)
+let mut memo = enc.memo(64 << 20);    // opt-in, up to ~64 MiB
+memo.encode("hello world");           // seen before → from memory
+
 // or by model name — GPT, Kimi, GLM, DeepSeek, Qwen, …
 tiktoken::encoding_for_model("kimi-k3").unwrap();`
 
