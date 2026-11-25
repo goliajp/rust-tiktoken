@@ -186,6 +186,9 @@ let bytes = enc.decode(&tokens);                   // Vec<u8>
 // 1 つのバッファを複数回の呼び出しで使い回し、呼び出しごとの確保をなくす
 let mut ids = Vec::new();
 enc.encode_into("hello world", &mut ids);         // `ids` の末尾に追加
+
+// 1 トークン分のバイト列。語彙から借用するので割り当てはない。長さを足し合わせると原文でのバイト位置がわかる
+let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
 ```
 
 ### 特殊 token

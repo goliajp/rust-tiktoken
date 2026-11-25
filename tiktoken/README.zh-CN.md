@@ -186,6 +186,9 @@ let bytes = enc.decode(&tokens);                   // Vec<u8>
 // 多次调用共用一个缓冲区，每次调用不再分配内存
 let mut ids = Vec::new();
 enc.encode_into("hello world", &mut ids);         // 追加到 `ids` 末尾
+
+// 单个 token 的字节，直接借用词表，不分配；累加长度即得每个 token 在原文中的字节位置
+let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
 ```
 
 ### 特殊 token

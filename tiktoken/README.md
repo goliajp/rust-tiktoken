@@ -229,6 +229,9 @@ let bytes = enc.decode(&tokens);                   // Vec<u8>
 // one buffer for many calls: no allocation per call
 let mut ids = Vec::new();
 enc.encode_into("hello world", &mut ids);         // appends to `ids`
+
+// one token's bytes, borrowed: lengths give byte offsets in the text
+let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
 ```
 
 ### Special tokens
