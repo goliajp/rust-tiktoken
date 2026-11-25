@@ -33,7 +33,7 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
-## Unreleased
+## [5.5.0] - 2026-11-25
 
 ### Added
 
