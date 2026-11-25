@@ -177,7 +177,7 @@ fn block<const CASE: bool>(block: &[u8; 64]) -> BlockMasks {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::classify_x86::block::<CASE>(block)
+        super::classify_x86::block_sse2::<CASE>(block)
     }
     #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
     {
@@ -191,6 +191,55 @@ fn block<const CASE: bool>(block: &[u8; 64]) -> BlockMasks {
     {
         super::classify_portable::block_portable::<CASE>(block)
     }
+}
+
+/// The ASCII masks of `blocks` blocks from `start`, and the guard word;
+/// returns the high-bit bytes of all of them.
+#[inline(always)]
+fn ascii_blocks<const CASE: bool, const W: usize>(
+    text: &[u8],
+    start: usize,
+    blocks: usize,
+    maps: &mut Bitmaps<W>,
+    block: impl Fn(&[u8; 64]) -> BlockMasks,
+) -> u64 {
+    let mut any_hi = 0;
+    for k in 0..blocks {
+        let at = start + 64 * k;
+        let b: &[u8; 64] = text[at..at + 64].try_into().unwrap();
+        let m = block(b);
+        for (map, &v) in m.iter().enumerate() {
+            if CASE || (map != M_LW && map != M_SL) {
+                maps.store_word(map, k, v);
+            }
+        }
+        any_hi |= m[M_CONT];
+    }
+    for map in 0..MAPS {
+        if CASE || (map != M_LW && map != M_SL) {
+            maps.store_word(map, blocks, 0);
+        }
+    }
+    any_hi
+}
+
+/// [`ascii_blocks`] with the AVX2 classifier.
+///
+/// # Safety
+///
+/// The CPU must support AVX2.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn ascii_blocks_avx2<const CASE: bool, const W: usize>(
+    text: &[u8],
+    start: usize,
+    blocks: usize,
+    maps: &mut Bitmaps<W>,
+) -> u64 {
+    // SAFETY: the caller checked for AVX2
+    ascii_blocks::<CASE, W>(text, start, blocks, maps, |b| unsafe {
+        super::classify_x86::block_avx2::<CASE>(b)
+    })
 }
 
 /// Classify `text[start..start + 64 * blocks]` into `maps`, with non-ASCII
@@ -207,23 +256,15 @@ pub(crate) fn classify<const CASE: bool, const W: usize>(
     maps: &mut Bitmaps<W>,
 ) -> bool {
     debug_assert!(blocks < W && start + 64 * blocks <= text.len());
-    let mut any_hi = 0;
-    for k in 0..blocks {
-        let at = start + 64 * k;
-        let b: &[u8; 64] = text[at..at + 64].try_into().unwrap();
-        let m = block::<CASE>(b);
-        for (map, &v) in m.iter().enumerate() {
-            if CASE || (map != M_LW && map != M_SL) {
-                maps.store_word(map, k, v);
-            }
-        }
-        any_hi |= m[M_CONT];
-    }
-    for map in 0..MAPS {
-        if CASE || (map != M_LW && map != M_SL) {
-            maps.store_word(map, blocks, 0);
-        }
-    }
+    #[cfg(target_arch = "x86_64")]
+    let any_hi = if std::arch::is_x86_feature_detected!("avx2") {
+        // SAFETY: the CPU has AVX2
+        unsafe { ascii_blocks_avx2::<CASE, W>(text, start, blocks, maps) }
+    } else {
+        ascii_blocks::<CASE, W>(text, start, blocks, maps, block::<CASE>)
+    };
+    #[cfg(not(target_arch = "x86_64"))]
+    let any_hi = ascii_blocks::<CASE, W>(text, start, blocks, maps, block::<CASE>);
     if any_hi == 0 {
         return false;
     }
@@ -336,6 +377,12 @@ mod tests {
 
     fn check_block<const CASE: bool>(b: &[u8; 64]) {
         assert_eq!(block::<CASE>(b), block_portable::<CASE>(b), "{b:?}");
+        #[cfg(target_arch = "x86_64")]
+        if std::arch::is_x86_feature_detected!("avx2") {
+            // SAFETY: the CPU has AVX2
+            let avx2 = unsafe { super::super::classify_x86::block_avx2::<CASE>(b) };
+            assert_eq!(avx2, block_portable::<CASE>(b), "{b:?}");
+        }
     }
 
     #[test]

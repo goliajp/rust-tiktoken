@@ -85,7 +85,7 @@ o200k_base の処理速度は単一スレッドで tiktoken-rs の 12〜80 倍�
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| 前処理での分割 | 全エンコーディングで、各分割パターンが想定するバージョンの Unicode から表を生成し、スキャナーがその表を参照する。cl100k 系と o200k 系では SIMD（NEON、SSE2、wasm simd128）で 64 バイトずつ読み、分割位置を求める | 毎回正規表現を実行 | 毎回正規表現を実行 |
+| 前処理での分割 | 全エンコーディングで、各分割パターンが想定するバージョンの Unicode から表を生成し、スキャナーがその表を参照する。cl100k 系と o200k 系では SIMD（NEON、SSE2 または AVX2、wasm simd128）で 64 バイトずつ読み、分割位置を求める | 毎回正規表現を実行 | 毎回正規表現を実行 |
 | 正規表現エンジン | 実行時は不使用（`regex` はスキャナーのテストで照合に使う開発用依存関係） | `fancy-regex`（バックトラッキング） | PyO3 経由で `regex` を使うため、FFI 呼び出しの負荷がかかる |
 | 語彙の検索 | キーの長さ別に格納する。15 バイト以下のキーは詰めて 1 つのオープンアドレス方式の表に格納し、キャッシュラインあたり 2 スロットを使う。それより長いキーにはハッシュ値でタグ付けしたアリーナ内のスロットを使う。1〜2 バイトのキーには直接添字で引ける表も使う | `HashMap<Vec<u8>>`（メモリ確保 20 万回） | PyO3 経由で Rust の `HashMap` を使う |
 | 同じ文字列の再出現 | 語彙にない文字列のマージ結果を検索表に追加し、全スレッドで再利用する。長い文字列には専用のスレッドローカルキャッシュと共有キャッシュを使う | なし | なし |
@@ -182,6 +182,10 @@ let enc = tiktoken::get_encoding("cl100k_base").unwrap();
 let tokens = enc.encode("hello world");           // Vec<u32>
 let text = enc.decode_to_string(&tokens).unwrap(); // String
 let bytes = enc.decode(&tokens);                   // Vec<u8>
+
+// 1 つのバッファを複数回の呼び出しで使い回し、呼び出しごとの確保をなくす
+let mut ids = Vec::new();
+enc.encode_into("hello world", &mut ids);         // `ids` の末尾に追加
 ```
 
 ### 特殊 token

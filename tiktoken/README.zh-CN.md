@@ -85,7 +85,7 @@ tiktoken 是速度最快的 Rust BPE 分词器。原生编码速度是 tiktoken-
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| 预分词 | 所有编码都用扫描器查 Unicode 表，生成表时采用各切分规则对应的 Unicode 版本。cl100k 和 o200k 系列用 SIMD（NEON、SSE2、wasm simd128）每次检查 64 字节，找出片段起点 | 每次都执行正则表达式 | 每次都执行正则表达式 |
+| 预分词 | 所有编码都用扫描器查 Unicode 表，生成表时采用各切分规则对应的 Unicode 版本。cl100k 和 o200k 系列用 SIMD（NEON、SSE2 或 AVX2、wasm simd128）每次检查 64 字节，找出片段起点 | 每次都执行正则表达式 | 每次都执行正则表达式 |
 | 正则引擎 | 运行时无需正则引擎（`regex` 仅作开发依赖，用于在测试中核对扫描结果） | `fancy-regex`（支持回溯） | 通过 PyO3 调用 `regex`，有 FFI 开销 |
 | 词表查找 | 按键长分层。最多 15 字节的键紧凑存放在同一张开放寻址表中，每个缓存行有两个槽位。更长的键存入带哈希标记的 arena 槽位。1〜2 字节的键可直接按索引查表 | `HashMap<Vec<u8>>`（20 万次分配） | 通过 PyO3 访问 Rust `HashMap` |
 | 重复片段 | 分词器将词表以外的片段合并后，把结果写入共享查找表，供所有线程复用。长片段另有线程局部缓存和共享缓存 | 无 | 无 |
@@ -182,6 +182,10 @@ let enc = tiktoken::get_encoding("cl100k_base").unwrap();
 let tokens = enc.encode("hello world");           // Vec<u32>
 let text = enc.decode_to_string(&tokens).unwrap(); // String
 let bytes = enc.decode(&tokens);                   // Vec<u8>
+
+// 多次调用共用一个缓冲区，每次调用不再分配内存
+let mut ids = Vec::new();
+enc.encode_into("hello world", &mut ids);         // 追加到 `ids` 末尾
 ```
 
 ### 特殊 token

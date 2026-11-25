@@ -109,7 +109,7 @@ implementation's memoisation; the lead holds there too.
 
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
-| Pre-tokenize | Table-driven scanners for every encoding, on Unicode tables generated from the patterns' own Unicode version; the cl100k and o200k families decide piece starts 64 bytes at a time with SIMD (NEON / SSE2 / wasm simd128) | always runs the regex | always runs the regex |
+| Pre-tokenize | Table-driven scanners for every encoding, on Unicode tables generated from the patterns' own Unicode version; the cl100k and o200k families decide piece starts 64 bytes at a time with SIMD (NEON / SSE2 or AVX2 / wasm simd128) | always runs the regex | always runs the regex |
 | Regex engine | none at runtime (`regex` is a dev-dependency, the reference the scanners are tested against) | `fancy-regex` (backtracking) | `regex` via PyO3 + FFI overhead |
 | Vocab lookup | Layered by key size: packed keys of up to 15 bytes in one open-addressed table (two slots per cache line), hash-tagged arena slots above, direct-indexed tables for 1–2-byte keys | `HashMap<Vec<u8>>` (200k allocs) | Rust `HashMap` behind PyO3 |
 | Repeated pieces | Merge results of non-vocabulary pieces are added to the shared lookup table, so every thread reuses them; long pieces have their own thread-local and shared caches | none | none |
@@ -225,6 +225,10 @@ let enc = tiktoken::get_encoding("cl100k_base").unwrap();
 let tokens = enc.encode("hello world");           // Vec<u32>
 let text = enc.decode_to_string(&tokens).unwrap(); // String
 let bytes = enc.decode(&tokens);                   // Vec<u8>
+
+// one buffer for many calls: no allocation per call
+let mut ids = Vec::new();
+enc.encode_into("hello world", &mut ids);         // appends to `ids`
 ```
 
 ### Special tokens

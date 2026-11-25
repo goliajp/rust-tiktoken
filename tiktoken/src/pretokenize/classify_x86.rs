@@ -1,4 +1,5 @@
-//! ASCII classifier for x86_64 (SSE2, part of the baseline).
+//! ASCII classifiers for x86_64: SSE2, part of the baseline, and AVX2, used
+//! when the CPU has it.
 
 use std::arch::x86_64::*;
 
@@ -14,7 +15,7 @@ fn map4(v: &[__m128i; 4], f: impl Fn(__m128i) -> __m128i) -> u64 {
 }
 
 #[inline(always)]
-pub(super) fn block<const CASE: bool>(block: &[u8; 64]) -> BlockMasks {
+pub(super) fn block_sse2<const CASE: bool>(block: &[u8; 64]) -> BlockMasks {
     // SAFETY: sse2 is part of the x86_64 baseline; the loads read exactly the
     // 64 bytes of `block`
     unsafe {
@@ -49,4 +50,43 @@ pub(super) fn block<const CASE: bool>(block: &[u8; 64]) -> BlockMasks {
         out[M_CONT] = map4(&v, |c| c);
         out
     }
+}
+
+/// [`block_sse2`] 32 bytes at a time.
+///
+/// # Safety
+///
+/// The CPU must support AVX2.
+#[target_feature(enable = "avx2")]
+#[inline]
+pub(super) unsafe fn block_avx2<const CASE: bool>(block: &[u8; 64]) -> BlockMasks {
+    // SAFETY: the loads read exactly the 64 bytes of `block`
+    let v = unsafe {
+        let p = block.as_ptr().cast::<__m256i>();
+        [_mm256_loadu_si256(p), _mm256_loadu_si256(p.add(1))]
+    };
+    let map2 = |f: &dyn Fn(__m256i) -> __m256i| {
+        let m = |x| _mm256_movemask_epi8(f(x)) as u32 as u64;
+        m(v[0]) | m(v[1]) << 32
+    };
+    let range = |c: __m256i, lo: u8, n: u8| {
+        let x = _mm256_add_epi8(c, _mm256_set1_epi8(0x80u8.wrapping_sub(lo) as i8));
+        _mm256_cmpgt_epi8(_mm256_set1_epi8((0x80u8 + n) as i8), x)
+    };
+    let eq = |c: __m256i, b: u8| _mm256_cmpeq_epi8(c, _mm256_set1_epi8(b as i8));
+    let mut out = [0u64; MAPS];
+    if CASE {
+        out[M_L] = map2(&|c| range(c, b'A', 26));
+        out[M_LW] = map2(&|c| range(c, b'a', 26));
+        out[M_SL] = map2(&|c| eq(c, b'/'));
+    } else {
+        out[M_L] = map2(&|c| range(_mm256_or_si256(c, _mm256_set1_epi8(0x20)), b'a', 26));
+    }
+    out[M_N] = map2(&|c| range(c, b'0', 10));
+    out[M_W] = map2(&|c| _mm256_or_si256(range(c, 9, 5), eq(c, b' ')));
+    out[M_NL] = map2(&|c| _mm256_or_si256(eq(c, b'\n'), eq(c, b'\r')));
+    out[M_SP] = map2(&|c| eq(c, b' '));
+    out[M_AP] = map2(&|c| eq(c, b'\''));
+    out[M_CONT] = map2(&|c| c);
+    out
 }

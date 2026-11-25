@@ -314,7 +314,24 @@ impl CoreBpe {
         }
     }
 
-    fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
+    /// Append the token ids of `text` to `result`, the same ids that
+    /// [`encode`](Self::encode) returns.
+    ///
+    /// Reusing one `result` across calls skips the allocation `encode` makes
+    /// for every call, which is a large share of the time for short texts.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+    /// let mut ids = Vec::new();
+    /// for text in ["hello world", "hello"] {
+    ///     ids.clear();
+    ///     enc.encode_into(text, &mut ids);
+    ///     assert_eq!(ids, enc.encode(text));
+    /// }
+    /// ```
+    pub fn encode_into(&self, text: &str, result: &mut Vec<u32>) {
         #[cfg(not(target_arch = "wasm32"))]
         if text.len() >= PARALLEL_MIN {
             split::encode(&self.engine(), text, split::CHUNK, None, result);

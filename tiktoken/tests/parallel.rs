@@ -144,3 +144,17 @@ fn empty_and_short_texts() {
     assert_eq!(enc.__encode_chunks("", 16), Vec::<u32>::new());
     assert_eq!(enc.encode_parallel("short"), enc.encode("short"));
 }
+
+#[test]
+fn encode_into_appends_on_both_paths() {
+    let enc = tiktoken::get_encoding("cl100k_base").unwrap();
+    let long = "The quick brown fox, 狐狸 jumps. ".repeat(3000);
+    assert!(long.len() >= PARALLEL_MIN);
+    let mut ids = vec![7, 8, 9];
+    let mut want = ids.clone();
+    for text in ["hello world", long.as_str(), "", "a"] {
+        enc.encode_into(text, &mut ids);
+        want.extend(enc.encode(text));
+        assert_eq!(ids, want);
+    }
+}
