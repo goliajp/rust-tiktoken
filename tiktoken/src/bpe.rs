@@ -44,7 +44,7 @@ pub struct CoreBpe {
     /// Identity for the thread-local piece cache — a nonce, never an address.
     cache_id: u64,
     special_encoder: FxHashMap<Vec<u8>, u32>,
-    special_decoder: FxHashMap<u32, Vec<u8>>,
+    pub(crate) special_decoder: FxHashMap<u32, Vec<u8>>,
     pre_tokenizer: ScalarPreTokenizer,
     special_matcher: Option<SpecialMatcher>,
 }
@@ -152,47 +152,6 @@ impl CoreBpe {
         }
 
         result
-    }
-
-    /// Decode token ids back to raw bytes.
-    ///
-    /// Use [`decode_to_string`](Self::decode_to_string) if you want a `String` directly.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-    /// let bytes = enc.decode(&[15339, 1917]);
-    /// assert_eq!(&bytes, b"hello world");
-    /// ```
-    #[must_use]
-    pub fn decode(&self, tokens: &[u32]) -> Vec<u8> {
-        let mut result = Vec::with_capacity(tokens.len() * 4);
-        for &token in tokens {
-            if let Some(bytes) = self.vocab.try_decode(token) {
-                result.extend_from_slice(bytes);
-                continue;
-            }
-            if let Some(bytes) = self.special_decoder.get(&token) {
-                result.extend_from_slice(bytes);
-            }
-        }
-        result
-    }
-
-    /// Decode token ids back to a UTF-8 string.
-    ///
-    /// Returns `Err` if the decoded bytes are not valid UTF-8.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let enc = tiktoken::get_encoding("cl100k_base").unwrap();
-    /// let text = enc.decode_to_string(&[15339, 1917]).unwrap();
-    /// assert_eq!(text, "hello world");
-    /// ```
-    pub fn decode_to_string(&self, tokens: &[u32]) -> Result<String, std::string::FromUtf8Error> {
-        String::from_utf8(self.decode(tokens))
     }
 
     /// Count tokens without allocating a token vector.

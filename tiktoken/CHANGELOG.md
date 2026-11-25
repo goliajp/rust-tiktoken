@@ -33,6 +33,15 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## Unreleased
+
+### Added
+
+- `CoreBpe::token_bytes(id)`: the bytes of one token id, special tokens
+  included, borrowed from the vocabulary without allocating. Summing their
+  lengths over the ids of `encode` gives each token's byte offset in the
+  text, which `decode(&[id])` could only give with one allocation per token.
+
 ## [5.4.0] - 2026-11-25
 
 ### Added
