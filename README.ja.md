@@ -14,6 +14,8 @@
 > **5.0 への更新**：互換性に関わる変更が 2 点あります。料金関連の構造体と `VisionPricing` に `#[non_exhaustive]` が付いたため、`match` には `_` の分岐が必要です。構造体リテラルでの生成もできなくなりました。また、Llama 4、Qwen 3.5〜3.8、Mistral Large 4、`deepseek-flash` の語彙を各モデルが実際に使うものに修正したため、token 数が変わります。5.1 での変更は、語彙データを提供元ごとの `tiktoken-vocab-*` crate に移したことだけです。
 >
 > **5.2 への更新**：API に変更はありません。32 KiB 以上のテキストは既定で複数のスレッドを使ってエンコードします。並列処理は `tiktoken::set_parallelism(1)` または `TIKTOKEN_THREADS=1` で無効にできます。wasm パッケージには WebAssembly SIMD が必要です（Chrome 91、Firefox 89、Safari 16.4 以降）。新しいバージョンの Unicode でのみ数字に分類される 336 個の符号位置については、`mistral_v15`、`deepseek_v3`、`deepseek_v4` で分割結果が変わります。詳細は [CHANGELOG](tiktoken/CHANGELOG.md#520---2026-11-23) を参照してください。
+>
+> **5.3、5.4 への更新**：コードの変更は不要で、token ID も変わりません。どちらも機能の追加だけです（5.3 で `TextMemo`、5.4 で `encode_into` と x86_64 向けの AVX2 対応を追加）。詳細は [CHANGELOG](tiktoken/CHANGELOG.md#540---2026-11-25) を参照してください。
 
 rust-tiktoken は Rust 製の BPE トークナイザーで最速の実装です。WebAssembly バインディングも提供しています。OpenAI の [tiktoken](https://github.com/openai/tiktoken) や主要なオープンモデル（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）のトークナイザーと互換性があり、そのまま置き換えられます。ASCII と CJK の分割にはそれぞれ手書きのスキャナーを使います。語彙はキーの長さ別に格納し、分割した文字列ごとに処理結果を再利用します。CJK の文章を含む測定で、処理速度はネイティブ版が tiktoken-rs の 22〜83 倍、fastokens の 1.5〜12 倍、ブラウザ版が gpt-tokenizer の 5.8〜7.0 倍です。
 

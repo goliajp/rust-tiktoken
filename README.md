@@ -14,6 +14,8 @@
 > **Upgrading to 5.0?** Two breaks. The pricing structs and `VisionPricing` are `#[non_exhaustive]`, so a `match` needs a `_` arm and the structs can no longer be built with literals. And Llama 4, Qwen 3.5–3.8, Mistral Large 4 and `deepseek-flash` now resolve to the vocabularies those models really use, so their token counts change. 5.1 moves the vocabulary data into per-vendor `tiktoken-vocab-*` crates without changing anything else.
 >
 > **Upgrading to 5.2?** No API change. Texts of 32 KiB and more are now encoded on several threads by default (`tiktoken::set_parallelism(1)` or `TIKTOKEN_THREADS=1` turns that off); the wasm package needs WebAssembly SIMD (Chrome 91, Firefox 89, Safari 16.4); and 336 code points that are digits only in newer Unicode versions split differently on `mistral_v15` and `deepseek_v3` / `deepseek_v4`. Details: [CHANGELOG](tiktoken/CHANGELOG.md#520---2026-11-23).
+>
+> **Upgrading to 5.3 or 5.4?** Nothing to change: both only add features (`TextMemo` in 5.3, `encode_into` and an AVX2 path on x86_64 in 5.4), and the token ids stay the same. Details: [CHANGELOG](tiktoken/CHANGELOG.md#540---2026-11-25).
 
 The fastest Rust BPE tokenizer, plus its WebAssembly bindings. Drop-in compatible with OpenAI [tiktoken](https://github.com/openai/tiktoken) and the mainstream open models (Llama 3, DeepSeek, Qwen, Mistral, Kimi, GLM, MiniMax). Hand-written scanners for ASCII **and CJK**, a key-size-layered vocabulary and whole-piece memoisation make it **22–83x faster than tiktoken-rs** and **1.5–12x faster than fastokens** natively, and **5.8–7.0x faster than gpt-tokenizer in the browser** — CJK prose included.
 

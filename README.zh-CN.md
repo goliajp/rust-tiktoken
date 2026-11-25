@@ -14,6 +14,8 @@
 > **升级到 5.0**：有两处不兼容。一是定价相关的结构体和 `VisionPricing` 加了 `#[non_exhaustive]`，`match` 要加 `_` 分支，也不能再用字面量构造这些结构体。二是 Llama 4、Qwen 3.5〜3.8、Mistral Large 4 和 `deepseek-flash` 改为对应这些模型实际用的词表，它们的 token 数会变。5.1 把词表数据挪到了按厂商划分的 `tiktoken-vocab-*` crate，其他没变。
 >
 > **升级到 5.2**：API 没变。32 KiB 及以上的文本默认用多个线程编码，`tiktoken::set_parallelism(1)` 或 `TIKTOKEN_THREADS=1` 可以关掉。wasm 包需要浏览器支持 WebAssembly SIMD（Chrome 91、Firefox 89、Safari 16.4）。有 336 个码点只在较新的 Unicode 版本里算数字，它们在 `mistral_v15`、`deepseek_v3` / `deepseek_v4` 上的切分方式变了。详见 [CHANGELOG](tiktoken/CHANGELOG.md#520---2026-11-23)。
+>
+> **升级到 5.3、5.4**：可以直接升级，代码不用改，token id 也不变。这两个版本只新增了功能：5.3 加了 `TextMemo`，5.4 加了 `encode_into`，并在 x86_64 上用 AVX2 加速。详见 [CHANGELOG](tiktoken/CHANGELOG.md#540---2026-11-25)。
 
 rust-tiktoken 提供速度最快的 Rust BPE 分词器及其 WebAssembly 绑定，可直接替代 OpenAI [tiktoken](https://github.com/openai/tiktoken) 和主流开放模型的分词器（Llama 3、DeepSeek、Qwen、Mistral、Kimi、GLM、MiniMax）。分词器用手写扫描器处理 ASCII 和 CJK，按键长组织词表，并缓存整个片段的编码结果。原生编码速度是 tiktoken-rs 的 22〜83 倍、fastokens 的 1.5〜12 倍。浏览器中是 gpt-tokenizer 的 5.8〜7.0 倍。中文、日文文章上同样领先。
 
