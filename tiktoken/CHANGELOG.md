@@ -33,6 +33,23 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## Unreleased
+
+### Added
+
+- `CoreBpe::encode_into(text, &mut ids)`: appends the ids of `text` to a
+  caller's buffer, the same ids `encode` returns. Reusing one buffer skips
+  the allocation `encode` makes for every call: on an Apple M4 Pro, 13 bytes
+  take 17.6 ns instead of 25.1 ns and 900 bytes 528 ns instead of 546 ns; on
+  45 KB and more the difference is under 2%.
+
+### Performance
+
+- x86_64: the byte classes of ASCII text are found with AVX2 when the CPU
+  has it (checked at run time, once per 4 KiB chunk); SSE2 otherwise, as
+  before. On an Intel i7-10700K this cuts the instructions of one `encode`
+  by 9-12% on texts of 900 bytes and more.
+
 ## [5.3.0] - 2026-11-24
 
 ### Added

@@ -29,7 +29,7 @@ rust-tiktoken 提供速度最快的 Rust BPE 分词器及其 WebAssembly 绑定�
 
 ## 主要特性
 
-- **运行时不用正则**：每种编码的切分规则都由查表的扫描器实现，表由 Unicode 数据生成。cl100k 和 o200k 系列用 SIMD（NEON、SSE2、wasm simd128）一次判断 64 字节里哪些位置是片段起点。`regex` crate 只在测试里用来核对扫描器的结果
+- **运行时不用正则**：每种编码的切分规则都由查表的扫描器实现，表由 Unicode 数据生成。cl100k 和 o200k 系列用 SIMD（NEON、SSE2 或 AVX2、wasm simd128）一次判断 64 字节里哪些位置是片段起点。`regex` crate 只在测试里用来核对扫描器的结果
 - **20 种编码、153 个模型、11 家厂商**：OpenAI（GPT-4/4o/4.1/4.5、GPT-5.x、GPT-6.x、o1/o3/o4-mini、gpt-oss）、Llama 3/4、DeepSeek V3/V4、Qwen 2〜3.8、Mistral（含 Large 4）、Kimi K2/K3、GLM-4/5、MiniMax M2/M3。另外可以按美元估算费用，估算还覆盖 Anthropic 和 Google 的模型
 - **重复文本**：`enc.memo(max_bytes)` 返回一个 `TextMemo`，需要时才创建。遇到见过的文本，它直接从内存给出结果：一本 200 KB 的书重新编码要 110 µs，从 `TextMemo` 取只要 3.5 µs。`encode` 本身什么都不保存
 - **小而可移植**：20 份词表一共 7.8 MB，编译时内嵌，每份都可以单独去掉。只要 cl100k 的构建只带 373 KB 词表数据，cargo 也只下载你启用的厂商的数据。词表按 key 的长度分层，整个片段的编码结果会被缓存，BPE 合并在线性扫描和堆之间切换。长文本由内置线程池分给多个线程编码，线程池只用标准库。`count()` 不分配内存。全部用 Rust 写成，没有 C 依赖，运行时只依赖 `ruzstd` 和词表数据 crate。wasm 构建不依赖其他文件
