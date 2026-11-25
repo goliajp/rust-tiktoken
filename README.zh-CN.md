@@ -54,6 +54,10 @@ assert_eq!(enc.decode_to_string(&tokens).unwrap(), "hello world");
 // 不分配 token 向量的计数
 let n = enc.count("The quick brown fox.");
 
+// 多次调用共用一个缓冲区，encode_into 追加到末尾
+let mut ids = Vec::new();
+enc.encode_into("hello world", &mut ids);
+
 // 或按模型名解析
 let enc = tiktoken::encoding_for_model("gpt-4o").unwrap();
 ```
