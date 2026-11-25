@@ -54,6 +54,10 @@ assert_eq!(enc.decode_to_string(&tokens).unwrap(), "hello world");
 // count without allocating a token vector
 let n = enc.count("The quick brown fox.");
 
+// reuse one buffer across calls; encode_into appends
+let mut ids = Vec::new();
+enc.encode_into("hello world", &mut ids);
+
 // or resolve by model name
 let enc = tiktoken::encoding_for_model("gpt-4o").unwrap();
 ```

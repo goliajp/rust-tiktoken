@@ -54,6 +54,10 @@ assert_eq!(enc.decode_to_string(&tokens).unwrap(), "hello world");
 // トークンベクタを割り当てずにカウント
 let n = enc.count("The quick brown fox.");
 
+// 一つのバッファを使い回す。encode_into は末尾に追加する
+let mut ids = Vec::new();
+enc.encode_into("hello world", &mut ids);
+
 // モデル名で解決
 let enc = tiktoken::encoding_for_model("gpt-4o").unwrap();
 ```
