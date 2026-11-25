@@ -6,7 +6,9 @@ impl CoreBpe {
     ///
     /// Borrowed from the vocabulary, so it costs no allocation: summing the
     /// lengths over the ids of [`encode`](Self::encode) gives each token's
-    /// byte offset in the text.
+    /// byte offset in the text. A token can end inside a multi-byte
+    /// character, so check `str::is_char_boundary` before slicing the text at
+    /// such an offset.
     ///
     /// # Examples
     ///
