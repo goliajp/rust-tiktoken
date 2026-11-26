@@ -26,9 +26,10 @@
 //!
 //! # Threads
 //!
-//! [`CoreBpe::encode`], [`CoreBpe::count`] and their `_with_special_tokens`
-//! forms encode a text of 32 KiB or more on a process-wide pool of worker
-//! threads, with output identical to single-threaded encoding. The pool is
+//! [`CoreBpe::encode`], [`CoreBpe::count`], their `_with_special_tokens`
+//! forms and [`CoreBpe::encode_with_ends`] encode a text of 32 KiB or more on
+//! a process-wide pool of worker threads, with output identical to
+//! single-threaded encoding. The pool is
 //! created on the first such call and uses the performance cores by default;
 //! [`set_parallelism`] or the `TIKTOKEN_THREADS` environment variable changes
 //! the thread count, and `1` keeps every call on the calling thread. Shorter
@@ -62,6 +63,8 @@ mod encode_loop;
 mod encode_miss;
 mod encode_sink;
 pub mod encoding;
+mod ends;
+mod ends_sink;
 mod hash;
 mod merge;
 mod miss_batch;

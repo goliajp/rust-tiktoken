@@ -233,6 +233,11 @@ enc.encode_into("hello world", &mut ids);         // appends to `ids`
 // one token's bytes, borrowed: lengths give byte offsets in the text
 let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
 
+// ids and the byte offset where each token ends, found while encoding (cheaper
+// than summing token_bytes); a token can end inside a multi-byte char.
+// encode_with_ends_into(text, &mut ids, &mut ends) appends, like encode_into
+let (ids, ends) = enc.encode_with_ends("hello world"); // ends: [5, 11]
+
 // cuts: offsets where a text splits in two with the same tokens, so the
 // ids of text[..b] followed by those of text[b..] are the ids of text
 let text = "Hello world, again.";

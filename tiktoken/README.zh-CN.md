@@ -190,6 +190,11 @@ enc.encode_into("hello world", &mut ids);         // 追加到 `ids` 末尾
 // 单个 token 的字节，直接借用词表，不分配；累加长度即得每个 token 在原文中的字节位置
 let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
 
+// 编码的同时给出每个 token 在原文中的结束字节位置，比事后累加 token_bytes 的长度快；
+// token 可能结束在多字节字符的中间。encode_with_ends_into(text, &mut ids, &mut ends)
+// 和 encode_into 一样追加到末尾
+let (ids, ends) = enc.encode_with_ends("hello world"); // ends: [5, 11]
+
 // 切点：在这里把文本切成两段分别编码，text[..b] 和 text[b..] 的 token id
 // 接起来就是整段 text 的 token id
 let text = "Hello world, again.";

@@ -37,7 +37,7 @@ pub(crate) struct Engine<'a> {
 
 /// Texts shorter than this skip the window rules: classifying costs more than
 /// it saves on a handful of pieces.
-const WINDOW_MIN: usize = 32;
+pub(crate) const WINDOW_MIN: usize = 32;
 
 /// Ids to reserve for encoding `text`: a third of its length, or two thirds
 /// when its first 64 bytes are mostly non-ASCII, as dense CJK, Hangul or
@@ -164,7 +164,7 @@ impl Engine<'_> {
 }
 
 #[inline(always)]
-fn window_dispatch<S: PieceSink>(
+pub(crate) fn window_dispatch<S: PieceSink>(
     pre: &ScalarPreTokenizer,
     kind: WindowKind,
     text: &str,

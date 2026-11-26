@@ -15,7 +15,7 @@ use crate::vocab::Vocab;
 /// 10-performance-core M4 Pro, four 8 KiB chunks already beat one thread
 /// 2-3x, including when the workers are parked and must be woken first.
 #[cfg(not(target_arch = "wasm32"))]
-const PARALLEL_MIN: usize = 32 * 1024;
+pub(crate) const PARALLEL_MIN: usize = 32 * 1024;
 
 /// A Byte Pair Encoding tokenizer engine.
 ///
@@ -265,7 +265,7 @@ impl CoreBpe {
         &self.pre_tokenizer
     }
 
-    fn engine(&self) -> Engine<'_> {
+    pub(crate) fn engine(&self) -> Engine<'_> {
         Engine {
             vocab: &self.vocab,
             pre: &self.pre_tokenizer,
