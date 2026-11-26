@@ -162,7 +162,13 @@ impl<'e, 'v> EndsSink<'e, 'v> {
         // bytes readable past the last end
         unsafe {
             copy_ids(ids.as_ptr(), self.ip.add(self.n), k);
-            let (src, ep) = (self.engine.vocab.long_ends(&ids), self.ep.add(self.n));
+            let ep = self.ep.add(self.n);
+            let Some(src) = self.engine.vocab.long_ends(&ids) else {
+                // a record from before the table kept ends
+                piece_ends(self.engine.vocab, ids.as_ptr(), ep, k, at, self.at);
+                self.n += k;
+                return;
+            };
             let mut j = 0;
             loop {
                 let b = src.add(j).cast::<[u8; 8]>().read_unaligned();

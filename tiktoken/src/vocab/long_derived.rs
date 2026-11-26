@@ -5,8 +5,10 @@
 //! (0 = empty), in a bucket of eight that shares a cache line; the record at
 //! the arena offset is `[len | n << 16] [key bytes, padded to 4] [ids]`.
 //! The end of each id's token in the piece (at most 255 bytes) is a byte in
-//! a second arena, at the id's word offset: encoding with token ends reads
-//! them, and the encode loops never touch their lines.
+//! a second arena, at the id's word offset. Encoding with token ends creates
+//! it the first time it meets a long piece; records published before that
+//! have none (a first byte of 0), and until then inserts do not compute them,
+//! so that plain encoding never pays for them.
 //! A hit compares the tag, then the length and bytes exactly.
 //!
 //! Publication: a writer reserves its record with one `fetch_add` on the
@@ -16,6 +18,7 @@
 //! after that, until [`LongDerived::clear`], which needs exclusive use. A full
 //! bucket or arena refuses further entries.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 use super::key::hash_long;
@@ -42,7 +45,7 @@ pub(crate) struct LongDerived {
     buckets: Box<[Bucket]>,
     arena: Box<[AtomicU32]>,
     /// A byte per arena word, plus 8 bytes readable past the last.
-    ends: Box<[AtomicU8]>,
+    ends: OnceLock<Box<[AtomicU8]>>,
     /// On a line of its own: every insert writes it, and next to `buckets`
     /// and `arena`, which every lookup reads, it would invalidate that line
     /// in every other core.
@@ -91,13 +94,10 @@ impl LongDerived {
         let words = vec![0u32; ARENA_WORDS].into_boxed_slice();
         // SAFETY: AtomicU32 has the same size, alignment and bit validity as u32
         let arena = unsafe { Box::from_raw(Box::into_raw(words) as *mut [AtomicU32]) };
-        let bytes = vec![0u8; ARENA_WORDS + 8].into_boxed_slice();
-        // SAFETY: AtomicU8 has the same size, alignment and bit validity as u8
-        let ends = unsafe { Box::from_raw(Box::into_raw(bytes) as *mut [AtomicU8]) };
         Self {
             buckets,
             arena,
-            ends,
+            ends: OnceLock::new(),
             arena_len: Padded(AtomicU32::new(0)),
         }
     }
@@ -151,10 +151,26 @@ impl LongDerived {
         Some(LongIds(&rec[1 + key_words..1 + key_words + n]))
     }
 
+    /// Whether inserts record the end of each id's token.
+    #[inline]
+    pub(crate) fn keeps_ends(&self) -> bool {
+        self.ends.get().is_some()
+    }
+
+    /// Record the ends of every record inserted from now on.
+    #[cold]
+    pub(crate) fn keep_ends(&self) {
+        self.ends.get_or_init(|| {
+            let bytes = vec![0u8; ARENA_WORDS + 8].into_boxed_slice();
+            // SAFETY: AtomicU8 has the same size, alignment and bit validity as u8
+            unsafe { Box::from_raw(Box::into_raw(bytes) as *mut [AtomicU8]) }
+        });
+    }
+
     /// Publish the ids of `piece` (16 to [`LONG_KEY_MAX`] bytes), whose
-    /// [`hash_long`] is `h`, with the end of each id's token in the piece.
-    /// False when the table refuses it; the caller keeps the result
-    /// elsewhere.
+    /// [`hash_long`] is `h`, with the end of each id's token in the piece
+    /// when [`keeps_ends`](Self::keeps_ends) (empty otherwise). False when
+    /// the table refuses it; the caller keeps the result elsewhere.
     pub(crate) fn insert(&self, piece: &[u8], ids: &[u32], ends: &[u8], h: u64) -> bool {
         debug_assert!(piece.len() > 15 && piece.len() <= LONG_KEY_MAX && ids.len() <= piece.len());
         debug_assert_eq!(h, hash_long(piece));
@@ -163,7 +179,7 @@ impl LongDerived {
             return false;
         }
         let key_words = piece.len().div_ceil(4);
-        debug_assert_eq!(ends.len(), ids.len());
+        debug_assert!(ends.is_empty() || ends.len() == ids.len());
         let need = 1 + key_words + ids.len();
         let off = self.arena_len.0.fetch_add(need as u32, Ordering::Relaxed) as usize;
         if off + need > ARENA_WORDS {
@@ -181,8 +197,17 @@ impl LongDerived {
             rec.write(piece.len() as u32 | (ids.len() as u32) << 16);
             copy_key(piece, rec.add(1).cast::<u8>());
             copy_ids(ids.as_ptr(), rec.add(1 + key_words), ids.len());
-            let e = self.ends.as_ptr().cast::<u8>().cast_mut();
-            std::ptr::copy_nonoverlapping(ends.as_ptr(), e.add(off + 1 + key_words), ends.len());
+            // an arena created since the caller looked gets a first byte of
+            // 0 here: no ends for this record. A clear reuses the arena but
+            // every record after it writes its ends, so no stale byte is read
+            if let Some(e) = self.ends.get() {
+                let e = e.as_ptr().cast::<u8>().cast_mut().add(off + 1 + key_words);
+                if ends.is_empty() {
+                    e.write(0);
+                } else {
+                    std::ptr::copy_nonoverlapping(ends.as_ptr(), e, ends.len());
+                }
+            }
         }
         let v = tag(h) | (off as u64 + 1);
         for slot in &bucket.0 {
@@ -197,13 +222,17 @@ impl LongDerived {
     }
 
     /// The end of each of `ids`' tokens in their piece, a byte each, with 8
-    /// more bytes readable past the last; `ids` come from this table.
+    /// more bytes readable past the last, if the record has them; `ids` come
+    /// from this table.
     #[inline(always)]
-    pub(crate) fn ends_of(&self, ids: &LongIds<'_>) -> *const u8 {
+    pub(crate) fn ends_of(&self, ids: &LongIds<'_>) -> Option<*const u8> {
+        let e = self.ends.get()?;
         // SAFETY: the ids lie in the arena, and `ends` has a byte per word
+        // plus 8; the slot's Acquire load made the record's bytes visible
         unsafe {
             let off = ids.as_ptr().offset_from(self.arena.as_ptr().cast::<u32>()) as usize;
-            self.ends.as_ptr().cast::<u8>().add(off)
+            let p = e.as_ptr().cast::<u8>().add(off);
+            (*p != 0).then_some(p)
         }
     }
 
@@ -229,27 +258,30 @@ impl super::Vocab {
     /// The end of each of `ids`' tokens in their piece, a byte each, with 8
     /// more bytes readable; `ids` come from [`long_ids`](Self::long_ids).
     #[inline(always)]
-    pub(crate) fn long_ends(&self, ids: &LongIds<'_>) -> *const u8 {
-        self.long_derived
-            .get()
-            .map_or(std::ptr::null(), |t| t.ends_of(ids))
+    pub(crate) fn long_ends(&self, ids: &LongIds<'_>) -> Option<*const u8> {
+        let t = self.long_derived.get()?;
+        let e = t.ends_of(ids);
+        if e.is_none() {
+            t.keep_ends();
+        }
+        e
     }
 
     /// Share the ids of a hashed piece with every thread; false when the
     /// table refuses it.
     pub(crate) fn insert_long(&self, p: &LongPiece<'_>, ids: &[u32]) -> bool {
+        let t = self.long_derived.get_or_init(LongDerived::new);
         let mut ends = [0u8; LONG_KEY_MAX];
-        let mut at = 0usize;
-        for (e, &id) in ends.iter_mut().zip(ids) {
-            at += self.try_decode(id).map_or(0, <[u8]>::len);
-            *e = at as u8;
+        let mut n = 0;
+        if t.keeps_ends() {
+            let mut at = 0usize;
+            for (e, &id) in ends.iter_mut().zip(ids) {
+                at += self.try_decode(id).map_or(0, <[u8]>::len);
+                *e = at as u8;
+            }
+            n = ids.len();
         }
-        self.long_derived.get_or_init(LongDerived::new).insert(
-            p.piece,
-            ids,
-            &ends[..ids.len()],
-            p.hash,
-        )
+        t.insert(p.piece, ids, &ends[..n], p.hash)
     }
 }
 
@@ -317,9 +349,15 @@ mod tests {
         let a = "分词器把文本切成很多片段".as_bytes();
         assert!(t.get(a).is_none());
         assert!(t.insert(a, &[1, 2, 3], &[9, 20, 36], hash_long(a)));
-        let ends = t.ends_of(&t.get(a).unwrap());
+        // no ends kept yet
+        assert!(t.ends_of(&t.get(a).unwrap()).is_none());
+        t.keep_ends();
+        assert!(t.ends_of(&t.get(a).unwrap()).is_none());
+        let c = "分词器把文本切成很多片段了".as_bytes();
+        assert!(t.insert(c, &[1, 2, 3], &[9, 20, 39], hash_long(c)));
+        let ends = t.ends_of(&t.get(c).unwrap()).unwrap();
         // SAFETY: 8 bytes are readable past the last end
-        assert_eq!(unsafe { *ends.cast::<[u8; 3]>() }, [9, 20, 36]);
+        assert_eq!(unsafe { *ends.cast::<[u8; 3]>() }, [9, 20, 39]);
         let got = t.get(a).unwrap();
         let mut v = vec![];
         got.extend_into(&mut v);
