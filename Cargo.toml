@@ -18,7 +18,7 @@ exclude = ["tiktoken-wasm"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/goliajp/rust-tiktoken"
-authors = ["GOLIA株式会社", "Li Hao <lihao@golia.jp>"]
+authors = ["GOLIA K.K.", "DoraCawl <doracawl@golia.jp>"]
 
 [profile.release]
 lto = true
