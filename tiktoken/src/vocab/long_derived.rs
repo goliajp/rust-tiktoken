@@ -169,9 +169,14 @@ impl LongDerived {
 
     /// Publish the ids of `piece` (16 to [`LONG_KEY_MAX`] bytes), whose
     /// [`hash_long`] is `h`, with the end of each id's token in the piece
-    /// when [`keeps_ends`](Self::keeps_ends) (empty otherwise). False when
-    /// the table refuses it; the caller keeps the result elsewhere.
-    pub(crate) fn insert(&self, piece: &[u8], ids: &[u32], ends: &[u8], h: u64) -> bool {
+    /// when [`keeps_ends`](Self::keeps_ends) said so (`None` otherwise).
+    /// False when the table refuses it; the caller keeps the result
+    /// elsewhere.
+    ///
+    /// A record without ends needs no mark: the ends arena did not exist
+    /// when the caller looked, so its bytes here are still zero. One made
+    /// before a [`clear`](Self::clear) exists for every insert after it.
+    pub(crate) fn insert(&self, piece: &[u8], ids: &[u32], ends: Option<&[u8]>, h: u64) -> bool {
         debug_assert!(piece.len() > 15 && piece.len() <= LONG_KEY_MAX && ids.len() <= piece.len());
         debug_assert_eq!(h, hash_long(piece));
         let bucket = self.bucket(h);
@@ -179,7 +184,7 @@ impl LongDerived {
             return false;
         }
         let key_words = piece.len().div_ceil(4);
-        debug_assert!(ends.is_empty() || ends.len() == ids.len());
+        debug_assert!(ends.is_none_or(|e| e.len() == ids.len()));
         let need = 1 + key_words + ids.len();
         let off = self.arena_len.0.fetch_add(need as u32, Ordering::Relaxed) as usize;
         if off + need > ARENA_WORDS {
@@ -197,16 +202,20 @@ impl LongDerived {
             rec.write(piece.len() as u32 | (ids.len() as u32) << 16);
             copy_key(piece, rec.add(1).cast::<u8>());
             copy_ids(ids.as_ptr(), rec.add(1 + key_words), ids.len());
-            // an arena created since the caller looked gets a first byte of
-            // 0 here: no ends for this record. A clear reuses the arena but
-            // every record after it writes its ends, so no stale byte is read
-            if let Some(e) = self.ends.get() {
-                let e = e.as_ptr().cast::<u8>().cast_mut().add(off + 1 + key_words);
-                if ends.is_empty() {
-                    e.write(0);
-                } else {
-                    std::ptr::copy_nonoverlapping(ends.as_ptr(), e, ends.len());
-                }
+            // the caller passes ends only once the ends arena exists
+            if let Some(ends) = ends {
+                let e = self
+                    .ends
+                    .get()
+                    .unwrap_unchecked()
+                    .as_ptr()
+                    .cast::<u8>()
+                    .cast_mut();
+                std::ptr::copy_nonoverlapping(
+                    ends.as_ptr(),
+                    e.add(off + 1 + key_words),
+                    ends.len(),
+                );
             }
         }
         let v = tag(h) | (off as u64 + 1);
@@ -272,7 +281,7 @@ impl super::Vocab {
     pub(crate) fn insert_long(&self, p: &LongPiece<'_>, ids: &[u32]) -> bool {
         let t = self.long_derived.get_or_init(LongDerived::new);
         if !t.keeps_ends() {
-            return t.insert(p.piece, ids, &[], p.hash);
+            return t.insert(p.piece, ids, None, p.hash);
         }
         let mut ends = [0u8; LONG_KEY_MAX];
         let mut at = 0usize;
@@ -280,7 +289,7 @@ impl super::Vocab {
             at += self.try_decode(id).map_or(0, <[u8]>::len);
             *e = at as u8;
         }
-        t.insert(p.piece, ids, &ends[..ids.len()], p.hash)
+        t.insert(p.piece, ids, Some(&ends[..ids.len()]), p.hash)
     }
 }
 
@@ -347,13 +356,13 @@ mod tests {
         let t = LongDerived::new();
         let a = "分词器把文本切成很多片段".as_bytes();
         assert!(t.get(a).is_none());
-        assert!(t.insert(a, &[1, 2, 3], &[9, 20, 36], hash_long(a)));
+        assert!(t.insert(a, &[1, 2, 3], None, hash_long(a)));
         // no ends kept yet
         assert!(t.ends_of(&t.get(a).unwrap()).is_none());
         t.keep_ends();
         assert!(t.ends_of(&t.get(a).unwrap()).is_none());
         let c = "分词器把文本切成很多片段了".as_bytes();
-        assert!(t.insert(c, &[1, 2, 3], &[9, 20, 39], hash_long(c)));
+        assert!(t.insert(c, &[1, 2, 3], Some(&[9, 20, 39]), hash_long(c)));
         let ends = t.ends_of(&t.get(c).unwrap()).unwrap();
         // SAFETY: 8 bytes are readable past the last end
         assert_eq!(unsafe { *ends.cast::<[u8; 3]>() }, [9, 20, 39]);
@@ -376,12 +385,7 @@ mod tests {
         let mut kept = vec![];
         for i in 0..200_000u32 {
             let key = format!("{i:0>40}");
-            if t.insert(
-                key.as_bytes(),
-                &[i; 20],
-                &[2; 20],
-                hash_long(key.as_bytes()),
-            ) {
+            if t.insert(key.as_bytes(), &[i; 20], None, hash_long(key.as_bytes())) {
                 kept.push(i);
             }
         }
