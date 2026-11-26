@@ -24,8 +24,8 @@ rust-tiktoken は Rust 製の BPE トークナイザーで最速の実装です�
 | パス | crate／パッケージ | 説明 | バージョン |
 |:-----|:----------------|:-----|:-----------|
 | [`tiktoken/`](tiktoken/) | [`tiktoken`](https://crates.io/crates/tiktoken) | 20 種類のエンコーディング、153 モデル、各社の料金見積もりに対応する Rust 製 BPE トークナイザー | [![crates.io](https://img.shields.io/crates/v/tiktoken.svg?style=flat-square)](https://crates.io/crates/tiktoken) |
-| [`tiktoken-wasm/`](tiktoken-wasm/) | [`tiktoken-wasm`](https://crates.io/crates/tiktoken-wasm)（Rust） | Rust 版 tiktoken を wasm から利用するための crate | [![crates.io](https://img.shields.io/crates/v/tiktoken-wasm.svg?style=flat-square)](https://crates.io/crates/tiktoken-wasm) |
-| [`tiktoken-wasm/`](tiktoken-wasm/) | [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)（npm） | 同じバインディングを `wasm-pack` で npm 向けに公開 | [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm.svg?style=flat-square)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) |
+| [`tiktoken-wasm/`](tiktoken-wasm/) | [`tiktoken-wasm`](https://crates.io/crates/tiktoken-wasm)（Rust）| Rust 版 tiktoken を wasm から利用するための crate | [![crates.io](https://img.shields.io/crates/v/tiktoken-wasm.svg?style=flat-square)](https://crates.io/crates/tiktoken-wasm) |
+| [`tiktoken-wasm/`](tiktoken-wasm/) | [`@goliapkg/tiktoken-wasm`](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm)（npm）| 同じバインディングを `wasm-pack` で npm 向けに公開 | [![npm](https://img.shields.io/npm/v/@goliapkg/tiktoken-wasm.svg?style=flat-square)](https://www.npmjs.com/package/@goliapkg/tiktoken-wasm) |
 
 > 2 つの crate は同じ workspace で管理しています。リリースのたびに両方のバージョンを上げ、同じ番号で公開します。
 
