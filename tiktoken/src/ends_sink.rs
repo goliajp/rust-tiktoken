@@ -92,6 +92,29 @@ impl<'e, 'v> EndsSink<'e, 'v> {
         self.sync();
     }
 
+    /// A piece of `len` bytes that is the token `id`, for loops other than
+    /// the windowed scan.
+    #[inline(always)]
+    pub(crate) fn token(&mut self, id: u32, len: usize) {
+        if self.n == self.room {
+            self.grow(ROOM);
+        }
+        self.at += len;
+        // SAFETY: there is room for one more id and end
+        unsafe {
+            self.ip.add(self.n).write(id);
+            self.ep.add(self.n).write(self.at);
+        }
+        self.n += 1;
+    }
+
+    /// A piece that the home line did not answer, for loops other than the
+    /// windowed scan; `key` is its packed key, or `NO_KEY` past 15 bytes.
+    #[inline(never)]
+    pub(crate) fn miss(&mut self, piece: &[u8], key: (u64, u64)) {
+        self.other(piece, key);
+    }
+
     /// A piece the home line did not answer: a long piece's shared merge
     /// result when there is one, otherwise the general miss path.
     #[inline(always)]

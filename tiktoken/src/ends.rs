@@ -128,10 +128,12 @@ impl Engine<'_> {
         ends: &mut Vec<usize>,
         base: usize,
     ) {
+        let mut sink = EndsSink::new(self, ids, ends, base);
         let bytes = text.as_bytes();
         let wide = bytes.len() >= KEY_READ;
         let mut pos = 0;
         while let Some((start, end)) = self.pre.next_match(text, pos) {
+            debug_assert_eq!(start, pos);
             pos = end;
             let mut key = NO_KEY;
             if (end - start).wrapping_sub(1) < FAST_KEY_MAX {
@@ -141,20 +143,13 @@ impl Engine<'_> {
                     key_of(&bytes[start..end])
                 };
                 if let Some(id) = self.vocab.get_home(key.0, key.1) {
-                    ids.push(id);
-                    ends.push(base + end);
+                    sink.token(id, end - start);
                     continue;
                 }
             }
-            let k = ids.len();
-            self.encode_piece(&bytes[start..end], key, ids);
-            let mut e = base + start;
-            for &id in &ids[k..ids.len() - 1] {
-                e += self.vocab.token_len(id);
-                ends.push(e);
-            }
-            ends.push(base + end);
+            sink.miss(&bytes[start..end], key);
         }
+        sink.finish();
     }
 }
 
