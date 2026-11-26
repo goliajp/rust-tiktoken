@@ -189,6 +189,12 @@ enc.encode_into("hello world", &mut ids);         // `ids` の末尾に追加
 
 // 1 トークン分のバイト列。語彙から借用するので割り当てはない。長さを足し合わせると原文でのバイト位置がわかる
 let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
+
+// カット位置：ここで 2 つに分けて別々にエンコードしても、text[..b] と text[b..] の
+// token ID を並べると text 全体の token ID と一致する
+let text = "Hello world, again.";
+let b = enc.next_cut(text, 1).unwrap();           // 5（" world" の前）
+let last = enc.prev_cut(text, text.len());        // Some(12)（" again." の前）
 ```
 
 ### 特殊 token

@@ -56,6 +56,7 @@
 
 mod bpe;
 mod count_sink;
+mod cut;
 mod decode;
 mod encode_loop;
 mod encode_miss;

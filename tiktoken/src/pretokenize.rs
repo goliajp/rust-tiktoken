@@ -147,6 +147,12 @@ impl ScalarPreTokenizer {
         self.fast
     }
 
+    /// The cut rules that hold for this pattern.
+    #[inline]
+    pub(crate) fn cut_rules(&self) -> crate::cut::Rules {
+        crate::cut::Rules::of(self.fast)
+    }
+
     /// The window rules of this pattern, if it has them.
     #[inline(always)]
     pub(crate) fn window_kind(&self) -> Option<WindowKind> {
