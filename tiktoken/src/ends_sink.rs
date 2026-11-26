@@ -132,18 +132,24 @@ impl<'e, 'v> EndsSink<'e, 'v> {
         }
         let at = self.at;
         self.at += len;
-        // SAFETY: room for `k` ids and ends was made above
+        // SAFETY: room for `k` ids and ends was made above, with ROOM to
+        // spare for the up to 7 ends written past them, and the table has 8
+        // bytes readable past the last end
         unsafe {
-            let ip = self.ip.add(self.n);
-            copy_ids(ids.as_ptr(), ip, k);
-            piece_ends(
-                self.engine.vocab,
-                ids.as_ptr(),
-                self.ep.add(self.n),
-                k,
-                at,
-                self.at,
-            );
+            copy_ids(ids.as_ptr(), self.ip.add(self.n), k);
+            let (src, ep) = (self.engine.vocab.long_ends(&ids), self.ep.add(self.n));
+            let mut j = 0;
+            loop {
+                let b = src.add(j).cast::<[u8; 8]>().read_unaligned();
+                for (l, &x) in b.iter().enumerate() {
+                    ep.add(j + l).write(at + x as usize);
+                }
+                j += 8;
+                if j >= k {
+                    break;
+                }
+            }
+            debug_assert_eq!(*ep.add(k - 1), self.at);
         }
         self.n += k;
     }
@@ -220,6 +226,85 @@ unsafe fn entry_ends(vocab: &Vocab, e: Entry, ep: *mut usize, at: usize, end: us
     }
 }
 
+/// Writes the ids and ends of consecutive pieces `offs[i]..offs[i + 1]`
+/// from `i` on while the table answers them with a token or an inline
+/// entry, after `n` ids at `ip` and ends at `ep`; a buffer offset `x` is the
+/// text offset `x + delta`. Stops at the first piece it does not answer, and
+/// returns that piece's index (`offs.len() - 1` when all are done), the new
+/// count, the piece's key and its entry if it has one. A leaf, so the loop
+/// keeps everything in registers; pointers rather than indices, and each
+/// piece's end carried over as the next one's start.
+#[allow(clippy::too_many_arguments)]
+#[inline(never)]
+fn ends_hits(
+    vocab: &Vocab,
+    home: HomeProbe<'_>,
+    buf: &[u8],
+    start: usize,
+    offs: &[u16],
+    i: usize,
+    ip: *mut u32,
+    ep: *mut usize,
+    n: usize,
+    delta: usize,
+) -> (usize, usize, (u64, u64), Option<Entry>) {
+    if i + 1 >= offs.len() {
+        return (i, n, NO_KEY, None);
+    }
+    let base = offs.as_ptr();
+    // SAFETY: i + 1 < offs.len(), and `last` is the last offset
+    let (mut o, last, mut a) = unsafe { (base.add(i), base.add(offs.len() - 1), *base.add(i)) };
+    // SAFETY: `n` ids and ends were written below the room
+    let (mut pi, mut pe) = unsafe { (ip.add(n), ep.add(n)) };
+    let done = |o: *const u16, pi: *mut u32| {
+        // SAFETY: both pointers lie in the allocations they started in
+        unsafe { (o.offset_from(base) as usize, pi.offset_from(ip) as usize) }
+    };
+    let text = start.wrapping_add(delta);
+    while o < last {
+        // SAFETY: o < last, so o + 1 is in bounds
+        let b = unsafe { *o.add(1) };
+        let Some((lo, hi)) = piece_key(buf, start + a as usize, start + b as usize) else {
+            let (i, n) = done(o, pi);
+            return (i, n, NO_KEY, None);
+        };
+        let found = match home.lookup(lo, hi) {
+            Home::Miss => home.lookup_chain(lo, hi),
+            h => h,
+        };
+        let end = text.wrapping_add(b as usize);
+        // SAFETY (writes): the caller made room for three ids and ends per
+        // piece
+        match found {
+            Home::Token(id) => unsafe {
+                pi.write(id);
+                pe.write(end);
+                pi = pi.add(1);
+                pe = pe.add(1);
+            },
+            Home::Derived(e) if e.is_inline() => unsafe {
+                vocab.write_entry(e, pi);
+                entry_ends(vocab, e, pe, text.wrapping_add(a as usize), end);
+                pi = pi.add(e.len());
+                pe = pe.add(e.len());
+            },
+            Home::Derived(e) => {
+                let (i, n) = done(o, pi);
+                return (i, n, NO_KEY, Some(e));
+            }
+            Home::Miss => {
+                let (i, n) = done(o, pi);
+                return (i, n, (lo, hi), None);
+            }
+        }
+        a = b;
+        // SAFETY: o < last
+        o = unsafe { o.add(1) };
+    }
+    let (i, n) = done(o, pi);
+    (i, n, NO_KEY, None)
+}
+
 impl PieceSink for EndsSink<'_, '_> {
     #[inline(always)]
     fn window(&mut self) {
@@ -242,45 +327,11 @@ impl PieceSink for EndsSink<'_, '_> {
                 self.grow(3 * left);
             }
             let stop = i + left.min((self.room - self.n) / 3);
-            let (ip, ep) = (self.ip, self.ep);
-            let mut n = self.n;
-            let mut key = NO_KEY;
-            let mut entry = None;
-            while i < stop {
-                let a = start + offs[i] as usize;
-                let b = start + offs[i + 1] as usize;
-                let Some((lo, hi)) = piece_key(buf, a, b) else {
-                    break;
-                };
-                let found = match home.lookup(lo, hi) {
-                    Home::Miss => home.lookup_chain(lo, hi),
-                    h => h,
-                };
-                // SAFETY (writes): room for three ids and ends per piece up
-                // to `stop` was made above
-                match found {
-                    Home::Token(id) => unsafe {
-                        ip.add(n).write(id);
-                        ep.add(n).write(b.wrapping_add(delta));
-                        n += 1;
-                    },
-                    Home::Derived(e) if e.is_inline() => unsafe {
-                        vocab.write_entry(e, ip.add(n));
-                        let (at, end) = (a.wrapping_add(delta), b.wrapping_add(delta));
-                        entry_ends(vocab, e, ep.add(n), at, end);
-                        n += e.len();
-                    },
-                    Home::Derived(e) => {
-                        entry = Some(e);
-                        break;
-                    }
-                    Home::Miss => {
-                        key = (lo, hi);
-                        break;
-                    }
-                }
-                i += 1;
-            }
+            let batch = &offs[..=stop];
+            let (at, n, key, entry) = ends_hits(
+                vocab, home, buf, start, batch, i, self.ip, self.ep, self.n, delta,
+            );
+            i = at;
             self.n = n;
             self.at = (start + offs[i] as usize).wrapping_add(delta);
             if i < stop {

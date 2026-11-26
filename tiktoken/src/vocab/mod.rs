@@ -308,14 +308,6 @@ impl Vocab {
         self.long.get_hashed(&self.arena, p.piece, p.hash)
     }
 
-    /// Share the ids of a hashed piece with every thread; false when the
-    /// table refuses it.
-    pub(crate) fn insert_long(&self, p: &LongPiece<'_>, ids: &[u32]) -> bool {
-        self.long_derived
-            .get_or_init(LongDerived::new)
-            .insert(p.piece, ids, p.hash)
-    }
-
     /// The chars a merge may start from whole.
     pub(crate) fn atoms(&self) -> &Atoms {
         self.atoms.get_or_init(|| {

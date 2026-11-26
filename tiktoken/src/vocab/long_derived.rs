@@ -4,6 +4,9 @@
 //! rarely tokens, and repeat. A slot is one word, `tag << 32 | offset + 1`
 //! (0 = empty), in a bucket of eight that shares a cache line; the record at
 //! the arena offset is `[len | n << 16] [key bytes, padded to 4] [ids]`.
+//! The end of each id's token in the piece (at most 255 bytes) is a byte in
+//! a second arena, at the id's word offset: encoding with token ends reads
+//! them, and the encode loops never touch their lines.
 //! A hit compares the tag, then the length and bytes exactly.
 //!
 //! Publication: a writer reserves its record with one `fetch_add` on the
@@ -13,10 +16,10 @@
 //! after that, until [`LongDerived::clear`], which needs exclusive use. A full
 //! bucket or arena refuses further entries.
 
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 
-use super::copy_ids;
 use super::key::hash_long;
+use super::{LongPiece, copy_ids};
 
 /// Longest piece kept.
 pub(crate) const LONG_KEY_MAX: usize = 255;
@@ -38,6 +41,8 @@ struct Bucket([AtomicU64; BUCKET]);
 pub(crate) struct LongDerived {
     buckets: Box<[Bucket]>,
     arena: Box<[AtomicU32]>,
+    /// A byte per arena word, plus 8 bytes readable past the last.
+    ends: Box<[AtomicU8]>,
     /// On a line of its own: every insert writes it, and next to `buckets`
     /// and `arena`, which every lookup reads, it would invalidate that line
     /// in every other core.
@@ -86,9 +91,13 @@ impl LongDerived {
         let words = vec![0u32; ARENA_WORDS].into_boxed_slice();
         // SAFETY: AtomicU32 has the same size, alignment and bit validity as u32
         let arena = unsafe { Box::from_raw(Box::into_raw(words) as *mut [AtomicU32]) };
+        let bytes = vec![0u8; ARENA_WORDS + 8].into_boxed_slice();
+        // SAFETY: AtomicU8 has the same size, alignment and bit validity as u8
+        let ends = unsafe { Box::from_raw(Box::into_raw(bytes) as *mut [AtomicU8]) };
         Self {
             buckets,
             arena,
+            ends,
             arena_len: Padded(AtomicU32::new(0)),
         }
     }
@@ -143,9 +152,10 @@ impl LongDerived {
     }
 
     /// Publish the ids of `piece` (16 to [`LONG_KEY_MAX`] bytes), whose
-    /// [`hash_long`] is `h`. False when the table refuses it; the caller
-    /// keeps the result elsewhere.
-    pub(crate) fn insert(&self, piece: &[u8], ids: &[u32], h: u64) -> bool {
+    /// [`hash_long`] is `h`, with the end of each id's token in the piece.
+    /// False when the table refuses it; the caller keeps the result
+    /// elsewhere.
+    pub(crate) fn insert(&self, piece: &[u8], ids: &[u32], ends: &[u8], h: u64) -> bool {
         debug_assert!(piece.len() > 15 && piece.len() <= LONG_KEY_MAX && ids.len() <= piece.len());
         debug_assert_eq!(h, hash_long(piece));
         let bucket = self.bucket(h);
@@ -153,6 +163,7 @@ impl LongDerived {
             return false;
         }
         let key_words = piece.len().div_ceil(4);
+        debug_assert_eq!(ends.len(), ids.len());
         let need = 1 + key_words + ids.len();
         let off = self.arena_len.0.fetch_add(need as u32, Ordering::Relaxed) as usize;
         if off + need > ARENA_WORDS {
@@ -170,6 +181,8 @@ impl LongDerived {
             rec.write(piece.len() as u32 | (ids.len() as u32) << 16);
             copy_key(piece, rec.add(1).cast::<u8>());
             copy_ids(ids.as_ptr(), rec.add(1 + key_words), ids.len());
+            let e = self.ends.as_ptr().cast::<u8>().cast_mut();
+            std::ptr::copy_nonoverlapping(ends.as_ptr(), e.add(off + 1 + key_words), ends.len());
         }
         let v = tag(h) | (off as u64 + 1);
         for slot in &bucket.0 {
@@ -181,6 +194,17 @@ impl LongDerived {
             }
         }
         false
+    }
+
+    /// The end of each of `ids`' tokens in their piece, a byte each, with 8
+    /// more bytes readable past the last; `ids` come from this table.
+    #[inline(always)]
+    pub(crate) fn ends_of(&self, ids: &LongIds<'_>) -> *const u8 {
+        // SAFETY: the ids lie in the arena, and `ends` has a byte per word
+        unsafe {
+            let off = ids.as_ptr().offset_from(self.arena.as_ptr().cast::<u32>()) as usize;
+            self.ends.as_ptr().cast::<u8>().add(off)
+        }
     }
 
     /// Drop every entry. Caller guarantees no concurrent use.
@@ -198,6 +222,34 @@ impl LongDerived {
             }
         }
         self.arena_len.0.store(0, Ordering::Relaxed);
+    }
+}
+
+impl super::Vocab {
+    /// The end of each of `ids`' tokens in their piece, a byte each, with 8
+    /// more bytes readable; `ids` come from [`long_ids`](Self::long_ids).
+    #[inline(always)]
+    pub(crate) fn long_ends(&self, ids: &LongIds<'_>) -> *const u8 {
+        self.long_derived
+            .get()
+            .map_or(std::ptr::null(), |t| t.ends_of(ids))
+    }
+
+    /// Share the ids of a hashed piece with every thread; false when the
+    /// table refuses it.
+    pub(crate) fn insert_long(&self, p: &LongPiece<'_>, ids: &[u32]) -> bool {
+        let mut ends = [0u8; LONG_KEY_MAX];
+        let mut at = 0usize;
+        for (e, &id) in ends.iter_mut().zip(ids) {
+            at += self.try_decode(id).map_or(0, <[u8]>::len);
+            *e = at as u8;
+        }
+        self.long_derived.get_or_init(LongDerived::new).insert(
+            p.piece,
+            ids,
+            &ends[..ids.len()],
+            p.hash,
+        )
     }
 }
 
@@ -264,7 +316,10 @@ mod tests {
         let t = LongDerived::new();
         let a = "分词器把文本切成很多片段".as_bytes();
         assert!(t.get(a).is_none());
-        assert!(t.insert(a, &[1, 2, 3], hash_long(a)));
+        assert!(t.insert(a, &[1, 2, 3], &[9, 20, 36], hash_long(a)));
+        let ends = t.ends_of(&t.get(a).unwrap());
+        // SAFETY: 8 bytes are readable past the last end
+        assert_eq!(unsafe { *ends.cast::<[u8; 3]>() }, [9, 20, 36]);
         let got = t.get(a).unwrap();
         let mut v = vec![];
         got.extend_into(&mut v);
@@ -284,7 +339,12 @@ mod tests {
         let mut kept = vec![];
         for i in 0..200_000u32 {
             let key = format!("{i:0>40}");
-            if t.insert(key.as_bytes(), &[i; 20], hash_long(key.as_bytes())) {
+            if t.insert(
+                key.as_bytes(),
+                &[i; 20],
+                &[2; 20],
+                hash_long(key.as_bytes()),
+            ) {
                 kept.push(i);
             }
         }
