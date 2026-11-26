@@ -29,14 +29,14 @@ tiktoken は Rust 製の BPE トークナイザーで最速の実装です。ネ
 
 | コーパス | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | 対 tiktoken-rs | 対 Python 版 |
 |---|---|---|---|---|---|
-| 短文（13 B） | 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
-| 中程度の長さの文章（900 B） | 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
-| 英語の文章（45 KB） | 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
-| 中国語の文章（4.3 KB） | 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
-| 日本語の文章（4.6 KB） | 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
-| CJK 混在 ×50（4.5 KB） | 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
-| 繰り返しのない敵対的 CJK 入力（3.9 KB） | 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
-| コード（3.9 KB） | 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
+| 短文（13 B）| 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
+| 中程度の長さの文章（900 B）| 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
+| 英語の文章（45 KB）| 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
+| 中国語の文章（4.3 KB）| 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
+| 日本語の文章（4.6 KB）| 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
+| CJK 混在 ×50（4.5 KB）| 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
+| 繰り返しのない敵対的 CJK 入力（3.9 KB）| 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
+| コード（3.9 KB）| 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
 
 o200k_base の処理速度は単一スレッドで tiktoken-rs の 12〜80 倍です。`count()` は ID 列のメモリを確保しません。短文では `encode` より最大 36% 速く、長文ではほぼ同じ速度です。既定のスレッド数では 45 KB のテキストを 6.2 µs で処理します。
 
@@ -46,16 +46,16 @@ o200k_base の処理速度は単一スレッドで tiktoken-rs の 12〜80 倍�
 
 | コーパス | **tiktoken** | [fastokens](https://crates.io/crates/fastokens) 0.3.6 | [HF tokenizers](https://crates.io/crates/tokenizers) 1.0-rc.5 | [toks](https://github.com/actual-computer/toks) 0.3.3 | [toktok-rs](https://crates.io/crates/toktok-rs) 0.5 | [magi-tokenizer](https://crates.io/crates/magi-tokenizer) 0.1 | [bpe-openai](https://crates.io/crates/bpe-openai) 0.3 |
 |---|---|---|---|---|---|---|---|
-| 短文（13 B） | **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
-| 中程度の長さの文章（900 B） | **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
-| 英語の文章（45 KB） | **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
-| 中国語の文章（4.3 KB） | **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
-| 日本語の文章（4.6 KB） | **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
-| CJK 混在 ×50（4.5 KB） | **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
-| 繰り返しのない敵対的 CJK 入力（3.9 KB） | **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
-| コード（3.9 KB） | **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
-| 英語の書籍（200 KB） | **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
-| Rust ソース（100 KB） | **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
+| 短文（13 B）| **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
+| 中程度の長さの文章（900 B）| **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
+| 英語の文章（45 KB）| **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
+| 中国語の文章（4.3 KB）| **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
+| 日本語の文章（4.6 KB）| **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
+| CJK 混在 ×50（4.5 KB）| **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
+| 繰り返しのない敵対的 CJK 入力（3.9 KB）| **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
+| コード（3.9 KB）| **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
+| 英語の書籍（200 KB）| **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
+| Rust ソース（100 KB）| **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
 
 - 単一スレッドでの tiktoken の処理速度は fastokens の 1.5〜12 倍。既定のスレッド数では、書籍の処理時間が tiktoken で 16.7 µs、fastokens で 50.3 µs（速度比 3.0 倍）。Rust ソースではそれぞれ 12.5 µs、36.3 µs（2.9 倍）
 - 13 バイトの短文では magi-tokenizer との速度差は 4〜12%
@@ -69,12 +69,12 @@ o200k_base の処理速度は単一スレッドで tiktoken-rs の 12〜80 倍�
 
 | コーパス | tiktoken-fast 0.1 (wasm) | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
 |---|---|---|---|---|
-| 中国語の文章（4.3 KB） | 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
-| 日本語の文章（4.6 KB） | 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
-| CJK 混在 ×50（4.5 KB） | 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
-| 繰り返しのない敵対的 CJK 入力（3.9 KB） | 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
-| 英語の文章（45 KB） | 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
-| コード（3.9 KB） | 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
+| 中国語の文章（4.3 KB）| 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
+| 日本語の文章（4.6 KB）| 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
+| CJK 混在 ×50（4.5 KB）| 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
+| 繰り返しのない敵対的 CJK 入力（3.9 KB）| 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
+| 英語の文章（45 KB）| 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
+| コード（3.9 KB）| 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
 
 複数の文字種が混在する 2 つのコーパスでは、処理済みの入力なら tiktoken-fast と tiktoken の速度差は約 10% まで縮まります。初めて処理する入力では tiktoken-fast は tiktoken の 1.8〜6.6 倍の時間がかかります。Safari での tiktoken の処理速度は gpt-tokenizer の 3.3〜7.9 倍、tiktoken-fast の 1.5〜2.2 倍です。
 
@@ -86,8 +86,8 @@ o200k_base の処理速度は単一スレッドで tiktoken-rs の 12〜80 倍�
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
 | 前処理での分割 | 全エンコーディングで、各分割パターンが想定するバージョンの Unicode から表を生成し、スキャナーがその表を参照する。cl100k 系と o200k 系では SIMD（NEON、SSE2 または AVX2、wasm simd128）で 64 バイトずつ読み、分割位置を求める | 毎回正規表現を実行 | 毎回正規表現を実行 |
-| 正規表現エンジン | 実行時は不使用（`regex` はスキャナーのテストで照合に使う開発用依存関係） | `fancy-regex`（バックトラッキング） | PyO3 経由で `regex` を使うため、FFI 呼び出しの負荷がかかる |
-| 語彙の検索 | キーの長さ別に格納する。15 バイト以下のキーは詰めて 1 つのオープンアドレス方式の表に格納し、キャッシュラインあたり 2 スロットを使う。それより長いキーにはハッシュ値でタグ付けしたアリーナ内のスロットを使う。1〜2 バイトのキーには直接添字で引ける表も使う | `HashMap<Vec<u8>>`（メモリ確保 20 万回） | PyO3 経由で Rust の `HashMap` を使う |
+| 正規表現エンジン | 実行時は不使用（`regex` はスキャナーのテストで照合に使う開発用依存関係）| `fancy-regex`（バックトラッキング）| PyO3 経由で `regex` を使うため、FFI 呼び出しの負荷がかかる |
+| 語彙の検索 | キーの長さ別に格納する。15 バイト以下のキーは詰めて 1 つのオープンアドレス方式の表に格納し、キャッシュラインあたり 2 スロットを使う。それより長いキーにはハッシュ値でタグ付けしたアリーナ内のスロットを使う。1〜2 バイトのキーには直接添字で引ける表も使う | `HashMap<Vec<u8>>`（メモリ確保 20 万回）| PyO3 経由で Rust の `HashMap` を使う |
 | 同じ文字列の再出現 | 語彙にない文字列のマージ結果を検索表に追加し、全スレッドで再利用する。長い文字列には専用のスレッドローカルキャッシュと共有キャッシュを使う | なし | なし |
 | BPE のマージ | 短い文字列はスタック上で線形走査し、長い文字列にはヒープを使う。表にない短い文字列は token ID ごとに複数まとめてマージする | O(n*m) の線形走査 | O(n*m) の線形走査 |
 | メモリ確保を伴わない `count()` | 対応 | 非対応 | 非対応 |
@@ -152,22 +152,22 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 | エンコーディング | プロバイダ | Feature | データ | 対応モデル |
 |---|---|---|---|---|
 | `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o、GPT-4.1、GPT-4.5、GPT-5〜5.6（Sol/Terra/Luna を含む）、GPT-6.x（推定、公式未公表）、o1、o3、o4-mini |
-| `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony チャット形式） |
+| `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony チャット形式）|
 | `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4、GPT-4 Turbo、GPT-3.5 Turbo、text-embedding-*、davinci-002、babbage-002 |
 | `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + ベース | text-davinci-002/003、code-davinci-*、code-cushman-* |
 | `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*、code-davinci-edit-* |
 | `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 世代：davinci、curie、babbage、ada |
-| `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` の別名） |
+| `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` の別名）|
 | `llama3` | Meta | `vocab-llama3` | 111 KB + ベース | Llama 3、3.1、3.2、3.3 |
 | `llama4` | Meta | `vocab-llama4` | 816 KB | Llama 4 Scout / Maverick、Muse |
 | `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3、R1 |
-| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash、V4.1 Flash（V3 語彙 + V4 特殊 token） |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash、V4.1 Flash（V3 語彙 + V4 特殊 token）|
 | `qwen2` | Alibaba | `vocab-qwen2` | 564 KB | Qwen 2.5、Qwen 3 |
-| `qwen3_5` | Alibaba | `vocab-qwen3_5` | 989 KB | Qwen 3.5〜3.8、Qwen 4（推定、公式未公表） |
-| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral、Mixtral、Large 3、Small 4（Tekken トークナイザー） |
-| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4（Tekken v15） |
+| `qwen3_5` | Alibaba | `vocab-qwen3_5` | 989 KB | Qwen 3.5〜3.8、Qwen 4（推定、公式未公表）|
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral、Mixtral、Large 3、Small 4（Tekken トークナイザー）|
+| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4（Tekken v15）|
 | `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
-| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1（K2 語彙 + K3 特殊 token） |
+| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1（K2 語彙 + K3 特殊 token）|
 | `glm4` | Zhipu | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
 | `glm5` | Zhipu | `vocab-glm5` | 6 KB + ベース | GLM-5 / 5.1 / 5.2 / 5.3 |
 | `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 / M3 / M3.1 |

@@ -29,14 +29,14 @@ tiktoken 是速度最快的 Rust BPE 分词器。原生编码速度是 tiktoken-
 
 | 语料 | Python tiktoken 0.14 | tiktoken-rs 0.12 | **tiktoken** | 相对 tiktoken-rs 的速度倍数 | 相对 Python 的速度倍数 |
 |---|---|---|---|---|---|
-| 短文本（13 B） | 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
-| 中等文本（900 B） | 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
-| 英文文章（45 KB） | 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
-| 中文文章（4.3 KB） | 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
-| 日文文章（4.6 KB） | 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
-| CJK 混排 ×50（4.5 KB） | 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
-| 无重复片段的 CJK 对抗语料（3.9 KB） | 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
-| 代码（3.9 KB） | 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
+| 短文本（13 B）| 1.3 µs | 602 ns | **28 ns** | **22x** | **46x** |
+| 中等文本（900 B）| 23.2 µs | 19.8 µs | **431 ns** | **46x** | **54x** |
+| 英文文章（45 KB）| 1,100 µs | 955 µs | **19.9 µs** | **48x** | **55x** |
+| 中文文章（4.3 KB）| 114 µs | 97.8 µs | **2.0 µs** | **50x** | **58x** |
+| 日文文章（4.6 KB）| 131 µs | 119 µs | **1.4 µs** | **82x** | **91x** |
+| CJK 混排 ×50（4.5 KB）| 122 µs | 108 µs | **2.5 µs** | **43x** | **49x** |
+| 无重复片段的 CJK 对抗语料（3.9 KB）| 114 µs | 94.0 µs | **2.6 µs** | **36x** | **43x** |
+| 代码（3.9 KB）| 179 µs | 163 µs | **1.9 µs** | **83x** | **92x** |
 
 使用 o200k_base 时，本库的单线程速度是 tiktoken-rs 的 12〜80 倍。`count()` 无需分配 ID 向量，处理短文本时比 `encode` 最多快 36%，处理长文本时两者速度相近。使用默认线程数时，编码 45 KB 的文本耗时 6.2 µs。
 
@@ -46,16 +46,16 @@ tiktoken 是速度最快的 Rust BPE 分词器。原生编码速度是 tiktoken-
 
 | 语料 | **tiktoken** | [fastokens](https://crates.io/crates/fastokens) 0.3.6 | [HF tokenizers](https://crates.io/crates/tokenizers) 1.0-rc.5 | [toks](https://github.com/actual-computer/toks) 0.3.3 | [toktok-rs](https://crates.io/crates/toktok-rs) 0.5 | [magi-tokenizer](https://crates.io/crates/magi-tokenizer) 0.1 | [bpe-openai](https://crates.io/crates/bpe-openai) 0.3 |
 |---|---|---|---|---|---|---|---|
-| 短文本（13 B） | **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
-| 中等文本（900 B） | **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
-| 英文文章（45 KB） | **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
-| 中文文章（4.3 KB） | **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
-| 日文文章（4.6 KB） | **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
-| CJK 混排 ×50（4.5 KB） | **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
-| 无重复片段的 CJK 对抗语料（3.9 KB） | **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
-| 代码（3.9 KB） | **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
-| 英文书籍（200 KB） | **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
-| Rust 源码（100 KB） | **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
+| 短文本（13 B）| **25 ns** | 61 ns | 112 ns | 42 ns | 32 ns | 27 ns | 147 ns |
+| 中等文本（900 B）| **431 ns** | 750 ns | 733 ns | 606 ns | 1.3 µs | 1.0 µs | 8.2 µs |
+| 英文文章（45 KB）| **19.9 µs** | 35.6 µs | 32.3 µs | 29.9 µs | 61.2 µs | 49.5 µs | 405 µs |
+| 中文文章（4.3 KB）| **2.0 µs** | 8.0 µs | 4.3 µs | 12.9 µs | 10.1 µs | 12.2 µs | 37.7 µs |
+| 日文文章（4.6 KB）| **1.4 µs** | 17.2 µs | 4.1 µs | 18.8 µs | 15.8 µs | 22.8 µs | 41.1 µs |
+| CJK 混排 ×50（4.5 KB）| **2.6 µs** | 3.9 µs | 5.8 µs | 17.8 µs | 12.7 µs | 18.9 µs | 40.0 µs |
+| 无重复片段的 CJK 对抗语料（3.9 KB）| **2.7 µs** | 5.3 µs | 5.4 µs | 17.2 µs | 15.3 µs | 19.4 µs | 56.1 µs |
+| 代码（3.9 KB）| **1.9 µs** | 3.9 µs | 3.4 µs | 2.8 µs | 6.1 µs | 6.6 µs | 46.1 µs |
+| 英文书籍（200 KB）| **111 µs** | 184 µs | 205 µs | 144 µs | 341 µs | 715 µs | 2,854 µs |
+| Rust 源码（100 KB）| **56.1 µs** | 95.8 µs | 97.6 µs | 79.8 µs | 181 µs | 263 µs | 1,412 µs |
 
 - 本库的单线程速度是 fastokens 的 1.5〜12 倍。使用默认线程数时，fastokens 编码英文书籍耗时 50.3 µs，编码 Rust 源码耗时 36.3 µs。本库分别耗时 16.7 µs 和 12.5 µs，速度分别是 fastokens 的 3.0 倍和 2.9 倍
 - 编码 13 字节的字符串时，magi-tokenizer 与本库的耗时相差 4%〜12%
@@ -69,12 +69,12 @@ tiktoken 是速度最快的 Rust BPE 分词器。原生编码速度是 tiktoken-
 
 | 语料 | tiktoken-fast 0.1 (wasm) | gpt-tokenizer 4.1 | js-tiktoken 1.0 | **tiktoken (wasm)** |
 |---|---|---|---|---|
-| 中文文章（4.3 KB） | 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
-| 日文文章（4.6 KB） | 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
-| CJK 混排 ×50（4.5 KB） | 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
-| 无重复片段的 CJK 对抗语料（3.9 KB） | 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
-| 英文文章（45 KB） | 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
-| 代码（3.9 KB） | 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
+| 中文文章（4.3 KB）| 6.4 µs | 31.9 µs | 6,625 µs | **4.8 µs** |
+| 日文文章（4.6 KB）| 6.6 µs | 29.2 µs | 12,825 µs | **4.2 µs** |
+| CJK 混排 ×50（4.5 KB）| 7.0 µs | 40.3 µs | 3,975 µs | **6.3 µs** |
+| 无重复片段的 CJK 对抗语料（3.9 KB）| 6.7 µs | 42.2 µs | 2,756 µs | **6.1 µs** |
+| 英文文章（45 KB）| 118 µs | 277 µs | 9,638 µs | **47.7 µs** |
+| 代码（3.9 KB）| 8.9 µs | 30.4 µs | 1,120 µs | **5.1 µs** |
 
 处理两组混合文字语料时，tiktoken-fast 如果已经编码过相同的输入，与本库的速度差距就在约 10% 以内。首次处理这些语料时，本库的速度是它的 1.8〜6.6 倍。在 Safari 中，本库的速度是 gpt-tokenizer 的 3.3〜7.9 倍、tiktoken-fast 的 1.5〜2.2 倍。
 
@@ -86,8 +86,8 @@ tiktoken 是速度最快的 Rust BPE 分词器。原生编码速度是 tiktoken-
 | | tiktoken | tiktoken-rs | Python tiktoken |
 |---|---|---|---|
 | 预分词 | 所有编码都用扫描器查 Unicode 表，生成表时采用各切分规则对应的 Unicode 版本。cl100k 和 o200k 系列用 SIMD（NEON、SSE2 或 AVX2、wasm simd128）每次检查 64 字节，找出片段起点 | 每次都执行正则表达式 | 每次都执行正则表达式 |
-| 正则引擎 | 运行时无需正则引擎（`regex` 仅作开发依赖，用于在测试中核对扫描结果） | `fancy-regex`（支持回溯） | 通过 PyO3 调用 `regex`，有 FFI 开销 |
-| 词表查找 | 按键长分层。最多 15 字节的键紧凑存放在同一张开放寻址表中，每个缓存行有两个槽位。更长的键存入带哈希标记的 arena 槽位。1〜2 字节的键可直接按索引查表 | `HashMap<Vec<u8>>`（20 万次分配） | 通过 PyO3 访问 Rust `HashMap` |
+| 正则引擎 | 运行时无需正则引擎（`regex` 仅作开发依赖，用于在测试中核对扫描结果）| `fancy-regex`（支持回溯）| 通过 PyO3 调用 `regex`，有 FFI 开销 |
+| 词表查找 | 按键长分层。最多 15 字节的键紧凑存放在同一张开放寻址表中，每个缓存行有两个槽位。更长的键存入带哈希标记的 arena 槽位。1〜2 字节的键可直接按索引查表 | `HashMap<Vec<u8>>`（20 万次分配）| 通过 PyO3 访问 Rust `HashMap` |
 | 重复片段 | 分词器将词表以外的片段合并后，把结果写入共享查找表，供所有线程复用。长片段另有线程局部缓存和共享缓存 | 无 | 无 |
 | BPE 合并 | 短片段在栈上线性扫描，长片段用堆处理。查表未命中的短片段按 token ID 成批合并 | O(n*m) 线性扫描 | O(n*m) 线性扫描 |
 | 零分配 `count()` | 有 | 无 | 无 |
@@ -152,22 +152,22 @@ let enc = tiktoken::encoding_for_model("qwen2.5-72b").unwrap();
 | 编码 | 厂商 | Feature | 数据 | 适用模型 |
 |---|---|---|---|---|
 | `o200k_base` | OpenAI | `vocab-o200k_base` | 815 KB | GPT-4o、GPT-4.1、GPT-4.5、GPT-5〜5.6（含 Sol/Terra/Luna）、GPT-6.x（推定，官方未公布）、o1、o3、o4-mini |
-| `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony 对话格式） |
+| `o200k_harmony` | OpenAI | `vocab-o200k_base` | — | gpt-oss（harmony 对话格式）|
 | `cl100k_base` | OpenAI | `vocab-cl100k_base` | 373 KB | GPT-4、GPT-4 Turbo、GPT-3.5 Turbo、text-embedding-*、davinci-002、babbage-002 |
 | `p50k_base` | OpenAI | `vocab-p50k_base` | 55 B + 基座 | text-davinci-002/003、code-davinci-*、code-cushman-* |
 | `p50k_edit` | OpenAI | `vocab-p50k_base` | — | text-davinci-edit-*、code-davinci-edit-* |
 | `r50k_base` | OpenAI | `vocab-r50k_base` | 182 KB | GPT-3 时代：davinci、curie、babbage、ada |
-| `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` 的别名） |
+| `gpt2` | OpenAI | `vocab-r50k_base` | — | GPT-2（`r50k_base` 的别名）|
 | `llama3` | Meta | `vocab-llama3` | 111 KB + 基座 | Llama 3、3.1、3.2、3.3 |
 | `llama4` | Meta | `vocab-llama4` | 816 KB | Llama 4 Scout / Maverick、Muse |
 | `deepseek_v3` | DeepSeek | `vocab-deepseek_v3` | 514 KB | DeepSeek V3、R1 |
-| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash、V4.1 Flash（V3 词表 + V4 特殊 token） |
+| `deepseek_v4` | DeepSeek | `vocab-deepseek_v3` | — | DeepSeek V4 Pro / Flash、V4.1 Flash（V3 词表 + V4 特殊 token）|
 | `qwen2` | 阿里巴巴 | `vocab-qwen2` | 564 KB | Qwen 2.5、Qwen 3 |
-| `qwen3_5` | 阿里巴巴 | `vocab-qwen3_5` | 989 KB | Qwen 3.5〜3.8、Qwen 4（推定，官方未公布） |
-| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral、Mixtral、Large 3、Small 4（Tekken 分词器） |
-| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4（Tekken v15） |
+| `qwen3_5` | 阿里巴巴 | `vocab-qwen3_5` | 989 KB | Qwen 3.5〜3.8、Qwen 4（推定，官方未公布）|
+| `mistral_v3` | Mistral | `vocab-mistral_v3` | 525 KB | Mistral、Mixtral、Large 3、Small 4（Tekken 分词器）|
+| `mistral_v15` | Mistral | `vocab-mistral_v15` | 853 KB | Mistral Large 4（Tekken v15）|
 | `kimi_k2` | Moonshot | `vocab-kimi_k2` | 659 KB | Kimi K2 / K2.5 / K2.6 |
-| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1（K2 词表 + K3 特殊 token） |
+| `kimi_k3` | Moonshot | `vocab-kimi_k2` | — | Kimi K3 / K3.1（K2 词表 + K3 特殊 token）|
 | `glm4` | 智谱 | `vocab-glm4` | 578 KB | GLM-4.5 / 4.6 / 4.7 |
 | `glm5` | 智谱 | `vocab-glm5` | 6 KB + 基座 | GLM-5 / 5.1 / 5.2 / 5.3 |
 | `minimax_m2` | MiniMax | `vocab-minimax_m2` | 822 KB | MiniMax M2 / M2.1 / M2.5 / M2.7 / M3 / M3.1 |
