@@ -33,6 +33,39 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [Unreleased]
+
+### Added
+
+- `CoreBpe::next_cut(text, from)` and `CoreBpe::prev_cut(text, to)`: the
+  nearest cut of `text` at or after `from` (at or before `to`). At a cut `b`,
+  the ids of `text[..b]` followed by the ids of `text[b..]` are exactly the
+  ids of `text`, and the counts add up. Whether `b` is a cut depends only on
+  the bytes within four of it, so a cut of a slice is a cut of any text that
+  contains the slice. A chunker can count a chunk from the document's own
+  ids plus two short encodes at the chunk's ends instead of encoding the
+  whole chunk again. Not promised for `encode_with_special_tokens`.
+- More cut positions, each proven against every encoding's split pattern
+  and checked against every encoding's scanner and ids: a space or tab after
+  any non-blank char; the last blank of a whitespace run before an ASCII
+  word, number or punctuation char (indentation; not before a digit on
+  `deepseek_v3` and `deepseek_v4`); kana letters before CJK marks, and
+  `「」『』（）` as marks. Long texts are cut for the worker threads at these
+  positions too; ids are unchanged.
+
+### Performance
+
+- Texts of 32 KiB and more on the worker threads (Apple M4 Pro, default
+  threads, `o200k_base`): 180 KB of Japanese prose 88-96 µs to 13 µs, since
+  5.5 found no position to cut it at and encoded it on one thread; 100 KB of
+  Rust source 12.8 µs to 11.1 µs. Other texts and every call on one thread
+  are unchanged.
+- The cut search reads 16 or 32 bytes at a time (SSE2 or AVX2 on x86_64,
+  NEON on aarch64, a byte loop elsewhere): 0.09 ns per byte where nothing
+  qualifies, against 0.5 ns per byte for 5.5's byte-at-a-time rule. Finding
+  the first and the last cut of every 2 KB slice of a 200 KB document takes
+  about 1 µs; encoding it takes 115 µs.
+
 ## [5.5.0] - 2026-11-25
 
 ### Added

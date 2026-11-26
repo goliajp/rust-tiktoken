@@ -299,6 +299,58 @@ impl CoreBpe {
         self.engine().encode_into(text, result);
     }
 
+    /// The first cut of `text` at or after byte `from`: a byte offset `b`,
+    /// `0 < b < text.len()`, at which `text` can be split in two without
+    /// changing its tokens.
+    ///
+    /// At a cut `b`, encoding `&text[..b]` and `&text[b..]` separately and
+    /// concatenating the ids gives exactly [`encode(text)`](Self::encode), and
+    /// the two [`count`](Self::count)s add up to `count(text)`. Every cut is
+    /// a char boundary.
+    ///
+    /// Whether `b` is a cut depends only on the bytes within four of `b`
+    /// inside `text`, so a cut of a slice is also a cut of every text that
+    /// contains the slice, at the same place: for `doc` and `s..e`, a cut
+    /// `b` of `&doc[s..e]` is a cut of `doc` at `s + b`.
+    ///
+    /// Cuts come from rules proven for each encoding's split pattern; they
+    /// are a sufficient condition, not every position where a split happens
+    /// to be harmless, and a later version may find more of them. Nothing is
+    /// promised for [`encode_with_special_tokens`](Self::encode_with_special_tokens):
+    /// a cut may fall inside the text of a special token.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let enc = tiktoken::get_encoding("o200k_base").unwrap();
+    /// let text = "Hello world, again.";
+    /// let b = enc.next_cut(text, 1).unwrap();
+    /// assert_eq!(b, 5);
+    /// let mut ids = enc.encode(&text[..b]);
+    /// ids.extend(enc.encode(&text[b..]));
+    /// assert_eq!(ids, enc.encode(text));
+    /// ```
+    #[must_use]
+    pub fn next_cut(&self, text: &str, from: usize) -> Option<usize> {
+        crate::cut::next(text.as_bytes(), from, self.pre_tokenizer.cut_rules())
+    }
+
+    /// The last cut of `text` at or before byte `to`; see
+    /// [`next_cut`](Self::next_cut) for what a cut is.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let enc = tiktoken::get_encoding("o200k_base").unwrap();
+    /// let text = "Hello world, again.";
+    /// assert_eq!(enc.prev_cut(text, text.len()), Some(12));
+    /// assert_eq!(enc.prev_cut(text, 4), None);
+    /// ```
+    #[must_use]
+    pub fn prev_cut(&self, text: &str, to: usize) -> Option<usize> {
+        crate::cut::prev(text.as_bytes(), to, self.pre_tokenizer.cut_rules())
+    }
+
     /// [`encode`](Self::encode)'s parallel path at any length, with chunks of
     /// about `chunk` bytes and no cap on their number. For tests and
     /// benchmarks; not a stable API.

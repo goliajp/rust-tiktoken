@@ -189,6 +189,12 @@ enc.encode_into("hello world", &mut ids);         // 追加到 `ids` 末尾
 
 // 单个 token 的字节，直接借用词表，不分配；累加长度即得每个 token 在原文中的字节位置
 let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
+
+// 切点：在这里把文本切成两段分别编码，text[..b] 和 text[b..] 的 token id
+// 接起来就是整段 text 的 token id
+let text = "Hello world, again.";
+let b = enc.next_cut(text, 1).unwrap();           // 5，在 " world" 之前
+let last = enc.prev_cut(text, text.len());        // Some(12)，在 " again." 之前
 ```
 
 ### 特殊 token

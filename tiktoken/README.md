@@ -232,6 +232,12 @@ enc.encode_into("hello world", &mut ids);         // appends to `ids`
 
 // one token's bytes, borrowed: lengths give byte offsets in the text
 let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
+
+// cuts: offsets where a text splits in two with the same tokens, so the
+// ids of text[..b] followed by those of text[b..] are the ids of text
+let text = "Hello world, again.";
+let b = enc.next_cut(text, 1).unwrap();           // 5, before " world"
+let last = enc.prev_cut(text, text.len());        // Some(12), before " again."
 ```
 
 ### Special tokens
