@@ -36,8 +36,14 @@ impl CoreBpe {
     /// ```
     #[must_use]
     pub fn encode_with_ends(&self, text: &str) -> (Vec<u32>, Vec<usize>) {
-        let mut ids = Vec::new();
-        let mut ends = Vec::new();
+        // a short text has room for an id per byte, which its loop makes
+        let cap = if text.len() < WINDOW_MIN {
+            text.len()
+        } else {
+            id_capacity(text)
+        };
+        let mut ids = Vec::with_capacity(cap);
+        let mut ends = Vec::with_capacity(cap);
         self.encode_with_ends_into(text, &mut ids, &mut ends);
         (ids, ends)
     }
@@ -107,28 +113,77 @@ impl Engine<'_> {
         ends: &mut Vec<usize>,
         base: usize,
     ) {
-        let cap = id_capacity(text);
-        ids.reserve(cap);
-        ends.reserve(cap);
-        if text.len() >= WINDOW_MIN
-            && let Some(kind) = self.pre.window_kind()
-        {
-            let mut sink = EndsSink::new(self, ids, ends, base);
-            window_dispatch(self.pre, kind, text, &mut sink);
-            sink.finish();
-            return;
+        if text.len() < WINDOW_MIN {
+            return self.short_ends(text, ids, ends, base);
         }
-        self.encode_scalar_ends(text, ids, ends, base);
+        let mut sink = EndsSink::new(self, ids, ends, base, id_capacity(text));
+        match self.pre.window_kind() {
+            Some(kind) => window_dispatch(self.pre, kind, text, &mut sink),
+            None => self.scalar_ends(text, &mut sink),
+        }
+        sink.finish();
     }
 
-    fn encode_scalar_ends(
+    /// A text shorter than [`WINDOW_MIN`]: it has at most one id per byte,
+    /// so room for that many is made once and nothing is checked after.
+    fn short_ends(&self, text: &str, ids: &mut Vec<u32>, ends: &mut Vec<usize>, base: usize) {
+        let bytes = text.as_bytes();
+        ids.reserve(bytes.len());
+        ends.reserve(bytes.len());
+        let (mut il, mut el) = (ids.len(), ends.len());
+        let (mut ip, mut ep) = (ids.as_mut_ptr(), ends.as_mut_ptr());
+        let mut pos = 0;
+        while let Some((start, end)) = self.pre.next_match(text, pos) {
+            pos = end;
+            let mut key = NO_KEY;
+            if (end - start).wrapping_sub(1) < FAST_KEY_MAX {
+                key = key_of(&bytes[start..end]);
+                if let Some(id) = self.vocab.get_home(key.0, key.1) {
+                    // SAFETY: room for an id and an end per byte was made
+                    // above, and every id takes at least one
+                    unsafe {
+                        ip.add(il).write(id);
+                        ep.add(el).write(base + end);
+                    }
+                    (il, el) = (il + 1, el + 1);
+                    continue;
+                }
+            }
+            // SAFETY: `il` ids and `el` ends were written
+            unsafe {
+                ids.set_len(il);
+                ends.set_len(el);
+            }
+            self.short_miss(&bytes[start..end], key, ids, ends, base + start);
+            (il, el) = (ids.len(), ends.len());
+            (ip, ep) = (ids.as_mut_ptr(), ends.as_mut_ptr());
+        }
+        // SAFETY: as above
+        unsafe {
+            ids.set_len(il);
+            ends.set_len(el);
+        }
+    }
+
+    #[inline(never)]
+    fn short_miss(
         &self,
-        text: &str,
+        piece: &[u8],
+        key: (u64, u64),
         ids: &mut Vec<u32>,
         ends: &mut Vec<usize>,
-        base: usize,
+        at: usize,
     ) {
-        let mut sink = EndsSink::new(self, ids, ends, base);
+        let k = ids.len();
+        self.encode_piece(piece, key, ids);
+        let mut e = at;
+        for &id in &ids[k..] {
+            e += self.vocab.token_len(id);
+            ends.push(e);
+        }
+    }
+
+    fn scalar_ends(&self, text: &str, sink: &mut EndsSink<'_, '_>) {
         let bytes = text.as_bytes();
         let wide = bytes.len() >= KEY_READ;
         let mut pos = 0;
@@ -149,7 +204,6 @@ impl Engine<'_> {
             }
             sink.miss(&bytes[start..end], key);
         }
-        sink.finish();
     }
 }
 

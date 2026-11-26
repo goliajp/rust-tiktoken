@@ -27,12 +27,14 @@ pub(crate) struct EndsSink<'e, 'v> {
 }
 
 impl<'e, 'v> EndsSink<'e, 'v> {
-    /// Ends are written as `base` plus the offset in the text.
+    /// Ends are written as `base` plus the offset in the text; room for
+    /// `cap` ids and ends is made up front.
     pub(crate) fn new(
         engine: &'e Engine<'e>,
         ids: &'v mut Vec<u32>,
         ends: &'v mut Vec<usize>,
         base: usize,
+        cap: usize,
     ) -> Self {
         let mut sink = Self {
             engine,
@@ -45,7 +47,7 @@ impl<'e, 'v> EndsSink<'e, 'v> {
             room: 0,
             at: base,
         };
-        sink.reload(ROOM);
+        sink.reload(cap);
         sink
     }
 
