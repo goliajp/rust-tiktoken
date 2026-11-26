@@ -271,17 +271,16 @@ impl super::Vocab {
     /// table refuses it.
     pub(crate) fn insert_long(&self, p: &LongPiece<'_>, ids: &[u32]) -> bool {
         let t = self.long_derived.get_or_init(LongDerived::new);
-        let mut ends = [0u8; LONG_KEY_MAX];
-        let mut n = 0;
-        if t.keeps_ends() {
-            let mut at = 0usize;
-            for (e, &id) in ends.iter_mut().zip(ids) {
-                at += self.try_decode(id).map_or(0, <[u8]>::len);
-                *e = at as u8;
-            }
-            n = ids.len();
+        if !t.keeps_ends() {
+            return t.insert(p.piece, ids, &[], p.hash);
         }
-        t.insert(p.piece, ids, &ends[..n], p.hash)
+        let mut ends = [0u8; LONG_KEY_MAX];
+        let mut at = 0usize;
+        for (e, &id) in ends.iter_mut().zip(ids) {
+            at += self.try_decode(id).map_or(0, <[u8]>::len);
+            *e = at as u8;
+        }
+        t.insert(p.piece, ids, &ends[..ids.len()], p.hash)
     }
 }
 
