@@ -50,10 +50,11 @@ entries below.
   are ordinary text, as in `encode`; texts of 32 KiB or more run on the
   worker threads, with the same output. The `_into` form appends to both
   vectors, with ends relative to the text of that call.
-- Once `encode_with_ends` has met a piece longer than 15 bytes, the shared
-  table of such pieces also keeps each token's end in its piece: one byte
-  per table word, at most 1 MiB more (128 KiB on `wasm32`). Programs that
-  never call it allocate nothing more.
+- The shared table of pieces longer than 15 bytes also keeps, for each
+  piece `encode_with_ends` has met, each token's end in the piece: one byte
+  per table word, at most 1 MiB more (128 KiB on `wasm32`), allocated by the
+  first such call. Programs that never call it allocate nothing more, and
+  plain encoding never writes it.
 
 ### Performance
 

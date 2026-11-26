@@ -6,10 +6,12 @@
 //! text's last bytes. A piece answered by one token ends where the piece
 //! ends; the ids of any other piece get their ends from the token lengths.
 
+use std::sync::atomic::Ordering;
+
 use crate::encode_loop::{Engine, NO_KEY, piece_key, probe, probe_entry};
 use crate::encode_sink::ROOM;
 use crate::pretokenize::windowed::PieceSink;
-use crate::vocab::{Entry, Home, HomeProbe, LongIds, Vocab, copy_ids};
+use crate::vocab::{Entry, Home, HomeProbe, LONG_KEY_MAX, LongIds, Vocab, copy_ids};
 
 pub(crate) struct EndsSink<'e, 'v> {
     engine: &'e Engine<'e>,
@@ -157,22 +159,28 @@ impl<'e, 'v> EndsSink<'e, 'v> {
         }
         let at = self.at;
         self.at += len;
+        let vocab = self.engine.vocab;
         // SAFETY: room for `k` ids and ends was made above, with ROOM to
         // spare for the up to 7 ends written past them, and the table has 8
         // bytes readable past the last end
         unsafe {
             copy_ids(ids.as_ptr(), self.ip.add(self.n), k);
             let ep = self.ep.add(self.n);
-            let Some(src) = self.engine.vocab.long_ends(&ids) else {
-                // a record from before the table kept ends
-                piece_ends(self.engine.vocab, ids.as_ptr(), ep, k, at, self.at);
+            let Some(src) = vocab.long_ends(&ids) else {
+                // the first time an encode with ends meets this piece
+                piece_ends(vocab, ids.as_ptr(), ep, k, at, self.at);
+                let mut ends = [0u8; LONG_KEY_MAX];
+                for (j, e) in ends[..k].iter_mut().enumerate() {
+                    *e = (*ep.add(j) - at) as u8;
+                }
+                vocab.keep_long_ends(&ids, &ends[..k]);
                 self.n += k;
                 return;
             };
             let mut j = 0;
             loop {
-                let b = src.add(j).cast::<[u8; 8]>().read_unaligned();
-                for (l, &x) in b.iter().enumerate() {
+                for l in 0..8 {
+                    let x = (*src.add(j + l)).load(Ordering::Relaxed);
                     ep.add(j + l).write(at + x as usize);
                 }
                 j += 8;
