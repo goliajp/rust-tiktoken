@@ -190,6 +190,11 @@ enc.encode_into("hello world", &mut ids);         // `ids` の末尾に追加
 // 1 トークン分のバイト列。語彙から借用するので割り当てはない。長さを足し合わせると原文でのバイト位置がわかる
 let hello: Option<&[u8]> = enc.token_bytes(ids[0]);
 
+// エンコードと同時に、各トークンが原文のどのバイト位置で終わるかを返す。token_bytes の長さを
+// 後から足し合わせるより速い。マルチバイト文字の途中で終わるトークンもある。
+// encode_with_ends_into(text, &mut ids, &mut ends) は encode_into と同じく末尾に追加する
+let (ids, ends) = enc.encode_with_ends("hello world"); // ends: [5, 11]
+
 // カット位置：ここで 2 つに分けて別々にエンコードしても、text[..b] と text[b..] の
 // token ID を並べると text 全体の token ID と一致する
 let text = "Hello world, again.";

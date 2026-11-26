@@ -10,6 +10,7 @@
 //! Decoding indexes a contiguous arena by rank.
 
 mod atoms;
+mod decoder;
 mod fast;
 mod filter;
 mod frags;
@@ -408,22 +409,6 @@ impl Vocab {
             .iter()
             .filter(|&&(offset, _)| offset != u32::MAX)
             .count()
-    }
-
-    /// Try to get the token bytes for a given rank.
-    /// Returns `None` if the rank is out of range or not present in the vocabulary.
-    #[inline]
-    pub(crate) fn try_decode(&self, rank: u32) -> Option<&[u8]> {
-        let idx = rank as usize;
-        if idx >= self.decoder.len() {
-            return None;
-        }
-        let (offset, len) = self.decoder[idx];
-        // u32::MAX offset = sentinel for "rank not present"
-        if offset == u32::MAX {
-            return None;
-        }
-        Some(&self.arena[offset as usize..(offset as usize + len as usize)])
     }
 }
 

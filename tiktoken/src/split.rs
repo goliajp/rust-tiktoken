@@ -203,7 +203,7 @@ pub(crate) fn count(
 }
 
 /// Thread count and chunk boundaries, or `None` to stay on this thread.
-fn plan(
+pub(crate) fn plan(
     engine: &Engine<'_>,
     text: &str,
     chunk: usize,
