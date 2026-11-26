@@ -107,6 +107,9 @@ impl Engine<'_> {
         ends: &mut Vec<usize>,
         base: usize,
     ) {
+        let cap = id_capacity(text);
+        ids.reserve(cap);
+        ends.reserve(cap);
         if text.len() >= WINDOW_MIN
             && let Some(kind) = self.pre.window_kind()
         {
@@ -125,9 +128,6 @@ impl Engine<'_> {
         ends: &mut Vec<usize>,
         base: usize,
     ) {
-        let cap = id_capacity(text);
-        ids.reserve(cap);
-        ends.reserve(cap);
         let bytes = text.as_bytes();
         let wide = bytes.len() >= KEY_READ;
         let mut pos = 0;

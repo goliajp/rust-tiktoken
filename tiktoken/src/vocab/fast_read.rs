@@ -74,6 +74,14 @@ impl FastTable {
         }
     }
 
+    /// Where the ids of an entry of more than [`INLINE`] ids are kept.
+    #[inline(always)]
+    pub(crate) fn arena_ids(&self, e: Entry) -> *const u32 {
+        debug_assert!(e.len() > INLINE);
+        let off = e.w0 as u32 as usize;
+        self.arena[off..off + e.len()].as_ptr().cast::<u32>()
+    }
+
     /// Append the entry's ids to `out`.
     #[inline]
     pub(crate) fn extend(&self, e: Entry, out: &mut Vec<u32>) {

@@ -118,9 +118,8 @@ impl<'e, 'v> EndsSink<'e, 'v> {
         // SAFETY: an entry has at most 15 ids, and `write_entry` writes at
         // most two more; ROOM is more than that
         unsafe {
-            let ip = self.ip.add(self.n);
-            self.engine.vocab.write_entry(e, ip);
-            entry_ends(self.engine.vocab, e, ip, self.ep.add(self.n), at, self.at);
+            self.engine.vocab.write_entry(e, self.ip.add(self.n));
+            entry_ends(self.engine.vocab, e, self.ep.add(self.n), at, self.at);
         }
         self.n += e.len();
     }
@@ -137,7 +136,14 @@ impl<'e, 'v> EndsSink<'e, 'v> {
         unsafe {
             let ip = self.ip.add(self.n);
             copy_ids(ids.as_ptr(), ip, k);
-            piece_ends(self.engine.vocab, ip, self.ep.add(self.n), k, at, self.at);
+            piece_ends(
+                self.engine.vocab,
+                ids.as_ptr(),
+                self.ep.add(self.n),
+                k,
+                at,
+                self.at,
+            );
         }
         self.n += k;
     }
@@ -189,32 +195,23 @@ unsafe fn piece_ends(
     }
 }
 
-/// [`piece_ends`] of an entry's ids just written at `ip`, without a loop
-/// for an entry of up to three ids.
+/// [`piece_ends`] of an entry's ids, read from the entry rather than from
+/// the output just written, and without a loop for up to three ids.
 ///
 /// # Safety
 ///
-/// The entry's ids are readable at `ip`, and `max(3, e.len())` ends
-/// writable at `ep`.
+/// `max(3, e.len())` ends are writable at `ep`.
 #[inline(always)]
-unsafe fn entry_ends(
-    vocab: &Vocab,
-    e: Entry,
-    ip: *const u32,
-    ep: *mut usize,
-    at: usize,
-    end: usize,
-) {
+unsafe fn entry_ends(vocab: &Vocab, e: Entry, ep: *mut usize, at: usize, end: usize) {
     let k = e.len();
     // SAFETY: passed on from the caller
     unsafe {
         if !e.is_inline() {
-            return piece_ends(vocab, ip, ep, k, at, end);
+            return piece_ends(vocab, vocab.entry_ids(e), ep, k, at, end);
         }
-        // the words past the entry's ids are arbitrary: the second id is
-        // read only when there are three
-        let i0 = *ip;
-        let i1 = if k == 3 { *ip.add(1) } else { i0 };
+        // the second id is looked up only when there are three
+        let i0 = e.first();
+        let i1 = if k == 3 { e.rest() as u32 } else { i0 };
         let e0 = at + vocab.token_len(i0);
         let e1 = e0 + vocab.token_len(i1);
         ep.write(if k == 1 { end } else { e0 });
@@ -270,7 +267,7 @@ impl PieceSink for EndsSink<'_, '_> {
                     Home::Derived(e) if e.is_inline() => unsafe {
                         vocab.write_entry(e, ip.add(n));
                         let (at, end) = (a.wrapping_add(delta), b.wrapping_add(delta));
-                        entry_ends(vocab, e, ip.add(n), ep.add(n), at, end);
+                        entry_ends(vocab, e, ep.add(n), at, end);
                         n += e.len();
                     },
                     Home::Derived(e) => {
@@ -330,8 +327,7 @@ impl PieceSink for EndsSink<'_, '_> {
                 unsafe {
                     let vocab = self.engine.vocab;
                     vocab.write_entry(e, self.ip.add(self.n));
-                    let ip = self.ip.add(self.n);
-                    entry_ends(vocab, e, ip, self.ep.add(self.n), at, self.at);
+                    entry_ends(vocab, e, self.ep.add(self.n), at, self.at);
                 }
                 self.n += k;
             }

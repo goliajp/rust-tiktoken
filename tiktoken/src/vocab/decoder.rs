@@ -25,4 +25,11 @@ impl Vocab {
         debug_assert!(self.try_decode(rank).is_some());
         self.decoder[rank as usize].1 as usize
     }
+
+    /// Where the ids of an entry that is not inline are kept; they are not
+    /// written again while the vocabulary is shared.
+    #[inline(always)]
+    pub(crate) fn entry_ids(&self, e: super::Entry) -> *const u32 {
+        self.fast.arena_ids(e)
+    }
 }
