@@ -193,13 +193,14 @@ impl<'e, 'v> EndsSink<'e, 'v> {
         self.n += k;
     }
 
-    /// The ids of a piece that the loops did not answer, by the general miss
-    /// path, and their ends.
+    /// The ids of a piece that the shared tables were found not to hold, and
+    /// their ends; every caller looked first, so the miss path does not look
+    /// again.
     #[inline(never)]
     fn slow(&mut self, piece: &[u8], key: (u64, u64)) {
         self.sync();
         let k = self.ids.len();
-        self.engine.encode_piece(piece, key, self.ids);
+        self.engine.encode_unheld(piece, key, self.ids);
         let at = self.at;
         self.at += piece.len();
         let new = &self.ids[k..];
