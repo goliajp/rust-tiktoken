@@ -33,6 +33,25 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [Unreleased]
+
+### Performance
+
+- `encode_with_ends` and `encode_with_ends_into`: a piece that is in none
+  of the shared tables (the first time a process meets it) is no longer
+  looked up in them a second time before it is merged, which plain
+  encoding already skipped. On the 179 KB Chinese and 180 KB Japanese
+  texts, with the shared tables cleared before each call, this takes 1.4
+  to 1.7% and 0.5 to 0.7% of the instructions away (x86-64 and Apple M6,
+  `o200k_base` and `cl100k_base`); the cycles are 0 to 3% fewer, within
+  run-to-run noise. On those two texts such a first call still takes 3 to
+  5% more cycles than `encode_into` followed by summing the `token_bytes`
+  lengths (x86-64); on English, Markdown and code it takes 8 to 20% fewer.
+- `encode`, `encode_into` and `count` are unchanged: same code, and their
+  instructions per call are within 0.06% of 5.7.0's on x86-64 for the
+  texts above (0.6% on a 13-byte text, where process start dominates) and
+  equal on the M6.
+
 ## [5.7.0] - 2026-11-27
 
 ### Added
