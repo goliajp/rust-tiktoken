@@ -33,7 +33,7 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
-## [Unreleased]
+## [5.7.1] - 2026-11-27
 
 ### Performance
 
