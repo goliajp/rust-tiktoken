@@ -7,6 +7,7 @@
 //! runs hold one or two parts, which need at most one lookup; longer runs
 //! merge with the parts packed at the front of small arrays.
 
+use super::PartEnds;
 use crate::vocab::{ABSENT, Atoms, RankProbe, Vocab, copy_ids};
 
 /// Most parts in one run; a piece with a longer run takes the general merge.
@@ -80,16 +81,18 @@ fn window(piece: &[u8], i: usize) -> u32 {
 
 /// Merge `piece` (2 to 255 bytes) into `ids`, which has room for one id per
 /// byte; returns the id count, or `None` when a run outgrows the arrays.
+/// The end of each id's token in the piece goes to `ends`.
 #[inline(always)]
-pub(super) fn merge_chars(
+pub(super) fn merge_chars<E: PartEnds>(
     piece: &[u8],
     vocab: &Vocab,
     atoms: &Atoms,
     ids: &mut [u32],
+    ends: &mut E,
 ) -> Option<usize> {
     let n = piece.len();
     debug_assert!((2..=255).contains(&n));
-    assert!(ids.len() >= n);
+    assert!(ids.len() >= n && (!E::ON || ends.len() >= n));
     let table = atoms.walls();
     let probe = vocab.rank_probe();
     let single = |b: u32| vocab.rank_single(b as u8);
@@ -105,6 +108,16 @@ pub(super) fn merge_chars(
             debug_assert!(c < n);
             // SAFETY: c < n <= ids.len(), as above
             unsafe { *ids.get_unchecked_mut(c) = $x };
+            c += 1;
+        }};
+        ($x:expr, $end:expr) => {{
+            debug_assert!(c < n);
+            // SAFETY: c < n <= ids.len(), as above
+            unsafe { *ids.get_unchecked_mut(c) = $x };
+            if E::ON {
+                // SAFETY: c < n <= ends.len() when it keeps ends
+                unsafe { ends.put(c, $end as usize) };
+            }
             c += 1;
         }};
     }
@@ -124,14 +137,14 @@ pub(super) fn merge_chars(
         () => {{
             match m {
                 0 => {}
-                1 => put!(id[0]),
+                1 => put!(id[0], at[1]),
                 2 => {
                     let r = probe.rank_of(&piece[at[0] as usize..at[2] as usize]);
                     if r != ABSENT {
-                        put!(r);
+                        put!(r, at[2]);
                     } else {
-                        put!(id[0]);
-                        put!(id[1]);
+                        put!(id[0], at[1]);
+                        put!(id[1], at[2]);
                     }
                 }
                 _ => {
@@ -140,6 +153,13 @@ pub(super) fn merge_chars(
                     // SAFETY: both ranges are in bounds, and the merge
                     // leaves at least one part
                     unsafe { copy_ids(id.as_ptr(), ids.as_mut_ptr().add(c), k) };
+                    if E::ON {
+                        // the merge left part j covering at[j]..at[j + 1]
+                        for j in 0..k {
+                            // SAFETY: c + k <= n, as for the ids
+                            unsafe { ends.put(c + j, at[j + 1] as usize) };
+                        }
+                    }
                     c += k;
                 }
             }
@@ -197,6 +217,24 @@ pub(super) fn merge_chars(
             put!(p1);
             if let Some(p) = p2 {
                 put!(p);
+            }
+            if E::ON {
+                // the parts end at i + 1, i + 2 and i + 3 when they are the
+                // bytes; a joined pair ends one byte later or where the
+                // char does
+                let (k, first) = match cw.joined() {
+                    (Some(_), _) => (2, 2),
+                    (_, Some(_)) => (2, 1),
+                    _ => (l, 1),
+                };
+                // SAFETY: the `k` parts were written just before `c`
+                unsafe {
+                    ends.put(c - k, i + first);
+                    ends.put(c - k + 1, if k == 3 { i + 2 } else { i + l });
+                    if k == 3 {
+                        ends.put(c - 1, i + 3);
+                    }
+                }
             }
         }
         i += l;

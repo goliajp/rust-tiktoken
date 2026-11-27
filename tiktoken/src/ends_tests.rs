@@ -1,4 +1,5 @@
 use crate::CoreBpe;
+use crate::pretokenize::PreTokenizer;
 
 /// The ends by summing token lengths, the definition the API documents.
 fn summed(enc: &CoreBpe, ids: &[u32]) -> Vec<usize> {
@@ -171,5 +172,116 @@ fn long_texts() {
             assert_eq!(ids, enc.encode(&long), "{name}");
             assert_eq!(ends, summed(enc, &ids), "{name}");
         }
+    }
+}
+
+/// The ids of `text` merged piece by piece, past every shared table.
+fn reference_ids(enc: &CoreBpe, text: &str) -> Vec<u32> {
+    let mut want = vec![];
+    let mut pos = 0;
+    while let Some((s, e)) = enc.pre_tokenizer().next_match(text, pos) {
+        crate::merge::bpe_encode(&text.as_bytes()[s..e], enc.vocab(), &mut want);
+        pos = e;
+    }
+    want
+}
+
+/// Text that no other test makes: clauses of random chars from scripts that
+/// merge from atoms and wall chars, Latin words, chars that every
+/// vocabulary splits into byte tokens, and text that looks like special
+/// tokens, so most of its pieces are met for the first time.
+fn fresh_text(seed: u64, bytes: usize) -> String {
+    const BLOCKS: &[(u32, u32)] = &[
+        (0x4E00, 0x9FA5),
+        (0x3040, 0x30FF),
+        (0xAC00, 0xD7A3),
+        (0x0600, 0x06FF),
+        (0x0400, 0x04FF),
+        (0xFF01, 0xFF65),
+        (0x1F300, 0x1F64F),
+        (0x80, 0x24F),
+        (0x10FF00, 0x10FFFD),
+        (0xE0001, 0xE007F),
+    ];
+    const SPECIAL: &[&str] = &[
+        "<|endoftext|>",
+        "<|im_start|>",
+        "<|fim_prefix|>",
+        "<|begin_of_text|>",
+        "<｜end▁of▁sentence｜>",
+        "[INST]",
+    ];
+    let mut x = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let mut next = move |n: u64| {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        x % n
+    };
+    let mut out = String::new();
+    while out.len() < bytes {
+        match next(8) {
+            0..=3 => {
+                // a clause of one script, long enough for the long table
+                let (lo, hi) = BLOCKS[next(BLOCKS.len() as u64) as usize];
+                for _ in 0..1 + next(40) {
+                    if let Some(c) = char::from_u32(lo + next(u64::from(hi - lo + 1)) as u32) {
+                        out.push(c);
+                    }
+                }
+            }
+            4 | 5 => {
+                out.push(' ');
+                for _ in 0..1 + next(14) {
+                    out.push((b'a' + next(26) as u8) as char);
+                }
+            }
+            6 => out.push_str(SPECIAL[next(SPECIAL.len() as u64) as usize]),
+            _ => out.push_str([" ", "\n", "，", "。", "、", ". ", "\n\n", "  "][next(8) as usize]),
+        }
+    }
+    out
+}
+
+/// Ids equal to the reference merge and ends equal to the summed token
+/// lengths, at first meeting and again once the shared tables hold the
+/// pieces.
+fn check_twice(name: &str, enc: &CoreBpe, text: &str) {
+    let want = reference_ids(enc, text);
+    for pass in 0..2 {
+        let (ids, ends) = enc.encode_with_ends(text);
+        assert_eq!(ids, want, "{name} pass {pass}: ids of {:?}", head(text));
+        assert_eq!(
+            ends,
+            summed(enc, &ids),
+            "{name} pass {pass}: ends of {:?}",
+            head(text)
+        );
+    }
+}
+
+#[test]
+fn ends_of_first_met_pieces() {
+    for &name in crate::list_encodings() {
+        let enc = crate::get_encoding(name).unwrap();
+        for seed in 1..60u64 {
+            let text = fresh_text(
+                seed ^ (name.len() as u64 * 7919),
+                1 + (seed as usize * 97) % 3000,
+            );
+            check_twice(name, enc, &text);
+        }
+    }
+}
+
+// 32 KiB and more go to the worker threads, where each chunk's pieces are
+// first met on another thread
+#[test]
+fn ends_of_first_met_pieces_in_long_texts() {
+    for &name in crate::list_encodings() {
+        let enc = crate::get_encoding(name).unwrap();
+        let text = fresh_text(0xC0FFEE ^ name.len() as u64, 48 * 1024);
+        assert!(text.len() >= crate::bpe::PARALLEL_MIN);
+        check_twice(name, enc, &text);
     }
 }

@@ -23,7 +23,14 @@ fn ends_survive_every_table_state() {
     for name in ["o200k_base", "cl100k_base", "p50k_base", "qwen3_5"] {
         let enc = tiktoken::get_encoding(name).unwrap();
         for round in 0..4 {
-            for text in &texts {
+            // after the clear, another order puts other records where the
+            // ends of the first ones were kept
+            let order: Vec<&String> = if round < 2 {
+                texts.iter().collect()
+            } else {
+                texts.iter().rev().collect()
+            };
+            for text in order {
                 // plain encodes first fill the table without ends
                 if round % 2 == 0 {
                     let _ = enc.encode(text);

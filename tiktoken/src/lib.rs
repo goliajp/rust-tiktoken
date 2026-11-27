@@ -64,6 +64,7 @@ mod encode_miss;
 mod encode_sink;
 pub mod encoding;
 mod ends;
+mod ends_miss;
 mod ends_sink;
 mod hash;
 mod merge;

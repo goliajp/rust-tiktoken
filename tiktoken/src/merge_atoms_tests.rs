@@ -1,7 +1,7 @@
 //! Merges that start from atoms and wall chars against merges from bytes
 //! and a plain reference merge, for every encoding.
 
-use super::{SMALL_MAX, merge_n, merge_small, merge_small_bytes};
+use super::{SMALL_MAX, merge_n, merge_small, merge_small_bytes, merge_small_ends};
 use crate::pretokenize::PreTokenizer;
 use crate::vocab::{Vocab, char_len};
 
@@ -38,8 +38,34 @@ fn check(v: &Vocab, piece: &[u8], name: &str) {
     // the linked merge from atoms, which takes runs too long for the
     // char-at-a-time merge
     if piece.len() >= 2 {
-        let nc = merge_n::<SMALL_MAX>(piece, v, &mut b, Some(v.atoms()));
+        let nc = merge_n::<SMALL_MAX, _>(piece, v, &mut b, super::NoEnds, Some(v.atoms()));
         assert_eq!(a[..na], b[..nc], "{}", what());
+    }
+    check_ends(v, piece, &a[..na], &what);
+}
+
+/// The merges that write ends give the ids of `want` and, for each, the
+/// sum of the token lengths through it.
+fn check_ends(v: &Vocab, piece: &[u8], want: &[u32], what: &dyn Fn() -> String) {
+    let mut at = 0;
+    let summed: Vec<u8> = want
+        .iter()
+        .map(|&id| {
+            at += v.try_decode(id).map_or(1, <[u8]>::len);
+            at as u8
+        })
+        .collect();
+    let (mut ids, mut ends) = ([0u32; SMALL_MAX], [0u8; SMALL_MAX]);
+    let n = merge_small_ends(piece, v, &mut ids, &mut ends);
+    assert_eq!(ids[..n], *want, "{}", what());
+    assert_eq!(ends[..n], summed, "{}", what());
+    if piece.len() >= 2 {
+        for atoms in [None, Some(v.atoms())] {
+            ends.fill(0);
+            let n = merge_n::<SMALL_MAX, _>(piece, v, &mut ids, &mut ends[..], atoms);
+            assert_eq!(ids[..n], *want, "{}", what());
+            assert_eq!(ends[..n], summed, "{}", what());
+        }
     }
 }
 

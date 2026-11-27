@@ -316,6 +316,13 @@ impl Vocab {
             .insert(p.piece, ids, p.hash)
     }
 
+    /// [`insert_long`](Self::insert_long), returning the published ids.
+    pub(crate) fn insert_long_ids(&self, p: &LongPiece<'_>, ids: &[u32]) -> Option<LongIds<'_>> {
+        self.long_derived
+            .get_or_init(LongDerived::new)
+            .insert_ids(p.piece, ids, p.hash)
+    }
+
     /// The chars a merge may start from whole.
     pub(crate) fn atoms(&self) -> &Atoms {
         self.atoms.get_or_init(|| {

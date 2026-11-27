@@ -43,14 +43,58 @@ fn block_min(rank: &[u32], b: usize) -> u32 {
         .fold(u32::MAX, |a, &x| a.min(x))
 }
 
-/// Merge `piece` (`2..=N` bytes) and write the ids of its parts to `ids`;
-/// returns the part count. A byte missing from the vocabulary yields
-/// [`ABSENT`] for its part.
+/// Where a merge writes the end of each part in the piece: nowhere, on the
+/// paths that need only ids.
+pub(crate) trait PartEnds {
+    /// Whether ends are kept; code for them is left out when not.
+    const ON: bool;
+    /// Room for ends, when they are kept.
+    fn len(&self) -> usize;
+    /// The end of part `c`.
+    ///
+    /// # Safety
+    ///
+    /// `c < self.len()`.
+    unsafe fn put(&mut self, c: usize, end: usize);
+}
+
+/// The merge of the paths that need only ids; zero-sized, so those merges
+/// take no extra argument.
+pub(crate) struct NoEnds;
+
+impl PartEnds for NoEnds {
+    const ON: bool = false;
+    #[inline(always)]
+    fn len(&self) -> usize {
+        0
+    }
+    #[inline(always)]
+    unsafe fn put(&mut self, _: usize, _: usize) {}
+}
+
+impl PartEnds for &mut [u8] {
+    const ON: bool = true;
+    #[inline(always)]
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+    #[inline(always)]
+    unsafe fn put(&mut self, c: usize, end: usize) {
+        debug_assert!(c < <[u8]>::len(self));
+        // SAFETY: passed on from the caller
+        unsafe { *self.get_unchecked_mut(c) = end as u8 };
+    }
+}
+
+/// Merge `piece` (`2..=N` bytes) and write the ids of its parts to `ids`,
+/// and their ends to `ends`; returns the part count. A byte missing from the
+/// vocabulary yields [`ABSENT`] for its part.
 #[inline(always)]
-fn merge_n<const N: usize>(
+fn merge_n<const N: usize, E: PartEnds>(
     piece: &[u8],
     vocab: &Vocab,
     ids: &mut [u32],
+    mut ends: E,
     atoms: Option<&Atoms>,
 ) -> usize {
     let n = piece.len();
@@ -184,8 +228,13 @@ fn merge_n<const N: usize>(
     }
     // compact in place: the c-th live part starts at a byte >= c
     let (mut i, mut c) = (0, 0);
+    debug_assert!(!E::ON || ends.len() >= n);
     while i < n {
         ids[c] = ids[i];
+        if E::ON {
+            // SAFETY: c <= i < n <= ends.len()
+            unsafe { ends.put(c, next[i] as usize) };
+        }
         c += 1;
         i = next[i] as usize;
     }
@@ -244,9 +293,33 @@ pub(crate) fn mostly_multibyte(piece: &[u8]) -> bool {
 #[inline]
 pub(crate) fn merge_small(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
     if mostly_multibyte(piece) {
-        return merge_from_atoms(piece, vocab, ids);
+        return merge_from_atoms(piece, vocab, ids, NoEnds);
     }
     merge_small_bytes(piece, vocab, ids)
+}
+
+/// [`merge_small`], with the end of each id's token in the piece written to
+/// `ends`, which has room for an end per byte.
+#[inline]
+pub(crate) fn merge_small_ends(
+    piece: &[u8],
+    vocab: &Vocab,
+    ids: &mut [u32],
+    ends: &mut [u8],
+) -> usize {
+    if mostly_multibyte(piece) {
+        return merge_from_atoms(piece, vocab, ids, ends);
+    }
+    match piece.len() {
+        1 => {
+            ids[0] = vocab.rank_single(piece[0]);
+            ends[0] = 1;
+            1
+        }
+        n if n <= TINY_MAX => merge_n::<TINY_MAX, _>(piece, vocab, ids, ends, None),
+        n if n <= MID_MAX => merge_n::<MID_MAX, _>(piece, vocab, ids, ends, None),
+        _ => merge_n::<SMALL_MAX, _>(piece, vocab, ids, ends, None),
+    }
 }
 
 /// [`merge_small`] from bytes only, never from atoms.
@@ -257,19 +330,24 @@ pub(crate) fn merge_small_bytes(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) ->
             ids[0] = vocab.rank_single(piece[0]);
             1
         }
-        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids, None),
-        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids, None),
-        _ => merge_n::<SMALL_MAX>(piece, vocab, ids, None),
+        n if n <= TINY_MAX => merge_n::<TINY_MAX, _>(piece, vocab, ids, NoEnds, None),
+        n if n <= MID_MAX => merge_n::<MID_MAX, _>(piece, vocab, ids, NoEnds, None),
+        _ => merge_n::<SMALL_MAX, _>(piece, vocab, ids, NoEnds, None),
     }
 }
 
 /// [`merge_small`] of a piece of at least 2 bytes, from its atoms.
 #[inline(never)]
-fn merge_from_atoms(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
+fn merge_from_atoms<E: PartEnds>(
+    piece: &[u8],
+    vocab: &Vocab,
+    ids: &mut [u32],
+    mut ends: E,
+) -> usize {
     let atoms = vocab.atoms();
-    match chars::merge_chars(piece, vocab, atoms, ids) {
+    match chars::merge_chars(piece, vocab, atoms, ids, &mut ends) {
         Some(c) => c,
-        None => merge_linked_from_atoms(piece, vocab, ids, atoms),
+        None => merge_linked_from_atoms(piece, vocab, ids, ends, atoms),
     }
 }
 
@@ -277,11 +355,17 @@ fn merge_from_atoms(piece: &[u8], vocab: &Vocab, ids: &mut [u32]) -> usize {
 /// char-at-a-time merge.
 #[cold]
 #[inline(never)]
-fn merge_linked_from_atoms(piece: &[u8], vocab: &Vocab, ids: &mut [u32], atoms: &Atoms) -> usize {
+fn merge_linked_from_atoms<E: PartEnds>(
+    piece: &[u8],
+    vocab: &Vocab,
+    ids: &mut [u32],
+    ends: E,
+    atoms: &Atoms,
+) -> usize {
     match piece.len() {
-        n if n <= TINY_MAX => merge_n::<TINY_MAX>(piece, vocab, ids, Some(atoms)),
-        n if n <= MID_MAX => merge_n::<MID_MAX>(piece, vocab, ids, Some(atoms)),
-        _ => merge_n::<SMALL_MAX>(piece, vocab, ids, Some(atoms)),
+        n if n <= TINY_MAX => merge_n::<TINY_MAX, _>(piece, vocab, ids, ends, Some(atoms)),
+        n if n <= MID_MAX => merge_n::<MID_MAX, _>(piece, vocab, ids, ends, Some(atoms)),
+        _ => merge_n::<SMALL_MAX, _>(piece, vocab, ids, ends, Some(atoms)),
     }
 }
 

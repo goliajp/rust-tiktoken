@@ -157,11 +157,24 @@ impl LongDerived {
     /// [`hash_long`] is `h`. False when the table refuses it; the caller
     /// keeps the result elsewhere.
     pub(crate) fn insert(&self, piece: &[u8], ids: &[u32], h: u64) -> bool {
+        self.publish(piece, ids, h).is_some()
+    }
+
+    /// [`insert`](Self::insert), returning the published ids.
+    pub(crate) fn insert_ids(&self, piece: &[u8], ids: &[u32], h: u64) -> Option<LongIds<'_>> {
+        let at = self.publish(piece, ids, h)?;
+        Some(LongIds(&self.arena[at..at + ids.len()]))
+    }
+
+    /// Publish a record; the arena word of its first id, or `None` when
+    /// refused.
+    #[inline(always)]
+    fn publish(&self, piece: &[u8], ids: &[u32], h: u64) -> Option<usize> {
         debug_assert!(piece.len() > 15 && piece.len() <= LONG_KEY_MAX && ids.len() <= piece.len());
         debug_assert_eq!(h, hash_long(piece));
         let bucket = self.bucket(h);
         if bucket.0[BUCKET - 1].load(Ordering::Relaxed) != 0 {
-            return false;
+            return None;
         }
         let key_words = piece.len().div_ceil(4);
         let need = 1 + key_words + ids.len();
@@ -171,7 +184,7 @@ impl LongDerived {
             self.arena_len
                 .0
                 .store(ARENA_WORDS as u32, Ordering::Relaxed);
-            return false;
+            return None;
         }
         // SAFETY: the words `off..off + need` were reserved above, no reader
         // sees them before the slot's Release below, and they are in bounds;
@@ -188,10 +201,10 @@ impl LongDerived {
                 .compare_exchange(0, v, Ordering::Release, Ordering::Relaxed)
                 .is_ok()
             {
-                return true;
+                return Some(off + 1 + key_words);
             }
         }
-        false
+        None
     }
 
     /// Where the token ends of `ids`, which come from this table, are kept,
@@ -233,8 +246,11 @@ impl LongDerived {
         }
         // later records reuse these words: their ends are not known
         if let Some(e) = self.ends.get() {
-            for b in &e[..used.min(ARENA_WORDS)] {
-                b.store(0, Ordering::Relaxed);
+            // SAFETY: no other thread uses the table, the bytes are in an
+            // `UnsafeCell`, and the range is in bounds; one fill rather than
+            // a store per byte
+            unsafe {
+                std::ptr::write_bytes(e.as_ptr().cast::<u8>().cast_mut(), 0, used.min(ARENA_WORDS));
             }
         }
         // write only the slots in use: an unwritten line stays shared in

@@ -144,7 +144,7 @@ fn resolve<S: Sink, const PROBED: bool>(
 }
 
 // most long pieces are a few words or a CJK clause
-const MID_LONG: usize = 48;
+pub(crate) const MID_LONG: usize = 48;
 
 /// A piece of 16 to `M` bytes that the shared table of long results lacks.
 #[inline(always)]

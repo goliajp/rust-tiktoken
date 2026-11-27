@@ -198,20 +198,33 @@ impl<'e, 'v> EndsSink<'e, 'v> {
     /// again.
     #[inline(never)]
     fn slow(&mut self, piece: &[u8], key: (u64, u64)) {
+        let at = self.at;
+        self.at += piece.len();
+        if piece.len() <= LONG_KEY_MAX {
+            if self.room - self.n < piece.len() + ROOM {
+                self.grow(piece.len() + ROOM);
+            }
+            // SAFETY: room for an id and an end per byte of the piece was
+            // made above
+            let (ip, ep) = unsafe { (self.ip.add(self.n), self.ep.add(self.n)) };
+            // SAFETY: as above
+            if let Some(k) = unsafe { self.engine.unheld_ends(piece, key, ip, ep, at) } {
+                self.n += k;
+                // SAFETY: the last end was written above
+                debug_assert_eq!(unsafe { *ep.add(k - 1) }, self.at);
+                return;
+            }
+        }
+        // the thread-local cache's ids, or a piece too long for it
         self.sync();
         let k = self.ids.len();
         self.engine.encode_unheld(piece, key, self.ids);
-        let at = self.at;
-        self.at += piece.len();
-        let new = &self.ids[k..];
-        self.ends.reserve(new.len());
         let mut e = at;
-        for &id in &new[..new.len() - 1] {
+        for &id in &self.ids[k..] {
             e += self.engine.vocab.token_len(id);
             self.ends.push(e);
         }
-        self.ends.push(self.at);
-        debug_assert_eq!(e + self.engine.vocab.token_len(new[new.len() - 1]), self.at);
+        debug_assert_eq!(e, self.at);
         self.reload(ROOM);
     }
 }
