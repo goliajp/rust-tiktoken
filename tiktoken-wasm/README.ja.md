@@ -170,9 +170,9 @@ module.exports = {
 | `encode(text)` | `Uint32Array` | テキストを token ID 列に変換 |
 | `encodeWithSpecialTokens(text)` | `Uint32Array` | 特殊 tokenを認識しながらエンコード |
 | `decode(tokens)` | `string` | token ID 列をテキストに戻す |
-| `count(text)` | `number` | token 数を数える（`encode().length` より高速） |
+| `count(text)` | `number` | token 数を数える（`encode().length` より高速）|
 | `countWithSpecialTokens(text)` | `number` | 特殊 tokenを認識して token 数を数える |
-| `name` | `string` | エンコーディング名（getter） |
+| `name` | `string` | エンコーディング名（getter）|
 | `vocabSize` | `number` | 語彙に含まれる通常の token の数 |
 | `numSpecialTokens` | `number` | 特殊 token の数 |
 | `free()` | `void` | wasm メモリを解放 |
@@ -201,10 +201,10 @@ TypeScript ですべての項目に型が付いたモデル情報を返します
 |----------|------|-------------|
 | `id` | `string` | モデル識別子 |
 | `provider` | `string` | プロバイダ名 |
-| `inputPer1m` | `number` | 入力 100 万 token あたりの料金（USD） |
-| `outputPer1m` | `number` | 出力 100 万 token あたりの料金（USD） |
+| `inputPer1m` | `number` | 入力 100 万 token あたりの料金（USD）|
+| `outputPer1m` | `number` | 出力 100 万 token あたりの料金（USD）|
 | `cachedInputPer1m` | `number \| undefined` | キャッシュ済み入力 100 万 token あたりの料金 |
-| `contextWindow` | `number` | コンテキスト長の上限（token 数） |
+| `contextWindow` | `number` | コンテキスト長の上限（token 数）|
 | `maxOutput` | `number` | 出力 token 数の上限 |
 
 ## 対応モデル（価格情報付き）
@@ -223,7 +223,7 @@ TypeScript ですべての項目に型が付いたモデル情報を返します
 | DeepSeek | 5 | deepseek-flash、deepseek-v4-pro、deepseek-v4-flash、deepseek-v3、deepseek-r1 |
 | MiniMax | 6 | minimax-m3、minimax-m3.1-flash、minimax-m2.7/m2.5/m2.1/m2 |
 | Moonshot | 6 | kimi-k3.1-pro(-highspeed)、kimi-k3、kimi-k2.7-code、kimi-k2.6、kimi-k2.5 |
-| Voyage | 8 | voyage-4-large/4/4-lite/code-4、voyage-3-large、voyage-3.5(-lite)、voyage-code-3（埋め込みモデル） |
+| Voyage | 8 | voyage-4-large/4/4-lite/code-4、voyage-3-large、voyage-3.5(-lite)、voyage-code-3（埋め込みモデル）|
 
 対応モデルの正式な一覧はコードで定義しています。全件を確認するには、実行時に `allModels()` を呼ぶか、[docs.rs](https://docs.rs/tiktoken/latest/tiktoken/pricing/index.html) を参照してください。Anthropic と Google は照合先となるトークナイザーを公開していないため、料金情報のみ提供しています。ほかの 8 社については token 分割にも対応しています。
 

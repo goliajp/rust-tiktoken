@@ -170,9 +170,9 @@ module.exports = {
 | `encode(text)` | `Uint32Array` | 将文本编码为 token ID |
 | `encodeWithSpecialTokens(text)` | `Uint32Array` | 编码时识别特殊 token |
 | `decode(tokens)` | `string` | 将 token ID 解码为文本 |
-| `count(text)` | `number` | 统计 token 数量（比 `encode().length` 快） |
+| `count(text)` | `number` | 统计 token 数量（比 `encode().length` 快）|
 | `countWithSpecialTokens(text)` | `number` | 统计 token 数量，计数时识别特殊 token |
-| `name` | `string` | 编码名（getter） |
+| `name` | `string` | 编码名（getter）|
 | `vocabSize` | `number` | 词表中的普通 token 数量 |
 | `numSpecialTokens` | `number` | 特殊 token 数 |
 | `free()` | `void` | 释放 WASM 内存 |
@@ -201,10 +201,10 @@ module.exports = {
 |----------|------|-------------|
 | `id` | `string` | 模型标识 |
 | `provider` | `string` | 厂商名 |
-| `inputPer1m` | `number` | 每百万个输入 token 的费用（美元） |
-| `outputPer1m` | `number` | 每百万个输出 token 的费用（美元） |
+| `inputPer1m` | `number` | 每百万个输入 token 的费用（美元）|
+| `outputPer1m` | `number` | 每百万个输出 token 的费用（美元）|
 | `cachedInputPer1m` | `number \| undefined` | 每百万个缓存输入 token 的费用 |
-| `contextWindow` | `number` | 上下文窗口上限（以 token 为单位） |
+| `contextWindow` | `number` | 上下文窗口上限（以 token 为单位）|
 | `maxOutput` | `number` | 最多可输出的 token 数量 |
 
 ## 支持的模型（含价格）
@@ -223,7 +223,7 @@ module.exports = {
 | DeepSeek | 5 | deepseek-flash、deepseek-v4-pro、deepseek-v4-flash、deepseek-v3、deepseek-r1 |
 | MiniMax | 6 | minimax-m3、minimax-m3.1-flash、minimax-m2.7/m2.5/m2.1/m2 |
 | Moonshot | 6 | kimi-k3.1-pro(-highspeed)、kimi-k3、kimi-k2.7-code、kimi-k2.6、kimi-k2.5 |
-| Voyage | 8 | voyage-4-large/4/4-lite/code-4、voyage-3-large、voyage-3.5(-lite)、voyage-code-3（嵌入模型） |
+| Voyage | 8 | voyage-4-large/4/4-lite/code-4、voyage-3-large、voyage-3.5(-lite)、voyage-code-3（嵌入模型）|
 
 模型列表以代码为准，可在运行时调用 `allModels()` 获取，也可查阅 [docs.rs](https://docs.rs/tiktoken/latest/tiktoken/pricing/index.html)。Anthropic 和 Google 没有可供核对的公开分词器，本包仅提供这两家的价格数据。另有八家厂商同时支持分词。
 
