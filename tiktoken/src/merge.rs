@@ -221,8 +221,17 @@ fn merge_n<const N: usize, E: PartEnds>(
         if blocked {
             // the changed ranks sit at p <= k < j
             let (lo, hi) = (p / BLOCK, j / BLOCK);
-            for (b, m) in mins.iter_mut().enumerate().take(hi + 1).skip(lo) {
-                *m = block_min(&rank, b);
+            if E::ON {
+                // the same loop over a subslice: the form below gets an
+                // out-of-line helper in this instance, which moves the hot
+                // code of plain encoding linked after it
+                for (m, b) in mins[lo..=hi].iter_mut().zip(lo..) {
+                    *m = block_min(&rank, b);
+                }
+            } else {
+                for (b, m) in mins.iter_mut().enumerate().take(hi + 1).skip(lo) {
+                    *m = block_min(&rank, b);
+                }
             }
         }
     }
