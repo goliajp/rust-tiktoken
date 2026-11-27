@@ -6,6 +6,12 @@
 //! the arena offset is `[len | n << 16] [key bytes, padded to 4] [ids]`.
 //! A hit compares the tag, then the length and bytes exactly.
 //!
+//! Encoding with token ends also keeps, for a record it has seen, the end of
+//! each id's token in the piece (at most 255 bytes): a byte in a second arena,
+//! at the id's word offset, written there by the first such encode to meet
+//! the record. Its first byte goes last, with `Release`; 0 means not yet.
+//! Inserts never touch that arena, so plain encoding does not pay for it.
+//!
 //! Publication: a writer reserves its record with one `fetch_add` on the
 //! arena length, writes it, then claims an empty slot with a `Release`
 //! compare-exchange of the whole slot word. Readers load the slot with
@@ -13,7 +19,8 @@
 //! after that, until [`LongDerived::clear`], which needs exclusive use. A full
 //! bucket or arena refuses further entries.
 
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 use super::copy_ids;
 use super::key::hash_long;
@@ -38,6 +45,9 @@ struct Bucket([AtomicU64; BUCKET]);
 pub(crate) struct LongDerived {
     buckets: Box<[Bucket]>,
     arena: Box<[AtomicU32]>,
+    /// Token ends, a byte per arena word plus 8 readable past the last;
+    /// created by the first encode with ends.
+    ends: OnceLock<Box<[AtomicU8]>>,
     /// On a line of its own: every insert writes it, and next to `buckets`
     /// and `arena`, which every lookup reads, it would invalidate that line
     /// in every other core.
@@ -89,6 +99,7 @@ impl LongDerived {
         Self {
             buckets,
             arena,
+            ends: OnceLock::new(),
             arena_len: Padded(AtomicU32::new(0)),
         }
     }
@@ -183,10 +194,48 @@ impl LongDerived {
         false
     }
 
+    /// Where the token ends of `ids`, which come from this table, are kept,
+    /// if they are; 8 bytes past the last are readable.
+    #[inline(always)]
+    pub(crate) fn ends_of(&self, ids: &LongIds<'_>) -> Option<*const AtomicU8> {
+        let e = self.ends.get()?;
+        let p = &e[self.word_of(ids)];
+        (p.load(Ordering::Acquire) != 0).then_some(std::ptr::from_ref(p))
+    }
+
+    /// Keep the token ends of `ids`, which come from this table: the end of
+    /// each id's token in its piece.
+    #[cold]
+    pub(crate) fn keep_ends(&self, ids: &LongIds<'_>, ends: &[u8]) {
+        debug_assert_eq!(ends.len(), ids.len());
+        let e = self
+            .ends
+            .get_or_init(|| (0..ARENA_WORDS + 8).map(|_| AtomicU8::new(0)).collect());
+        let at = &e[self.word_of(ids)..];
+        // every encode that keeps them writes the same bytes
+        for (b, &x) in at[1..ends.len()].iter().zip(&ends[1..]) {
+            b.store(x, Ordering::Relaxed);
+        }
+        at[0].store(ends[0], Ordering::Release);
+    }
+
+    #[inline(always)]
+    fn word_of(&self, ids: &LongIds<'_>) -> usize {
+        // SAFETY: the ids lie in the arena
+        unsafe { ids.as_ptr().offset_from(self.arena.as_ptr().cast::<u32>()) as usize }
+    }
+
     /// Drop every entry. Caller guarantees no concurrent use.
     pub(crate) fn clear(&self) {
-        if self.arena_len.0.load(Ordering::Relaxed) == 0 {
+        let used = self.arena_len.0.load(Ordering::Relaxed) as usize;
+        if used == 0 {
             return;
+        }
+        // later records reuse these words: their ends are not known
+        if let Some(e) = self.ends.get() {
+            for b in &e[..used.min(ARENA_WORDS)] {
+                b.store(0, Ordering::Relaxed);
+            }
         }
         // write only the slots in use: an unwritten line stays shared in
         // every core's cache
@@ -198,6 +247,22 @@ impl LongDerived {
             }
         }
         self.arena_len.0.store(0, Ordering::Relaxed);
+    }
+}
+
+impl super::Vocab {
+    /// Where the token ends of `ids`, from [`long_ids`](Self::long_ids), are
+    /// kept, if they are; 8 bytes past the last are readable.
+    #[inline(always)]
+    pub(crate) fn long_ends(&self, ids: &LongIds<'_>) -> Option<*const AtomicU8> {
+        self.long_derived.get()?.ends_of(ids)
+    }
+
+    /// Keep the token ends of `ids`, from [`long_ids`](Self::long_ids).
+    pub(crate) fn keep_long_ends(&self, ids: &LongIds<'_>, ends: &[u8]) {
+        if let Some(t) = self.long_derived.get() {
+            t.keep_ends(ids, ends);
+        }
     }
 }
 
@@ -276,6 +341,26 @@ mod tests {
         assert!(t.get(&a[..a.len() - 3]).is_none());
         t.clear();
         assert!(t.get(a).is_none());
+    }
+
+    #[test]
+    fn ends_are_kept_until_a_clear() {
+        let t = LongDerived::new();
+        let a = "分词器把文本切成很多片段".as_bytes();
+        assert!(t.insert(a, &[1, 2, 3], hash_long(a)));
+        assert!(t.ends_of(&t.get(a).unwrap()).is_none());
+        t.keep_ends(&t.get(a).unwrap(), &[9, 20, 36]);
+        let p = t.ends_of(&t.get(a).unwrap()).unwrap();
+        // SAFETY: 8 bytes past the last end are readable
+        let got: Vec<u8> = (0..3)
+            .map(|j| unsafe { (*p.add(j)).load(Ordering::Relaxed) })
+            .collect();
+        assert_eq!(got, [9, 20, 36]);
+        t.clear();
+        let b = "另一段文本切成了很多片段".as_bytes();
+        assert!(t.insert(b, &[4, 5, 6], hash_long(b)));
+        // the same words, and no ends of the record before the clear
+        assert!(t.ends_of(&t.get(b).unwrap()).is_none());
     }
 
     #[test]

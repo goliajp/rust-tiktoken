@@ -45,29 +45,35 @@ entries below.
   A token can end inside a multi-byte character (a character no token holds
   whole is split over byte tokens), so an end is not always a char boundary.
   The encode loop writes each end next to its id: a piece that is one token
-  ends where the piece ends, and only pieces of several tokens look up token
-  lengths. Special tokens are ordinary text, as in `encode`; texts of 32 KiB
-  or more run on the worker threads, with the same output. The `_into` form
-  appends to both vectors, with ends relative to the text of that call.
+  ends where the piece ends, a cached piece of several tokens carries its
+  ends with it, and only the others look up token lengths. Special tokens
+  are ordinary text, as in `encode`; texts of 32 KiB or more run on the
+  worker threads, with the same output. The `_into` form appends to both
+  vectors, with ends relative to the text of that call.
+- The shared table of pieces longer than 15 bytes also keeps, for each
+  piece `encode_with_ends` has met, each token's end in the piece: one byte
+  per table word, at most 1 MiB more (128 KiB on `wasm32`), allocated by the
+  first such call. Programs that never call it allocate nothing more, and
+  plain encoding never writes it.
 
 ### Performance
 
 - `encode_with_ends_into` against `encode_into` followed by summing the
   `token_bytes` lengths into a reused vector (Apple M4 Pro, one thread,
-  `o200k_base`, median of 8 runs): 200 KB of English 139 µs against 171 µs
-  (`encode_into` alone: 115 µs), 100 KB of Rust source 70 against 96 (60),
-  174 KB of Markdown 118 against 150 (99), 180 KB of Japanese 111 against
-  139 (76); `cl100k_base` is within a few percent of these. On 179 KB of
-  Chinese it is not faster (296 against 259, with run-to-run spread of
-  about 30% on that text): most of its tokens come from pieces of several
-  tokens, which need one length lookup per token either way. With the
-  default threads the ends are found on the workers while the sum runs on
-  the calling thread: 32 µs against 83 µs for the English text, 50 against
-  116 for the Chinese one. Texts of a few dozen bytes cost the same either
-  way.
-- `encode`, `encode_into` and `count` are unchanged: on one thread their
-  instructions per call are within 1.5% of 5.6.0's for six encodings on the
-  texts above, and their times within run-to-run noise.
+  `o200k_base`, fastest of 12 runs): 200 KB of English 133 µs against
+  160 µs (`encode_into` alone: 115 µs), 100 KB of Rust source 67 against 89
+  (59), 174 KB of Markdown 113 against 150 (100), 180 KB of Japanese 90
+  against 132 (71), 179 KB of Chinese 180 against 209 (135). The other
+  encodings and a 900-byte text are faster too, and so is `encode_with_ends`
+  against `encode` followed by the sum; on a 13-byte text the two allocating
+  forms are within a nanosecond of each other. With the default threads
+  the ends are found on the workers while the sum runs on the calling
+  thread: 31 µs against 79 µs for the English text, 45 against 100 for the
+  Chinese one.
+- `encode`, `encode_into` and `count` are unchanged: their instructions per
+  call are within 0.4% of 5.6.0's on x86-64 and within 1.6% on the M4 Pro
+  for six encodings on the texts above, and their times within run-to-run
+  noise.
 
 ## [5.6.0] - 2026-11-27
 
