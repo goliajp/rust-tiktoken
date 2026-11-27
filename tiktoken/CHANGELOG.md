@@ -58,7 +58,22 @@ entries below.
 
 ### Performance
 
-PERF_PLACEHOLDER
+- `encode_with_ends_into` against `encode_into` followed by summing the
+  `token_bytes` lengths into a reused vector (Apple M4 Pro, one thread,
+  `o200k_base`, fastest of 12 runs): 200 KB of English 133 µs against
+  160 µs (`encode_into` alone: 115 µs), 100 KB of Rust source 67 against 89
+  (59), 174 KB of Markdown 113 against 150 (100), 180 KB of Japanese 90
+  against 132 (71), 179 KB of Chinese 180 against 209 (135). The other
+  encodings and a 900-byte text are faster too, and so is `encode_with_ends`
+  against `encode` followed by the sum; on a 13-byte text the two allocating
+  forms are within a nanosecond of each other. With the default threads
+  the ends are found on the workers while the sum runs on the calling
+  thread: 31 µs against 79 µs for the English text, 45 against 100 for the
+  Chinese one.
+- `encode`, `encode_into` and `count` are unchanged: their instructions per
+  call are within 0.4% of 5.6.0's on x86-64 and within 1.6% on the M4 Pro
+  for six encodings on the texts above, and their times within run-to-run
+  noise.
 
 ## [5.6.0] - 2026-11-27
 
