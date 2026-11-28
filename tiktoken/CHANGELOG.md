@@ -33,6 +33,25 @@ upgrading. Affected:
 Each change is detailed, with its differential-test evidence, in the version
 entries below.
 
+## [Unreleased]
+
+### Performance
+
+- `encode_with_ends` and `encode_with_ends_into`: a piece met for the first
+  time is merged once, with its token ends written by the merge itself,
+  instead of being merged and then walked again to find the ends. On the
+  179 KB Chinese and 180 KB Japanese texts, with the shared tables cleared
+  before each call, such a call takes 0.6 to 1.5% fewer instructions and
+  0.4 to 3.5% fewer cycles than in 5.7.1 (x86-64, `o200k_base` and
+  `cl100k_base`, median of 9 runs). It now executes 0.5 to 2.9% fewer
+  instructions than `encode_into` followed by summing the `token_bytes`
+  lengths, but still takes 0.9 to 2.9% more cycles, mostly from branch
+  mispredictions; on English, Markdown and code its instructions are 1.5
+  to 2.4% fewer than in 5.7.1.
+- `encode`, `encode_into` and `count` are unchanged: their instructions per
+  call are within 0.5% of 5.7.1's on x86-64 for the texts above and within
+  0.05% on the M6.
+
 ## [5.7.1] - 2026-11-27
 
 ### Performance
